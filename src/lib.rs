@@ -1,6 +1,10 @@
 mod utils;
 
-use std::fmt;
+use std::{
+    cell::{self, RefCell},
+    fmt,
+    rc::Rc,
+};
 
 use fixedbitset::FixedBitSet;
 use js_sys::Math::random;
@@ -10,6 +14,65 @@ macro_rules! log {
     ( $( $t:tt )* ) => {
         web_sys::console::log_1(&format!( $( $t )* ).into());
     }
+}
+
+/// ライフゲームのビルダー
+/// 複雑な引数を渡すテスト
+#[wasm_bindgen]
+pub struct GolBuilder {
+    width: u32,
+    height: u32,
+    cell_size: u32,
+    canvas: web_sys::HtmlCanvasElement,
+}
+
+#[wasm_bindgen]
+impl GolBuilder {
+    pub fn new(width: u32, height: u32, canvas: web_sys::HtmlCanvasElement) -> GolBuilder {
+        GolBuilder {
+            width,
+            height,
+            cell_size: 5,
+            canvas,
+        }
+    }
+
+    pub fn build(&self) -> Universe {
+        // set canvas size
+        self.canvas.set_width((self.width + 1) * self.cell_size);
+        self.canvas.set_height((self.height + 1) * self.cell_size);
+        Universe::new(self.width, self.height)
+    }
+
+    // event callbackチェエク
+    pub fn gol(self) {
+        let ue = UniEventer {
+            cell_size: self.cell_size,
+            canvas: self.canvas,
+        };
+
+        let ctx = Rc::new(RefCell::new(ue));
+
+        let ctx_clone = Rc::clone(&ctx);
+        let closure = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
+            let x = event.offset_x() as u32 / ctx_clone.borrow().cell_size;
+            let y = event.offset_y() as u32 / ctx_clone.borrow().cell_size;
+            log!("click: ({}, {})", x, y);
+        }) as Box<dyn FnMut(_)>);
+        ctx.borrow()
+            .canvas
+            .add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())
+            .unwrap();
+
+        // closureはevent_listenerに渡したので、dropさせない
+        closure.forget();
+    }
+}
+
+#[wasm_bindgen]
+pub struct UniEventer {
+    cell_size: u32,
+    canvas: web_sys::HtmlCanvasElement,
 }
 
 /// セルの状態を示す
@@ -124,7 +187,7 @@ impl Universe {
 
     /// 更新関数
     pub fn tick(&mut self) {
-        let _timer = Timer::new("Universe::tick");
+        // let _timer = Timer::new("Universe::tick");
         let mut next = self.cells.clone();
         for row in 0..self.height {
             for col in 0..self.width {
