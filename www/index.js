@@ -25,6 +25,9 @@ const playPauseButton = document.getElementById("play-pause");
 // フレーム識別子を保持する変数。null以外なら再生中と判断できる
 let animationId = null;
 
+// ドラッグ中かどうかを保持する変数
+let dragging = false;
+
 const isPaused = () => {
     return animationId === null;
 };
@@ -120,6 +123,38 @@ const drawCells = () => {
 
     ctx.stroke();
 };
+
+canvas.addEventListener("mousedown", event => {
+    dragging = true;
+});
+
+canvas.addEventListener("mouseup", event => {
+    dragging = false;
+});
+
+canvas.addEventListener("mouseleave", event => {
+    dragging = false;
+});
+
+canvas.addEventListener("mousemove", event => {
+    if (dragging) {
+        const boundingRect = canvas.getBoundingClientRect();
+
+        const scaleX = canvas.width / boundingRect.width;
+        const scaleY = canvas.height / boundingRect.height;
+
+        const canvasLeft = (event.clientX - boundingRect.left) * scaleX;
+        const canvasTop = (event.clientY - boundingRect.top) * scaleY;
+
+        const row = Math.min(Math.floor(canvasTop / (CELL_SIZE + 1)), height - 1);
+        const col = Math.min(Math.floor(canvasLeft / (CELL_SIZE + 1)), width - 1);
+        universe.toggle_cell(row, col);
+
+        drawGrid();
+        drawCells();
+    }
+});
+
 
 drawGrid();
 drawCells();

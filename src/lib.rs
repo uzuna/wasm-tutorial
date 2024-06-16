@@ -22,11 +22,31 @@ pub enum Cell {
 }
 
 impl Cell {
+    fn toggle(&mut self) -> &mut Self {
+        *self = match *self {
+            Cell::Dead => Cell::Alive,
+            Cell::Alive => Cell::Dead,
+        };
+        self
+    }
+}
+
+impl From<Cell> for bool {
     #[inline]
-    const fn bool(&self) -> bool {
-        match self {
+    fn from(cell: Cell) -> Self {
+        match cell {
             Cell::Dead => false,
             Cell::Alive => true,
+        }
+    }
+}
+
+impl From<bool> for Cell {
+    fn from(b: bool) -> Self {
+        if b {
+            Cell::Alive
+        } else {
+            Cell::Dead
         }
     }
 }
@@ -72,8 +92,7 @@ impl Universe {
         let size = (width * height) as usize;
         let mut cells = FixedBitSet::with_capacity(size);
         for i in 0..size {
-            let enabled = rule(i).bool();
-            cells.set(i, enabled);
+            cells.set(i, rule(i).into());
         }
 
         log!("Universe created: {}", size);
@@ -154,6 +173,13 @@ impl Universe {
     pub fn difference(&self, other: &Universe) -> usize {
         self.cells.difference_count(&other.cells)
     }
+
+    /// 指定セルの状態を反転する
+    pub fn toggle_cell(&mut self, row: u32, column: u32) {
+        let idx = self.get_index(row, column);
+        let cell = *Cell::from(self.cells[idx]).toggle();
+        self.cells.set(idx, cell.into());
+    }
 }
 
 impl fmt::Display for Universe {
@@ -162,7 +188,7 @@ impl fmt::Display for Universe {
             for col in 0..self.width {
                 let idx = self.get_index(row, col);
                 let cell = self.cells[idx];
-                let symbol = if cell == Cell::Dead.bool() {
+                let symbol = if cell == Cell::Dead.into() {
                     '◻'
                 } else {
                     '◼'
@@ -181,7 +207,7 @@ impl Universe {
     pub fn set_cells(&mut self, cells: &[(u32, u32)]) {
         for (row, col) in cells.iter().cloned() {
             let idx = self.get_index(row, col);
-            self.cells.set(idx, Cell::Alive.bool());
+            self.cells.set(idx, Cell::Alive.into());
         }
     }
 }
