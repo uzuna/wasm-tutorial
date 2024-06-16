@@ -43,6 +43,19 @@ impl Universe {
         }
     }
 
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// セル配列へのポインタを返す
+    pub fn cells(&self) -> *const Cell {
+        self.cells.as_ptr()
+    }
+
     /// すべてのセルを文字列で表現して返す
     pub fn render(&self) -> String {
         self.to_string()
