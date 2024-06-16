@@ -6,6 +6,12 @@ use fixedbitset::FixedBitSet;
 use js_sys::Math::random;
 use wasm_bindgen::prelude::*;
 
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
+}
+
 /// セルの状態を示す
 #[wasm_bindgen]
 #[repr(u8)]
@@ -39,6 +45,7 @@ pub struct Universe {
 impl Universe {
     /// 大きさを指定して新しいインスタンスを生成する
     pub fn new(width: u32, height: u32) -> Universe {
+        utils::set_panic_hook();
         Universe::new_inner(width, height, |i| {
             if i % 2 == 0 || i % 7 == 0 {
                 Cell::Alive
@@ -50,6 +57,8 @@ impl Universe {
 
     /// ランダムな状態で新しいインスタンスを生成する
     pub fn with_random(width: u32, height: u32) -> Universe {
+        // stack trace表示に必要。ここで呼ぶ必要があるかは不明...
+        utils::set_panic_hook();
         Universe::new_inner(width, height, |_| {
             if random() > 0.5 {
                 Cell::Alive
@@ -66,6 +75,8 @@ impl Universe {
             let enabled = rule(i).bool();
             cells.set(i, enabled);
         }
+
+        log!("Universe created: {}", size);
 
         Universe {
             width,
@@ -95,7 +106,6 @@ impl Universe {
     /// 更新関数
     pub fn tick(&mut self) {
         let mut next = self.cells.clone();
-
         for row in 0..self.height {
             for col in 0..self.width {
                 let idx = self.get_index(row, col);
