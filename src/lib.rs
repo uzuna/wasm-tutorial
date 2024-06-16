@@ -124,6 +124,7 @@ impl Universe {
 
     /// 更新関数
     pub fn tick(&mut self) {
+        let _timer = Timer::new("Universe::tick");
         let mut next = self.cells.clone();
         for row in 0..self.height {
             for col in 0..self.width {
@@ -209,5 +210,22 @@ impl Universe {
             let idx = self.get_index(row, col);
             self.cells.set(idx, Cell::Alive.into());
         }
+    }
+}
+
+pub struct Timer<'a> {
+    name: &'a str,
+}
+
+impl<'a> Timer<'a> {
+    pub fn new(name: &'a str) -> Timer<'a> {
+        web_sys::console::time_with_label(name);
+        Timer { name }
+    }
+}
+
+impl<'a> Drop for Timer<'a> {
+    fn drop(&mut self) {
+        web_sys::console::time_end_with_label(self.name);
     }
 }

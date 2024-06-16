@@ -149,14 +149,34 @@ const drawCells = () => {
 
     ctx.beginPath();
 
-    // 描画処理
+    // 生きてるセルだけ描画する
+    // ctx.fillStyleの変更コストが重いので、回数を減らすことで高速化できる
+    // ブラウザの開発ツール -> プロファイリング -> 拡大してタスクを選び、CallTreeを見る
+    ctx.fillStyle = ALIVE_COLOR;
     for (let row = 0; row < height; row++) {
         for (let col = 0; col < width; col++) {
             const idx = getIndex(row, col);
+            if (!bitIsSet(idx, cells)) {
+                continue;
+            }
 
-            ctx.fillStyle = bitIsSet(idx, cells)
-                ? ALIVE_COLOR
-                : DEAD_COLOR;
+            ctx.fillRect(
+                col * (CELL_SIZE + 1) + 1,
+                row * (CELL_SIZE + 1) + 1,
+                CELL_SIZE,
+                CELL_SIZE
+            );
+        }
+    }
+
+    // 死んでいるセルだけ描画する
+    ctx.fillStyle = DEAD_COLOR;
+    for (let row = 0; row < height; row++) {
+        for (let col = 0; col < width; col++) {
+            const idx = getIndex(row, col);
+            if (bitIsSet(idx, cells)) {
+                continue;
+            }
 
             ctx.fillRect(
                 col * (CELL_SIZE + 1) + 1,
