@@ -2,6 +2,7 @@ mod utils;
 
 use std::fmt;
 
+use js_sys::Math::random;
 use wasm_bindgen::prelude::*;
 
 /// セルの状態を示す
@@ -26,15 +27,28 @@ pub struct Universe {
 impl Universe {
     /// 大きさを指定して新しいインスタンスを生成する
     pub fn new(width: u32, height: u32) -> Universe {
-        let cells = (0..width * height)
-            .map(|i| {
-                if i % 2 == 0 || i % 7 == 0 {
-                    Cell::Alive
-                } else {
-                    Cell::Dead
-                }
-            })
-            .collect();
+        Universe::new_inner(width, height, |i| {
+            if i % 2 == 0 || i % 7 == 0 {
+                Cell::Alive
+            } else {
+                Cell::Dead
+            }
+        })
+    }
+
+    /// ランダムな状態で新しいインスタンスを生成する
+    pub fn with_random(width: u32, height: u32) -> Universe {
+        Universe::new_inner(width, height, |_| {
+            if random() > 0.5 {
+                Cell::Alive
+            } else {
+                Cell::Dead
+            }
+        })
+    }
+
+    fn new_inner(width: u32, height: u32, rule: impl Fn(u32) -> Cell) -> Universe {
+        let cells = (0..width * height).map(rule).collect();
 
         Universe {
             width,
