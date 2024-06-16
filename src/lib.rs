@@ -16,7 +16,8 @@ pub enum Cell {
 }
 
 impl Cell {
-    fn bool(&self) -> bool {
+    #[inline]
+    const fn bool(&self) -> bool {
         match self {
             Cell::Dead => false,
             Cell::Alive => true,
@@ -26,6 +27,7 @@ impl Cell {
 
 /// ライフゲームの空間を示す
 #[wasm_bindgen]
+#[derive(Debug)]
 pub struct Universe {
     width: u32,
     height: u32,
@@ -138,6 +140,10 @@ impl Universe {
         }
         count
     }
+
+    pub fn difference(&self, other: &Universe) -> usize {
+        self.cells.difference_count(&other.cells)
+    }
 }
 
 impl fmt::Display for Universe {
@@ -157,5 +163,15 @@ impl fmt::Display for Universe {
         }
 
         Ok(())
+    }
+}
+
+impl Universe {
+    /// 幅を設定する。(u32, u32)はWASMの制約により使えないのでwasm_bindgenを使わない
+    pub fn set_cells(&mut self, cells: &[(u32, u32)]) {
+        for (row, col) in cells.iter().cloned() {
+            let idx = self.get_index(row, col);
+            self.cells.set(idx, Cell::Alive.bool());
+        }
     }
 }
