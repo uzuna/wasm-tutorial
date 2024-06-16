@@ -13,6 +13,6 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 fn test_pass() {
-    let uni = Universe::new();
+    let uni = Universe::new(64, 64);
     assert_eq!(uni.render().len(), 12352);
 }
