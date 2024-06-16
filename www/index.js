@@ -54,12 +54,19 @@ const getIndex = (row, column) => {
     return row * width + column;
 };
 
+// Cellを1bitで表現しているので、そのbitが立っているかどうかを取得
+const bitIsSet = (n, arr) => {
+    const byte = Math.floor(n / 8);
+    const mask = 1 << (n % 8);
+    return (arr[byte] & mask) === mask;
+};
+
 // セル描画処理
 const drawCells = () => {
     // wasm空間のポインタ配列にアクセス
     const cellsPtr = universe.cells();
-    // wasm-game-of-life::Cellはrepr[u8]定義なのでUint8Arrayで解釈
-    const cells = new Uint8Array(memory.buffer, cellsPtr, width * height);
+    // 1bit表現をしているのでサイズは1/8で取得
+    const cells = new Uint8Array(memory.buffer, cellsPtr, width * height / 8);
 
     ctx.beginPath();
 
@@ -68,9 +75,9 @@ const drawCells = () => {
         for (let col = 0; col < width; col++) {
             const idx = getIndex(row, col);
 
-            ctx.fillStyle = cells[idx] === Cell.Dead
-                ? DEAD_COLOR
-                : ALIVE_COLOR;
+            ctx.fillStyle = bitIsSet(idx, cells)
+                ? ALIVE_COLOR
+                : DEAD_COLOR;
 
             ctx.fillRect(
                 col * (CELL_SIZE + 1) + 1,
