@@ -1,7 +1,4 @@
-import { PlayControl, GolBuilder, golstart } from "wasm-game-of-life";
-
-// wasmのメモリ空間に直接アクセス
-import { memory } from "wasm-game-of-life/wasm_game_of_life_bg";
+import { PlayControl, GolBuilder, golstart, webgl_start } from "wasm-game-of-life";
 
 const CELL_SIZE = 5; // px
 const GRID_COLOR = "#CCCCCC";
@@ -10,6 +7,7 @@ const GRID_COLOR = "#CCCCCC";
 // Give the canvas room for all of our cells and a 1px border
 // around each of them.
 const canvas = document.getElementById("game-of-life-canvas");
+const canvas_webgl = document.getElementById("webgl-canvas");
 const width = 64;
 const height = 64;
 const golb = GolBuilder.new(width, height, canvas);
@@ -122,3 +120,5 @@ const drawGrid = () => {
 
 drawGrid();
 play();
+
+webgl_start(canvas_webgl);
