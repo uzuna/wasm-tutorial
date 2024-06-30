@@ -1,4 +1,4 @@
-import { Universe, GolBuilder } from "wasm-game-of-life";
+import { Universe, GolBuilder, golstart } from "wasm-game-of-life";
 
 // wasmのメモリ空間に直接アクセス
 import { memory } from "wasm-game-of-life/wasm_game_of_life_bg";
@@ -12,11 +12,10 @@ const ALIVE_COLOR = "#000000";
 // Give the canvas room for all of our cells and a 1px border
 // around each of them.
 const canvas = document.getElementById("game-of-life-canvas");
-const golb = GolBuilder.new(64, 64, canvas);
-const universe = golb.build();
-golb.gol();
-const width = universe.width();
-const height = universe.height();
+const width = 64;
+const height = 64;
+const golb = GolBuilder.new(width, height, canvas);
+golstart(golb);
 
 const ctx = canvas.getContext('2d');
 
@@ -99,12 +98,7 @@ const renderLoop = () => {
     // debugger;
 
     fps.render(); //new
-
-    universe.tick();
-
     drawGrid();
-    drawCells();
-
     animationId = requestAnimationFrame(renderLoop);
 };
 
@@ -140,89 +134,38 @@ const bitIsSet = (n, arr) => {
     return (arr[byte] & mask) === mask;
 };
 
-// セル描画処理
-const drawCells = () => {
-    // wasm空間のポインタ配列にアクセス
-    const cellsPtr = universe.cells();
-    // 1bit表現をしているのでサイズは1/8で取得
-    const cells = new Uint8Array(memory.buffer, cellsPtr, width * height / 8);
+// canvas.addEventListener("mousedown", event => {
+//     dragging = true;
+// });
 
-    ctx.beginPath();
+// canvas.addEventListener("mouseup", event => {
+//     dragging = false;
+// });
 
-    // 生きてるセルだけ描画する
-    // ctx.fillStyleの変更コストが重いので、回数を減らすことで高速化できる
-    // ブラウザの開発ツール -> プロファイリング -> 拡大してタスクを選び、CallTreeを見る
-    ctx.fillStyle = ALIVE_COLOR;
-    for (let row = 0; row < height; row++) {
-        for (let col = 0; col < width; col++) {
-            const idx = getIndex(row, col);
-            if (!bitIsSet(idx, cells)) {
-                continue;
-            }
+// canvas.addEventListener("mouseleave", event => {
+//     dragging = false;
+// });
 
-            ctx.fillRect(
-                col * (CELL_SIZE + 1) + 1,
-                row * (CELL_SIZE + 1) + 1,
-                CELL_SIZE,
-                CELL_SIZE
-            );
-        }
-    }
+// canvas.addEventListener("mousemove", event => {
+//     if (dragging) {
+//         const boundingRect = canvas.getBoundingClientRect();
 
-    // 死んでいるセルだけ描画する
-    ctx.fillStyle = DEAD_COLOR;
-    for (let row = 0; row < height; row++) {
-        for (let col = 0; col < width; col++) {
-            const idx = getIndex(row, col);
-            if (bitIsSet(idx, cells)) {
-                continue;
-            }
+//         const scaleX = canvas.width / boundingRect.width;
+//         const scaleY = canvas.height / boundingRect.height;
 
-            ctx.fillRect(
-                col * (CELL_SIZE + 1) + 1,
-                row * (CELL_SIZE + 1) + 1,
-                CELL_SIZE,
-                CELL_SIZE
-            );
-        }
-    }
+//         const canvasLeft = (event.clientX - boundingRect.left) * scaleX;
+//         const canvasTop = (event.clientY - boundingRect.top) * scaleY;
 
-    ctx.stroke();
-};
+//         const row = Math.min(Math.floor(canvasTop / (CELL_SIZE + 1)), height - 1);
+//         const col = Math.min(Math.floor(canvasLeft / (CELL_SIZE + 1)), width - 1);
+//         universe.toggle_cell(row, col);
 
-canvas.addEventListener("mousedown", event => {
-    dragging = true;
-});
-
-canvas.addEventListener("mouseup", event => {
-    dragging = false;
-});
-
-canvas.addEventListener("mouseleave", event => {
-    dragging = false;
-});
-
-canvas.addEventListener("mousemove", event => {
-    if (dragging) {
-        const boundingRect = canvas.getBoundingClientRect();
-
-        const scaleX = canvas.width / boundingRect.width;
-        const scaleY = canvas.height / boundingRect.height;
-
-        const canvasLeft = (event.clientX - boundingRect.left) * scaleX;
-        const canvasTop = (event.clientY - boundingRect.top) * scaleY;
-
-        const row = Math.min(Math.floor(canvasTop / (CELL_SIZE + 1)), height - 1);
-        const col = Math.min(Math.floor(canvasLeft / (CELL_SIZE + 1)), width - 1);
-        universe.toggle_cell(row, col);
-
-        drawGrid();
-        drawCells();
-    }
-});
+//         drawGrid();
+//         drawCells();
+//     }
+// });
 
 
 
 drawGrid();
-drawCells();
 play();

@@ -3,6 +3,7 @@ mod utils;
 use std::{
     cell::{self, RefCell},
     fmt,
+    mem::forget,
     rc::Rc,
 };
 
@@ -46,7 +47,7 @@ impl GolBuilder {
 
     // event callbackチェエク
     pub fn gol(self) {
-        let ue = UniEventer {
+        let ue = UniEventHandler {
             cell_size: self.cell_size,
             canvas: self.canvas,
         };
@@ -58,6 +59,7 @@ impl GolBuilder {
             let x = event.offset_x() as u32 / ctx_clone.borrow().cell_size;
             let y = event.offset_y() as u32 / ctx_clone.borrow().cell_size;
             log!("click: ({}, {})", x, y);
+            // ctx_clone.borrow_mut().toggle_cell(y, x);
         }) as Box<dyn FnMut(_)>);
         ctx.borrow()
             .canvas
@@ -70,7 +72,7 @@ impl GolBuilder {
 }
 
 #[wasm_bindgen]
-pub struct UniEventer {
+pub struct UniEventHandler {
     cell_size: u32,
     canvas: web_sys::HtmlCanvasElement,
 }
@@ -290,5 +292,100 @@ impl<'a> Timer<'a> {
 impl<'a> Drop for Timer<'a> {
     fn drop(&mut self) {
         web_sys::console::time_end_with_label(self.name);
+    }
+}
+
+#[wasm_bindgen]
+pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
+    log!("golstart");
+    let mut uni = gb.build();
+
+    let closure = Rc::new(RefCell::new(None));
+    let clone = closure.clone();
+    let drawer = Drawer::default();
+
+    let context = gb
+        .canvas
+        .get_context("2d")
+        .unwrap()
+        .unwrap()
+        .dyn_into::<web_sys::CanvasRenderingContext2d>()
+        .unwrap();
+    gb.gol();
+
+    *clone.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<i32, JsValue>>::new(
+        move || {
+            uni.tick();
+            drawer.draw_cells(&context, &uni);
+            request_animation_frame(closure.borrow().as_ref().unwrap())
+        },
+    ));
+    request_animation_frame(clone.borrow().as_ref().unwrap())?;
+    Ok(())
+}
+
+fn request_animation_frame(
+    closure: &Closure<dyn FnMut() -> Result<i32, JsValue>>,
+) -> Result<i32, JsValue> {
+    let window = web_sys::window().unwrap();
+    window.request_animation_frame(closure.as_ref().unchecked_ref())
+}
+
+struct Drawer {
+    alive_color: &'static str,
+    dead_color: &'static str,
+    cell_size: f64,
+}
+
+impl Drawer {
+    fn draw_cells(&self, ctx: &web_sys::CanvasRenderingContext2d, uni: &Universe) {
+        let cell_size = self.cell_size;
+        ctx.set_fill_style(&self.alive_color.into());
+
+        ctx.begin_path();
+
+        for row in 0..uni.height {
+            for col in 0..uni.width {
+                let idx = uni.get_index(row, col);
+                let cell = uni.cells[idx];
+                if cell == Cell::Alive.into() {
+                    ctx.fill_rect(
+                        col as f64 * (cell_size + 1.0) + 1.0,
+                        row as f64 * (cell_size + 1.0) + 1.0,
+                        cell_size,
+                        cell_size,
+                    );
+                }
+            }
+        }
+
+        ctx.set_fill_style(&self.dead_color.into());
+
+        for row in 0..uni.height {
+            for col in 0..uni.width {
+                let idx = uni.get_index(row, col);
+                let cell = uni.cells[idx];
+                if cell == Cell::Dead.into() {
+                    ctx.fill_rect(
+                        col as f64 * (cell_size + 1.0) + 1.0,
+                        row as f64 * (cell_size + 1.0) + 1.0,
+                        cell_size,
+                        cell_size,
+                    );
+                }
+            }
+        }
+
+        ctx.stroke();
+    }
+}
+
+impl Default for Drawer {
+    fn default() -> Self {
+        Drawer {
+            alive_color: "#000000",
+            dead_color: "#FFFFFF",
+            cell_size: 5.0,
+        }
     }
 }
