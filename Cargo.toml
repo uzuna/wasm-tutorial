@@ -14,13 +14,27 @@ default = ["console_error_panic_hook"]
 fixedbitset = "0.5.7"
 js-sys = "0.3"
 wasm-bindgen = "0.2.84"
-web-sys = { version = "0.3", features = ["console"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
 console_error_panic_hook = { version = "0.1.7", optional = true }
+wasm-bindgen-futures = "0.4.42"
+gloo-timers = { version = "0.3.0", features = ["futures"] }
+futures-util = "0.3.30"
+tokio = { version = "1.38.0", features = ["macros", "sync"] }
+wasm-timer = "0.2.5"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "console",
+    "HtmlCanvasElement",
+    "MouseEvent",
+    "Window",
+    "CanvasRenderingContext2d",
+]
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"
