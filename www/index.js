@@ -1,4 +1,4 @@
-import { Universe, GolBuilder, golstart } from "wasm-game-of-life";
+import { PlayControl, GolBuilder, golstart } from "wasm-game-of-life";
 
 // wasmのメモリ空間に直接アクセス
 import { memory } from "wasm-game-of-life/wasm_game_of_life_bg";
@@ -15,7 +15,7 @@ const canvas = document.getElementById("game-of-life-canvas");
 const width = 64;
 const height = 64;
 const golb = GolBuilder.new(width, height, canvas);
-golstart(golb);
+const sender = golstart(golb);
 
 const ctx = canvas.getContext('2d');
 
@@ -44,8 +44,10 @@ const pause = () => {
 
 playPauseButton.addEventListener("click", event => {
     if (isPaused()) {
+        sender.send(PlayControl.Play);
         play();
     } else {
+        sender.send(PlayControl.Pause);
         pause();
     }
 });
@@ -121,50 +123,6 @@ const drawGrid = () => {
 
     ctx.stroke();
 };
-
-// メモリ空間のインデックスを取得
-const getIndex = (row, column) => {
-    return row * width + column;
-};
-
-// Cellを1bitで表現しているので、そのbitが立っているかどうかを取得
-const bitIsSet = (n, arr) => {
-    const byte = Math.floor(n / 8);
-    const mask = 1 << (n % 8);
-    return (arr[byte] & mask) === mask;
-};
-
-// canvas.addEventListener("mousedown", event => {
-//     dragging = true;
-// });
-
-// canvas.addEventListener("mouseup", event => {
-//     dragging = false;
-// });
-
-// canvas.addEventListener("mouseleave", event => {
-//     dragging = false;
-// });
-
-// canvas.addEventListener("mousemove", event => {
-//     if (dragging) {
-//         const boundingRect = canvas.getBoundingClientRect();
-
-//         const scaleX = canvas.width / boundingRect.width;
-//         const scaleY = canvas.height / boundingRect.height;
-
-//         const canvasLeft = (event.clientX - boundingRect.left) * scaleX;
-//         const canvasTop = (event.clientY - boundingRect.top) * scaleY;
-
-//         const row = Math.min(Math.floor(canvasTop / (CELL_SIZE + 1)), height - 1);
-//         const col = Math.min(Math.floor(canvasLeft / (CELL_SIZE + 1)), width - 1);
-//         universe.toggle_cell(row, col);
-
-//         drawGrid();
-//         drawCells();
-//     }
-// });
-
 
 
 drawGrid();

@@ -23,6 +23,7 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 wasm-bindgen-futures = "0.4.42"
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 futures-util = "0.3.30"
+tokio = { version = "1.38.0", features = ["sync"] }
 
 [dependencies.web-sys]
 version = "0.3"

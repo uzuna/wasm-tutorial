@@ -4,6 +4,7 @@ use fixedbitset::FixedBitSet;
 use futures_util::stream::StreamExt;
 use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
+use tokio::sync::mpsc;
 use wasm_bindgen::prelude::*;
 
 macro_rules! log {
@@ -291,8 +292,11 @@ impl<'a> Drop for Timer<'a> {
 }
 
 #[wasm_bindgen]
-pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
+pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
     log!("golstart");
+
+    let (sender, mut receiver) = mpsc::unbounded_channel();
+    let sender = Sender::new(sender);
 
     let mut uni = gb.build();
 
@@ -310,30 +314,40 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
     gb.gol();
 
     let p = Rc::new(RefCell::new(None));
-
     // 非同期タイマー実験
-    let p_ctrl = p.clone();
-    let cls_ctrl = closure.clone();
     wasm_bindgen_futures::spawn_local(async move {
         let ticker = gloo_timers::future::IntervalStream::new(2000);
 
         ticker
             .for_each(|_| async {
                 log!("tick");
-                let stopping = if let Some(ref mut p) = *p_ctrl.borrow_mut() {
-                    cancel_animation_frame(*p).unwrap();
-                    true
-                } else {
-                    false
-                };
-                if stopping {
-                    *p_ctrl.borrow_mut() = None;
-                } else {
+            })
+            .await;
+    });
+
+    // p;ay/pause event listener
+    let p_ctrl = p.clone();
+    let cls_ctrl = closure.clone();
+    wasm_bindgen_futures::spawn_local(async move {
+        while let Some(x) = receiver.recv().await {
+            log!("tick-after [{:?}]", x);
+
+            match x {
+                PlayControl::Play => {
+                    if let Some(ref mut p) = *p_ctrl.borrow_mut() {
+                        cancel_animation_frame(*p).unwrap();
+                    }
                     *p_ctrl.borrow_mut() =
                         Some(request_animation_frame(cls_ctrl.borrow().as_ref().unwrap()).unwrap());
                 }
-            })
-            .await;
+                PlayControl::Pause => {
+                    if let Some(ref mut p) = *p_ctrl.borrow_mut() {
+                        cancel_animation_frame(*p).unwrap();
+                    }
+                    *p_ctrl.borrow_mut() = None;
+                }
+            }
+        }
     });
 
     let p_closure = p.clone();
@@ -352,7 +366,7 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
         },
     ));
     *p.borrow_mut() = Some(request_animation_frame(clone.borrow().as_ref().unwrap())?);
-    Ok(())
+    Ok(sender)
 }
 
 fn request_animation_frame(
@@ -365,6 +379,29 @@ fn request_animation_frame(
 fn cancel_animation_frame(handle: i32) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     window.cancel_animation_frame(handle)
+}
+
+#[wasm_bindgen]
+pub struct Sender {
+    sender: mpsc::UnboundedSender<PlayControl>,
+}
+
+#[wasm_bindgen]
+#[derive(Debug)]
+pub enum PlayControl {
+    Play,
+    Pause,
+}
+
+#[wasm_bindgen]
+impl Sender {
+    fn new(sender: mpsc::UnboundedSender<PlayControl>) -> Self {
+        Sender { sender }
+    }
+
+    pub fn send(&self, ctrl: PlayControl) {
+        self.sender.send(ctrl).unwrap();
+    }
 }
 
 struct Drawer {
