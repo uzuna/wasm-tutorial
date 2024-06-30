@@ -5,8 +5,6 @@ import { memory } from "wasm-game-of-life/wasm_game_of_life_bg";
 
 const CELL_SIZE = 5; // px
 const GRID_COLOR = "#CCCCCC";
-const DEAD_COLOR = "#FFFFFF";
-const ALIVE_COLOR = "#000000";
 
 
 // Give the canvas room for all of our cells and a 1px border
@@ -24,8 +22,6 @@ const playPauseButton = document.getElementById("play-pause");
 // フレーム識別子を保持する変数。null以外なら再生中と判断できる
 let animationId = null;
 
-// ドラッグ中かどうかを保持する変数
-let dragging = false;
 
 const isPaused = () => {
     return animationId === null;

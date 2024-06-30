@@ -23,6 +23,7 @@ pub struct GolBuilder {
     canvas: web_sys::HtmlCanvasElement,
 }
 
+/// 関数をこう飽きする場合はimplにwasm_bindgenをつけてpubにする
 #[wasm_bindgen]
 impl GolBuilder {
     pub fn new(width: u32, height: u32, canvas: web_sys::HtmlCanvasElement) -> GolBuilder {
@@ -34,14 +35,16 @@ impl GolBuilder {
         }
     }
 
-    pub fn build(&self) -> Universe {
+    // Universeを生成する
+    fn build(&self) -> Universe {
         // set canvas size
         self.canvas.set_width((self.width + 1) * self.cell_size);
         self.canvas.set_height((self.height + 1) * self.cell_size);
         Universe::new(self.width, self.height)
     }
 
-    // event callbackチェエク
+    // click event listenerを作る
+    // canvasにクロージャを設定して、クリックされたセルの状態をchannel経由で変更する
     fn gol(self, sender: UnboundedSender<(CellControl, Point)>) {
         let ue: UniEventHandler = UniEventHandler {
             cell_size: self.cell_size,
@@ -49,7 +52,6 @@ impl GolBuilder {
         };
 
         let ctx = Rc::new(RefCell::new(ue));
-
         let ctx_clone = Rc::clone(&ctx);
         let closure = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
             let x = event.offset_x() as u32 / (ctx_clone.borrow().cell_size + 1);
@@ -67,6 +69,7 @@ impl GolBuilder {
     }
 }
 
+// clock event listener向けの変数保持
 #[wasm_bindgen]
 pub struct UniEventHandler {
     cell_size: u32,
@@ -292,16 +295,22 @@ impl<'a> Drop for Timer<'a> {
     }
 }
 
+/// WASMのエントリポイント
+///
+/// 構造体を戻すような使い方をすると、ライフタイムが不明でevent callbackの設定が難しい
+/// 実行プロセス全体を関数に閉じ込めたほうが取り回ししやすい
 #[wasm_bindgen]
 pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
-    log!("golstart");
-
+    // JS側の指示はchannel経由で受け取る
     let (sender, mut recv_p, mut recv_c) = Sender::new();
 
+    // UniverseをRcでラップして、非同期taskからアクセスできるようにする
     let uni = Rc::new(RefCell::new(gb.build()));
 
+    // アニメーション更新クロージャ
+    // 開始停止が難しいので、良いラップ方法を考えたい。非同期タスクとして見るのが良い?
     let closure = Rc::new(RefCell::new(None));
-    let clone = closure.clone();
+    // 描画処理
     let drawer = Drawer::default();
 
     let context = gb
@@ -313,11 +322,9 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
         .unwrap();
     gb.gol(sender.c_ctrl.clone());
 
-    let p = Rc::new(RefCell::new(None));
     // 非同期タイマー実験
     wasm_bindgen_futures::spawn_local(async move {
         let ticker = gloo_timers::future::IntervalStream::new(2000);
-
         ticker
             .for_each(|_| async {
                 log!("tick");
@@ -325,7 +332,11 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
             .await;
     });
 
-    // p;ay/pause event listener
+    // play/pause を制御するanimationIdを保持する変数
+    // callbackによる仮面更新に動悸した再生と、cancelAnimationFrameによる停止ができる
+    let p = Rc::new(RefCell::new(None));
+
+    // チャンネル経由でplay/pause操作する
     let p_ctrl = p.clone();
     let cls_ctrl = closure.clone();
     let uni_ctrl = uni.clone();
@@ -346,7 +357,6 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
                     }
                 }
                 Some(x) = recv_p.recv() => {
-
                     match x {
                         PlayControl::Play => {
                             if let Some(ref mut p) = *p_ctrl.borrow_mut() {
@@ -368,8 +378,10 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
         }
     });
 
+    // アニメーション開始と再生継続と停止のためのコールバック
     let p_closure = p.clone();
-    *clone.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<i32, JsValue>>::new(
+    let closure_clone = closure.clone();
+    *closure_clone.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<i32, JsValue>>::new(
         move || {
             uni.borrow_mut().tick();
             drawer.draw_cells(&context, &uni.borrow());
@@ -383,10 +395,13 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
             }
         },
     ));
-    *p.borrow_mut() = Some(request_animation_frame(clone.borrow().as_ref().unwrap())?);
+    *p.borrow_mut() = Some(request_animation_frame(
+        closure_clone.borrow().as_ref().unwrap(),
+    )?);
     Ok(sender)
 }
 
+// 次のアニメーションフレームをリクエストする
 fn request_animation_frame(
     closure: &Closure<dyn FnMut() -> Result<i32, JsValue>>,
 ) -> Result<i32, JsValue> {
@@ -394,33 +409,29 @@ fn request_animation_frame(
     window.request_animation_frame(closure.as_ref().unchecked_ref())
 }
 
+// 再生リクエストをキャンセル
 fn cancel_animation_frame(handle: i32) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     window.cancel_animation_frame(handle)
 }
 
-#[wasm_bindgen]
-pub struct Sender {
-    p_ctrl: mpsc::UnboundedSender<PlayControl>,
-    c_ctrl: mpsc::UnboundedSender<(CellControl, Point)>,
-}
-
-#[wasm_bindgen]
+// [CellControl]とともに送信して、書き換えるセルの位置を指示
 #[derive(Debug)]
-pub struct Point {
+struct Point {
     x: u32,
     y: u32,
 }
 
+// セルの状態変更指示
 // enumはC-Styleのみサポート
-#[wasm_bindgen]
 #[derive(Debug)]
-pub enum CellControl {
+enum CellControl {
     Alive,
     Dead,
     Toggle,
 }
 
+/// 再生停止指示
 #[wasm_bindgen]
 #[derive(Debug)]
 pub enum PlayControl {
@@ -428,6 +439,14 @@ pub enum PlayControl {
     Pause,
 }
 
+// JSからの指示を受け取るための構造体
+#[wasm_bindgen]
+pub struct Sender {
+    p_ctrl: mpsc::UnboundedSender<PlayControl>,
+    c_ctrl: mpsc::UnboundedSender<(CellControl, Point)>,
+}
+
+/// JSからのWasmに指示を飛ばすための構造体
 #[wasm_bindgen]
 impl Sender {
     fn new() -> (
@@ -443,12 +462,9 @@ impl Sender {
     pub fn play(&self, ctrl: PlayControl) {
         self.p_ctrl.send(ctrl).unwrap();
     }
-
-    pub fn cell(&self, ctrl: CellControl, x: u32, y: u32) {
-        self.c_ctrl.send((ctrl, Point { x, y })).unwrap();
-    }
 }
 
+// CanbasContext2Dで描画する実装
 struct Drawer {
     alive_color: &'static str,
     dead_color: &'static str,
