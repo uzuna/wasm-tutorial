@@ -1,4 +1,6 @@
+mod error;
 mod utils;
+mod webgl;
 
 use fixedbitset::FixedBitSet;
 use futures_util::stream::StreamExt;
@@ -6,7 +8,9 @@ use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use wasm_bindgen::prelude::*;
+use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as gl};
 
+#[macro_export]
 macro_rules! log {
     ( $( $t:tt )* ) => {
         web_sys::console::log_1(&format!( $( $t )* ).into());
@@ -522,4 +526,34 @@ impl Default for Drawer {
             cell_size: 5.0,
         }
     }
+}
+
+#[wasm_bindgen]
+pub fn webgl_start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
+    use crate::webgl::*;
+    canvas.set_width(768);
+    canvas.set_height(768);
+
+    let gl = canvas
+        .get_context("webgl2")?
+        .ok_or("Failed to get WebGl2RenderingContext")?
+        .dyn_into::<gl>()?;
+
+    let shader = Shader::new(&gl)?;
+    let camera = Camera::default();
+    let view = ViewMatrix::default();
+
+    gl.enable(gl::DEPTH_TEST);
+    gl.depth_func(gl::LEQUAL);
+    gl.enable(gl::CULL_FACE);
+
+    gl.clear_color(0.0, 0.0, 0.0, 1.0);
+    gl.clear_depth(1.0);
+    gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+
+    shader.use_program(&gl);
+    shader.set_mvp(&gl, &camera, &view);
+    shader.draw(&gl);
+
+    Ok(())
 }
