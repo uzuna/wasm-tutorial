@@ -4,7 +4,7 @@ use fixedbitset::FixedBitSet;
 use futures_util::stream::StreamExt;
 use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, UnboundedSender};
 use wasm_bindgen::prelude::*;
 
 macro_rules! log {
@@ -42,8 +42,8 @@ impl GolBuilder {
     }
 
     // event callbackチェエク
-    pub fn gol(self) {
-        let ue = UniEventHandler {
+    fn gol(self, sender: UnboundedSender<(CellControl, Point)>) {
+        let ue: UniEventHandler = UniEventHandler {
             cell_size: self.cell_size,
             canvas: self.canvas,
         };
@@ -52,10 +52,10 @@ impl GolBuilder {
 
         let ctx_clone = Rc::clone(&ctx);
         let closure = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
-            let x = event.offset_x() as u32 / ctx_clone.borrow().cell_size;
-            let y = event.offset_y() as u32 / ctx_clone.borrow().cell_size;
+            let x = event.offset_x() as u32 / (ctx_clone.borrow().cell_size + 1);
+            let y = event.offset_y() as u32 / (ctx_clone.borrow().cell_size + 1);
             log!("click: ({}, {})", x, y);
-            // ctx_clone.borrow_mut().toggle_cell(y, x);
+            sender.send((CellControl::Toggle, Point { x, y })).unwrap();
         }) as Box<dyn FnMut(_)>);
         ctx.borrow()
             .canvas
@@ -241,6 +241,7 @@ impl Universe {
         let idx = self.get_index(row, column);
         let cell = *Cell::from(self.cells[idx]).toggle();
         self.cells.set(idx, cell.into());
+        log!("toggle_cell: [{}, {}] = {:?}", row, column, cell);
     }
 }
 
@@ -295,10 +296,9 @@ impl<'a> Drop for Timer<'a> {
 pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
     log!("golstart");
 
-    let (sender, mut receiver) = mpsc::unbounded_channel();
-    let sender = Sender::new(sender);
+    let (sender, mut recv_p, mut recv_c) = Sender::new();
 
-    let mut uni = gb.build();
+    let uni = Rc::new(RefCell::new(gb.build()));
 
     let closure = Rc::new(RefCell::new(None));
     let clone = closure.clone();
@@ -311,7 +311,7 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
         .unwrap()
         .dyn_into::<web_sys::CanvasRenderingContext2d>()
         .unwrap();
-    gb.gol();
+    gb.gol(sender.c_ctrl.clone());
 
     let p = Rc::new(RefCell::new(None));
     // 非同期タイマー実験
@@ -328,24 +328,42 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
     // p;ay/pause event listener
     let p_ctrl = p.clone();
     let cls_ctrl = closure.clone();
+    let uni_ctrl = uni.clone();
     wasm_bindgen_futures::spawn_local(async move {
-        while let Some(x) = receiver.recv().await {
-            log!("tick-after [{:?}]", x);
+        loop {
+            tokio::select! {
+                Some((ctrl, point)) = recv_c.recv() => {
+                    match ctrl {
+                        CellControl::Alive => {
+                            uni_ctrl.borrow_mut().cells.set(uni_ctrl.borrow().get_index(point.y, point.x), Cell::Alive.into());
+                        }
+                        CellControl::Dead => {
+                            uni_ctrl.borrow_mut().cells.set(uni_ctrl.borrow().get_index(point.y, point.x), Cell::Dead.into());
+                        },
+                        CellControl::Toggle => {
+                            uni_ctrl.borrow_mut().toggle_cell(point.y, point.x);
+                        }
+                    }
+                }
+                Some(x) = recv_p.recv() => {
 
-            match x {
-                PlayControl::Play => {
-                    if let Some(ref mut p) = *p_ctrl.borrow_mut() {
-                        cancel_animation_frame(*p).unwrap();
+                    match x {
+                        PlayControl::Play => {
+                            if let Some(ref mut p) = *p_ctrl.borrow_mut() {
+                                cancel_animation_frame(*p).unwrap();
+                            }
+                            *p_ctrl.borrow_mut() =
+                                Some(request_animation_frame(cls_ctrl.borrow().as_ref().unwrap()).unwrap());
+                        }
+                        PlayControl::Pause => {
+                            if let Some(ref mut p) = *p_ctrl.borrow_mut() {
+                                cancel_animation_frame(*p).unwrap();
+                            }
+                            *p_ctrl.borrow_mut() = None;
+                        }
                     }
-                    *p_ctrl.borrow_mut() =
-                        Some(request_animation_frame(cls_ctrl.borrow().as_ref().unwrap()).unwrap());
                 }
-                PlayControl::Pause => {
-                    if let Some(ref mut p) = *p_ctrl.borrow_mut() {
-                        cancel_animation_frame(*p).unwrap();
-                    }
-                    *p_ctrl.borrow_mut() = None;
-                }
+
             }
         }
     });
@@ -353,8 +371,8 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
     let p_closure = p.clone();
     *clone.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<i32, JsValue>>::new(
         move || {
-            uni.tick();
-            drawer.draw_cells(&context, &uni);
+            uni.borrow_mut().tick();
+            drawer.draw_cells(&context, &uni.borrow());
             let res = request_animation_frame(closure.borrow().as_ref().unwrap());
             match res {
                 Ok(handle) => {
@@ -383,7 +401,24 @@ fn cancel_animation_frame(handle: i32) -> Result<(), JsValue> {
 
 #[wasm_bindgen]
 pub struct Sender {
-    sender: mpsc::UnboundedSender<PlayControl>,
+    p_ctrl: mpsc::UnboundedSender<PlayControl>,
+    c_ctrl: mpsc::UnboundedSender<(CellControl, Point)>,
+}
+
+#[wasm_bindgen]
+#[derive(Debug)]
+pub struct Point {
+    x: u32,
+    y: u32,
+}
+
+// enumはC-Styleのみサポート
+#[wasm_bindgen]
+#[derive(Debug)]
+pub enum CellControl {
+    Alive,
+    Dead,
+    Toggle,
 }
 
 #[wasm_bindgen]
@@ -395,12 +430,22 @@ pub enum PlayControl {
 
 #[wasm_bindgen]
 impl Sender {
-    fn new(sender: mpsc::UnboundedSender<PlayControl>) -> Self {
-        Sender { sender }
+    fn new() -> (
+        Self,
+        mpsc::UnboundedReceiver<PlayControl>,
+        mpsc::UnboundedReceiver<(CellControl, Point)>,
+    ) {
+        let (p_ctrl, recv_p) = mpsc::unbounded_channel();
+        let (c_ctrl, recv_c) = mpsc::unbounded_channel();
+        (Sender { p_ctrl, c_ctrl }, recv_p, recv_c)
     }
 
-    pub fn send(&self, ctrl: PlayControl) {
-        self.sender.send(ctrl).unwrap();
+    pub fn play(&self, ctrl: PlayControl) {
+        self.p_ctrl.send(ctrl).unwrap();
+    }
+
+    pub fn cell(&self, ctrl: CellControl, x: u32, y: u32) {
+        self.c_ctrl.send((ctrl, Point { x, y })).unwrap();
     }
 }
 

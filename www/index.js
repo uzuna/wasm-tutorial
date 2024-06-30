@@ -44,10 +44,10 @@ const pause = () => {
 
 playPauseButton.addEventListener("click", event => {
     if (isPaused()) {
-        sender.send(PlayControl.Play);
+        sender.play(PlayControl.Play);
         play();
     } else {
-        sender.send(PlayControl.Pause);
+        sender.play(PlayControl.Pause);
         pause();
     }
 });
@@ -123,7 +123,6 @@ const drawGrid = () => {
 
     ctx.stroke();
 };
-
 
 drawGrid();
 play();
