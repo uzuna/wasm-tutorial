@@ -1,14 +1,9 @@
 mod utils;
 
-use std::{
-    cell::{self, RefCell},
-    fmt,
-    mem::forget,
-    rc::Rc,
-};
-
 use fixedbitset::FixedBitSet;
+use futures_util::stream::StreamExt;
 use js_sys::Math::random;
+use std::{cell::RefCell, fmt, rc::Rc};
 use wasm_bindgen::prelude::*;
 
 macro_rules! log {
@@ -298,6 +293,7 @@ impl<'a> Drop for Timer<'a> {
 #[wasm_bindgen]
 pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
     log!("golstart");
+
     let mut uni = gb.build();
 
     let closure = Rc::new(RefCell::new(None));
@@ -313,14 +309,49 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
         .unwrap();
     gb.gol();
 
+    let p = Rc::new(RefCell::new(None));
+
+    // 非同期タイマー実験
+    let p_ctrl = p.clone();
+    let cls_ctrl = closure.clone();
+    wasm_bindgen_futures::spawn_local(async move {
+        let ticker = gloo_timers::future::IntervalStream::new(2000);
+
+        ticker
+            .for_each(|_| async {
+                log!("tick");
+                let stopping = if let Some(ref mut p) = *p_ctrl.borrow_mut() {
+                    cancel_animation_frame(*p).unwrap();
+                    true
+                } else {
+                    false
+                };
+                if stopping {
+                    *p_ctrl.borrow_mut() = None;
+                } else {
+                    *p_ctrl.borrow_mut() =
+                        Some(request_animation_frame(cls_ctrl.borrow().as_ref().unwrap()).unwrap());
+                }
+            })
+            .await;
+    });
+
+    let p_closure = p.clone();
     *clone.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<i32, JsValue>>::new(
         move || {
             uni.tick();
             drawer.draw_cells(&context, &uni);
-            request_animation_frame(closure.borrow().as_ref().unwrap())
+            let res = request_animation_frame(closure.borrow().as_ref().unwrap());
+            match res {
+                Ok(handle) => {
+                    *p_closure.borrow_mut() = Some(handle);
+                    Ok(handle)
+                }
+                Err(e) => Err(e),
+            }
         },
     ));
-    request_animation_frame(clone.borrow().as_ref().unwrap())?;
+    *p.borrow_mut() = Some(request_animation_frame(clone.borrow().as_ref().unwrap())?);
     Ok(())
 }
 
@@ -329,6 +360,11 @@ fn request_animation_frame(
 ) -> Result<i32, JsValue> {
     let window = web_sys::window().unwrap();
     window.request_animation_frame(closure.as_ref().unchecked_ref())
+}
+
+fn cancel_animation_frame(handle: i32) -> Result<(), JsValue> {
+    let window = web_sys::window().unwrap();
+    window.cancel_animation_frame(handle)
 }
 
 struct Drawer {
