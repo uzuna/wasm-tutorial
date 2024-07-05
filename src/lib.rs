@@ -8,7 +8,9 @@ use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as gl};
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
+
+const GRID_COLOR: &str = "#CCCCCC";
 
 #[macro_export]
 macro_rules! log {
@@ -389,6 +391,7 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
         move || {
             uni.borrow_mut().tick();
             drawer.draw_cells(&context, &uni.borrow());
+            drawer.draw_grid(&context);
             let res = request_animation_frame(closure.borrow().as_ref().unwrap());
             match res {
                 Ok(handle) => {
@@ -512,6 +515,27 @@ impl Drawer {
                     );
                 }
             }
+        }
+
+        ctx.stroke();
+    }
+
+    fn draw_grid(&self, ctx: &web_sys::CanvasRenderingContext2d) {
+        ctx.begin_path();
+        ctx.set_stroke_style(&GRID_COLOR.into());
+
+        let cs = self.cell_size + 1.0;
+
+        // Vertical lines.
+        for i in 0..ctx.canvas().unwrap().width() {
+            ctx.move_to(i as f64 * cs + 1.0, 0.0);
+            ctx.line_to(i as f64 * cs + 1.0, ctx.canvas().unwrap().height() as f64);
+        }
+
+        // Horizontal lines.
+        for j in 0..ctx.canvas().unwrap().height() {
+            ctx.move_to(0.0, j as f64 * cs + 1.0);
+            ctx.line_to(ctx.canvas().unwrap().width() as f64, j as f64 * cs + 1.0);
         }
 
         ctx.stroke();

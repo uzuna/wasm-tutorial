@@ -1,9 +1,5 @@
 import { PlayControl, GolBuilder, golstart, webgl_start } from "wasm-game-of-life";
 
-const CELL_SIZE = 5; // px
-const GRID_COLOR = "#CCCCCC";
-
-
 // Give the canvas room for all of our cells and a 1px border
 // around each of them.
 const canvas = document.getElementById("game-of-life-canvas");
@@ -12,8 +8,6 @@ const width = 64;
 const height = 64;
 const golb = GolBuilder.new(width, height, canvas);
 const sender = golstart(golb);
-
-const ctx = canvas.getContext('2d');
 
 const playPauseButton = document.getElementById("play-pause");
 
@@ -94,31 +88,9 @@ const renderLoop = () => {
     // debugger;
 
     fps.render(); //new
-    drawGrid();
     animationId = requestAnimationFrame(renderLoop);
 };
 
-// 文字通りグリットの描画
-const drawGrid = () => {
-    ctx.beginPath();
-    ctx.strokeStyle = GRID_COLOR;
-
-    // Vertical lines.
-    for (let i = 0; i <= width; i++) {
-        ctx.moveTo(i * (CELL_SIZE + 1) + 1, 0);
-        ctx.lineTo(i * (CELL_SIZE + 1) + 1, (CELL_SIZE + 1) * height + 1);
-    }
-
-    // Horizontal lines.
-    for (let j = 0; j <= height; j++) {
-        ctx.moveTo(0, j * (CELL_SIZE + 1) + 1);
-        ctx.lineTo((CELL_SIZE + 1) * width + 1, j * (CELL_SIZE + 1) + 1);
-    }
-
-    ctx.stroke();
-};
-
-drawGrid();
 play();
 
 webgl_start(canvas_webgl);
