@@ -42,6 +42,7 @@ features = [
     "WebGlBuffer",
     "WebGlVertexArrayObject",
     "WebGlUniformLocation",
+    "HtmlButtonElement",
 ]
 
 [dev-dependencies]

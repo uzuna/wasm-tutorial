@@ -27,17 +27,24 @@ pub struct GolBuilder {
     height: u32,
     cell_size: u32,
     canvas: web_sys::HtmlCanvasElement,
+    play_button: web_sys::HtmlButtonElement,
 }
 
 /// 関数をこう飽きする場合はimplにwasm_bindgenをつけてpubにする
 #[wasm_bindgen]
 impl GolBuilder {
-    pub fn new(width: u32, height: u32, canvas: web_sys::HtmlCanvasElement) -> GolBuilder {
+    pub fn new(
+        width: u32,
+        height: u32,
+        canvas: web_sys::HtmlCanvasElement,
+        play_button: web_sys::HtmlButtonElement,
+    ) -> GolBuilder {
         GolBuilder {
             width,
             height,
             cell_size: 5,
             canvas,
+            play_button,
         }
     }
 
@@ -306,7 +313,7 @@ impl<'a> Drop for Timer<'a> {
 /// 構造体を戻すような使い方をすると、ライフタイムが不明でevent callbackの設定が難しい
 /// 実行プロセス全体を関数に閉じ込めたほうが取り回ししやすい
 #[wasm_bindgen]
-pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
+pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
     // JS側の指示はchannel経由で受け取る
     let (sender, mut recv_p, mut recv_c) = Sender::new();
 
@@ -326,6 +333,7 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
         .unwrap()
         .dyn_into::<web_sys::CanvasRenderingContext2d>()
         .unwrap();
+    let play_btn = gb.play_button.clone();
     gb.gol(sender.c_ctrl.clone());
 
     // 非同期タイマー実験
@@ -405,7 +413,9 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
     *p.borrow_mut() = Some(request_animation_frame(
         closure_clone.borrow().as_ref().unwrap(),
     )?);
-    Ok(sender)
+
+    play_button_start(play_btn, sender);
+    Ok(())
 }
 
 // 次のアニメーションフレームをリクエストする
@@ -580,4 +590,33 @@ pub fn webgl_start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
     shader.draw(&gl);
 
     Ok(())
+}
+
+fn play_button_start(btn: web_sys::HtmlButtonElement, sender: Sender) {
+    let sender = Rc::new(RefCell::new(sender));
+    let ctx = Rc::new(RefCell::new(btn));
+    let is_paused = Rc::new(RefCell::new(true));
+    let is_paused_clone = Rc::clone(&is_paused);
+    let sender_clone = sender.clone();
+    let ctx_clone = ctx.clone();
+    let closure = Closure::wrap(Box::new(move || {
+        let is_paused = is_paused_clone.borrow().clone();
+        if is_paused {
+            sender_clone.borrow().play(PlayControl::Play);
+            ctx_clone.borrow().set_text_content(Some("⏸"));
+        } else {
+            sender_clone.borrow().play(PlayControl::Pause);
+            ctx_clone.borrow().set_text_content(Some("▶"));
+        }
+        *is_paused_clone.borrow_mut() = !is_paused;
+    }) as Box<dyn FnMut()>);
+
+    ctx.borrow()
+        .add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())
+        .unwrap();
+    closure.forget();
+
+    // start play
+    sender.borrow().play(PlayControl::Play);
+    ctx.borrow().set_text_content(Some("⏸"));
 }

@@ -6,39 +6,9 @@ const canvas = document.getElementById("game-of-life-canvas");
 const canvas_webgl = document.getElementById("webgl-canvas");
 const width = 64;
 const height = 64;
-const golb = GolBuilder.new(width, height, canvas);
-const sender = golstart(golb);
-
 const playPauseButton = document.getElementById("play-pause");
-
-// フレーム識別子を保持する変数。null以外なら再生中と判断できる
-let animationId = null;
-
-
-const isPaused = () => {
-    return animationId === null;
-};
-
-const play = () => {
-    playPauseButton.textContent = "⏸";
-    renderLoop();
-};
-
-const pause = () => {
-    playPauseButton.textContent = "▶";
-    cancelAnimationFrame(animationId);
-    animationId = null;
-};
-
-playPauseButton.addEventListener("click", event => {
-    if (isPaused()) {
-        sender.play(PlayControl.Play);
-        play();
-    } else {
-        sender.play(PlayControl.Pause);
-        pause();
-    }
-});
+const golb = GolBuilder.new(width, height, canvas, playPauseButton);
+golstart(golb);
 
 const fps = new class {
     constructor() {
@@ -90,7 +60,5 @@ const renderLoop = () => {
     fps.render(); //new
     animationId = requestAnimationFrame(renderLoop);
 };
-
-play();
 
 webgl_start(canvas_webgl);
