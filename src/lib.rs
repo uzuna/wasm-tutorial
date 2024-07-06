@@ -1,4 +1,6 @@
+mod error;
 mod utils;
+mod webgl;
 
 use fixedbitset::FixedBitSet;
 use futures_util::stream::StreamExt;
@@ -6,7 +8,11 @@ use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use wasm_bindgen::prelude::*;
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
 
+const GRID_COLOR: &str = "#CCCCCC";
+
+#[macro_export]
 macro_rules! log {
     ( $( $t:tt )* ) => {
         web_sys::console::log_1(&format!( $( $t )* ).into());
@@ -21,17 +27,27 @@ pub struct GolBuilder {
     height: u32,
     cell_size: u32,
     canvas: web_sys::HtmlCanvasElement,
+    play_button: web_sys::HtmlButtonElement,
+    fps: web_sys::HtmlElement,
 }
 
 /// 関数をこう飽きする場合はimplにwasm_bindgenをつけてpubにする
 #[wasm_bindgen]
 impl GolBuilder {
-    pub fn new(width: u32, height: u32, canvas: web_sys::HtmlCanvasElement) -> GolBuilder {
+    pub fn new(
+        width: u32,
+        height: u32,
+        canvas: web_sys::HtmlCanvasElement,
+        play_button: web_sys::HtmlButtonElement,
+        fps: web_sys::HtmlElement,
+    ) -> GolBuilder {
         GolBuilder {
             width,
             height,
             cell_size: 5,
             canvas,
+            play_button,
+            fps,
         }
     }
 
@@ -300,7 +316,7 @@ impl<'a> Drop for Timer<'a> {
 /// 構造体を戻すような使い方をすると、ライフタイムが不明でevent callbackの設定が難しい
 /// 実行プロセス全体を関数に閉じ込めたほうが取り回ししやすい
 #[wasm_bindgen]
-pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
+pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
     // JS側の指示はchannel経由で受け取る
     let (sender, mut recv_p, mut recv_c) = Sender::new();
 
@@ -320,6 +336,9 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
         .unwrap()
         .dyn_into::<web_sys::CanvasRenderingContext2d>()
         .unwrap();
+    let play_btn = gb.play_button.clone();
+    let mut fps = Fps::new(gb.fps.clone());
+
     gb.gol(sender.c_ctrl.clone());
 
     // 非同期タイマー実験
@@ -385,6 +404,8 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
         move || {
             uni.borrow_mut().tick();
             drawer.draw_cells(&context, &uni.borrow());
+            drawer.draw_grid(&context);
+            fps.render();
             let res = request_animation_frame(closure.borrow().as_ref().unwrap());
             match res {
                 Ok(handle) => {
@@ -398,7 +419,9 @@ pub fn golstart(gb: GolBuilder) -> Result<Sender, JsValue> {
     *p.borrow_mut() = Some(request_animation_frame(
         closure_clone.borrow().as_ref().unwrap(),
     )?);
-    Ok(sender)
+
+    play_button_start(play_btn, sender);
+    Ok(())
 }
 
 // 次のアニメーションフレームをリクエストする
@@ -512,6 +535,27 @@ impl Drawer {
 
         ctx.stroke();
     }
+
+    fn draw_grid(&self, ctx: &web_sys::CanvasRenderingContext2d) {
+        ctx.begin_path();
+        ctx.set_stroke_style(&GRID_COLOR.into());
+
+        let cs = self.cell_size + 1.0;
+
+        // Vertical lines.
+        for i in 0..ctx.canvas().unwrap().width() {
+            ctx.move_to(i as f64 * cs + 1.0, 0.0);
+            ctx.line_to(i as f64 * cs + 1.0, ctx.canvas().unwrap().height() as f64);
+        }
+
+        // Horizontal lines.
+        for j in 0..ctx.canvas().unwrap().height() {
+            ctx.move_to(0.0, j as f64 * cs + 1.0);
+            ctx.line_to(ctx.canvas().unwrap().width() as f64, j as f64 * cs + 1.0);
+        }
+
+        ctx.stroke();
+    }
 }
 
 impl Default for Drawer {
@@ -521,5 +565,107 @@ impl Default for Drawer {
             dead_color: "#FFFFFF",
             cell_size: 5.0,
         }
+    }
+}
+
+#[wasm_bindgen]
+pub fn webgl_start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
+    use crate::webgl::*;
+    canvas.set_width(768);
+    canvas.set_height(768);
+
+    let gl = canvas
+        .get_context("webgl2")?
+        .ok_or("Failed to get WebGl2RenderingContext")?
+        .dyn_into::<gl>()?;
+
+    let shader = Shader::new(&gl)?;
+    let camera = Camera::default();
+    let view = ViewMatrix::default();
+
+    gl.enable(gl::DEPTH_TEST);
+    gl.depth_func(gl::LEQUAL);
+    gl.enable(gl::CULL_FACE);
+
+    gl.clear_color(0.0, 0.0, 0.0, 1.0);
+    gl.clear_depth(1.0);
+    gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+
+    shader.use_program(&gl);
+    shader.set_mvp(&gl, &camera, &view);
+    shader.draw(&gl);
+
+    Ok(())
+}
+
+fn play_button_start(btn: web_sys::HtmlButtonElement, sender: Sender) {
+    let sender = Rc::new(RefCell::new(sender));
+    let ctx = Rc::new(RefCell::new(btn));
+    let is_paused = Rc::new(RefCell::new(true));
+    let is_paused_clone = Rc::clone(&is_paused);
+    let sender_clone = sender.clone();
+    let ctx_clone = ctx.clone();
+    let closure = Closure::wrap(Box::new(move || {
+        let is_paused = is_paused_clone.borrow().clone();
+        if is_paused {
+            sender_clone.borrow().play(PlayControl::Play);
+            ctx_clone.borrow().set_text_content(Some("⏸"));
+        } else {
+            sender_clone.borrow().play(PlayControl::Pause);
+            ctx_clone.borrow().set_text_content(Some("▶"));
+        }
+        *is_paused_clone.borrow_mut() = !is_paused;
+    }) as Box<dyn FnMut()>);
+
+    ctx.borrow()
+        .add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())
+        .unwrap();
+    closure.forget();
+
+    // start play
+    sender.borrow().play(PlayControl::Play);
+    ctx.borrow().set_text_content(Some("⏸"));
+}
+
+struct Fps {
+    element: web_sys::HtmlElement,
+    performance: web_sys::Performance,
+    frames: Vec<f64>,
+    last_ts: f64,
+}
+
+impl Fps {
+    fn new(fps: web_sys::HtmlElement) -> Self {
+        let performance = web_sys::window().unwrap().performance().unwrap();
+        Fps {
+            element: fps,
+            performance,
+            frames: Vec::new(),
+            last_ts: 0.0,
+        }
+    }
+    fn render(&mut self) {
+        let now = self.performance.now();
+        let delta = now - self.last_ts;
+        self.last_ts = now;
+        let fps = 1000.0 / delta;
+        self.frames.push(fps);
+        if self.frames.len() > 60 {
+            self.frames.remove(0);
+        }
+        let avg = self.frames.iter().sum::<f64>() / self.frames.len() as f64;
+        let min = self.frames.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max = self
+            .frames
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
+        self.element.set_inner_text(&format!(
+            r#"Frames per Second:
+           latest = {fps:.3}
+  avg of last 100 = {avg:.3}
+  min of last 100 = {min:.3}
+  max of last 100 = {max:.3}"#
+        ));
     }
 }
