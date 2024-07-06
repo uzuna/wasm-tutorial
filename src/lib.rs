@@ -28,6 +28,7 @@ pub struct GolBuilder {
     cell_size: u32,
     canvas: web_sys::HtmlCanvasElement,
     play_button: web_sys::HtmlButtonElement,
+    fps: web_sys::HtmlElement,
 }
 
 /// 関数をこう飽きする場合はimplにwasm_bindgenをつけてpubにする
@@ -38,6 +39,7 @@ impl GolBuilder {
         height: u32,
         canvas: web_sys::HtmlCanvasElement,
         play_button: web_sys::HtmlButtonElement,
+        fps: web_sys::HtmlElement,
     ) -> GolBuilder {
         GolBuilder {
             width,
@@ -45,6 +47,7 @@ impl GolBuilder {
             cell_size: 5,
             canvas,
             play_button,
+            fps,
         }
     }
 
@@ -334,6 +337,8 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
         .dyn_into::<web_sys::CanvasRenderingContext2d>()
         .unwrap();
     let play_btn = gb.play_button.clone();
+    let mut fps = Fps::new(gb.fps.clone());
+
     gb.gol(sender.c_ctrl.clone());
 
     // 非同期タイマー実験
@@ -400,6 +405,7 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
             uni.borrow_mut().tick();
             drawer.draw_cells(&context, &uni.borrow());
             drawer.draw_grid(&context);
+            fps.render();
             let res = request_animation_frame(closure.borrow().as_ref().unwrap());
             match res {
                 Ok(handle) => {
@@ -619,4 +625,47 @@ fn play_button_start(btn: web_sys::HtmlButtonElement, sender: Sender) {
     // start play
     sender.borrow().play(PlayControl::Play);
     ctx.borrow().set_text_content(Some("⏸"));
+}
+
+struct Fps {
+    element: web_sys::HtmlElement,
+    performance: web_sys::Performance,
+    frames: Vec<f64>,
+    last_ts: f64,
+}
+
+impl Fps {
+    fn new(fps: web_sys::HtmlElement) -> Self {
+        let performance = web_sys::window().unwrap().performance().unwrap();
+        Fps {
+            element: fps,
+            performance,
+            frames: Vec::new(),
+            last_ts: 0.0,
+        }
+    }
+    fn render(&mut self) {
+        let now = self.performance.now();
+        let delta = now - self.last_ts;
+        self.last_ts = now;
+        let fps = 1000.0 / delta;
+        self.frames.push(fps);
+        if self.frames.len() > 60 {
+            self.frames.remove(0);
+        }
+        let avg = self.frames.iter().sum::<f64>() / self.frames.len() as f64;
+        let min = self.frames.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max = self
+            .frames
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
+        self.element.set_inner_text(&format!(
+            r#"Frames per Second:
+           latest = {fps:.3}
+  avg of last 100 = {avg:.3}
+  min of last 100 = {min:.3}
+  max of last 100 = {max:.3}"#
+        ));
+    }
 }
