@@ -4,6 +4,7 @@ mod webgl;
 
 use fixedbitset::FixedBitSet;
 use futures_util::stream::StreamExt;
+use gloo_timers::future::TimeoutFuture;
 use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
 use tokio::sync::mpsc::{self, UnboundedSender};
@@ -341,16 +342,6 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
 
     gb.gol(sender.c_ctrl.clone());
 
-    // 非同期タイマー実験
-    wasm_bindgen_futures::spawn_local(async move {
-        let ticker = gloo_timers::future::IntervalStream::new(2000);
-        ticker
-            .for_each(|_| async {
-                log!("tick1");
-            })
-            .await;
-    });
-
     // play/pause を制御するanimationIdを保持する変数
     // callbackによる仮面更新に動悸した再生と、cancelAnimationFrameによる停止ができる
     let p = Rc::new(RefCell::new(None));
@@ -668,4 +659,41 @@ impl Fps {
   max of last 100 = {max:.3}"#
         ));
     }
+}
+
+/// WASMのエントリポイント
+/// JSから関数を呼ばなくても実行される
+#[wasm_bindgen(start)]
+pub fn run() -> Result<(), JsValue> {
+    log!("Hello, wasm-bindgen!");
+
+    // 非同期ループ実験
+    let token = tokio_util::sync::CancellationToken::new();
+    let token_clone = token.clone();
+    // 無限ループと条件付き終了
+    // tokio spawnと違って戻り地がないため結果確認はできない
+    wasm_bindgen_futures::spawn_local(async move {
+        // 実行スレッドは1つしか無いのでawaitがなければ画面は固まる
+        // 確認は Google Chrome 125.0.6422.60 at 2024/07/12
+        loop {
+            tokio::select! {
+                _ = token_clone.cancelled() => {
+                    log!("cancelled");
+                    break;
+                }
+                // interval実装は無いため都度newする
+                _ = TimeoutFuture::new(1_000) => {
+                    log!("tick1");
+                }
+            }
+        }
+        log!("ticker finished");
+    });
+
+    // 上のFuture loopを停止するFuture
+    wasm_bindgen_futures::spawn_local(async move {
+        TimeoutFuture::new(4_000).await;
+        token.cancel();
+    });
+    Ok(())
 }
