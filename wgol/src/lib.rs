@@ -12,7 +12,7 @@ use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as gl};
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
 
 const GRID_COLOR: &str = "#CCCCCC";
 
@@ -352,7 +352,7 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
         .get_context("2d")
         .unwrap()
         .unwrap()
-        .dyn_into::<web_sys::CanvasRenderingContext2d>()
+        .dyn_into::<CanvasRenderingContext2d>()
         .unwrap();
     let play_btn = gb.play_button.clone();
     let mut fps = Fps::new(gb.fps.clone());
@@ -503,7 +503,7 @@ struct Drawer {
 }
 
 impl Drawer {
-    fn draw_cells(&self, ctx: &web_sys::CanvasRenderingContext2d, uni: &Universe) {
+    fn draw_cells(&self, ctx: &CanvasRenderingContext2d, uni: &Universe) {
         let cell_size = self.cell_size;
         ctx.set_fill_style(&self.alive_color.into());
 
@@ -544,7 +544,7 @@ impl Drawer {
         ctx.stroke();
     }
 
-    fn draw_grid(&self, ctx: &web_sys::CanvasRenderingContext2d) {
+    fn draw_grid(&self, ctx: &CanvasRenderingContext2d) {
         ctx.begin_path();
         ctx.set_stroke_style(&GRID_COLOR.into());
 
@@ -578,7 +578,7 @@ impl Default for Drawer {
 
 #[wasm_bindgen]
 pub fn webgl_start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
-    use crate::webgl::*;
+    use crate::webgl::basic_plane::*;
     canvas.set_width(768);
     canvas.set_height(768);
 
