@@ -6,7 +6,7 @@ test:
 
 .PHONY: build
 build:
-	wasm-pack build -d ${WWW_DIR}/wgol
+	wasm-pack build -d ${ASSETS_DIR}/wgol --target web
 
 .PHONY: npm-link
 npm-link:

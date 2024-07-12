@@ -16,4 +16,4 @@ npm-link:
 
 .PHONY: serve
 serve:
-	cd www && npm run start
+	cd web-server && cargo run
