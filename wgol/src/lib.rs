@@ -295,7 +295,7 @@ impl fmt::Display for Universe {
                 };
                 write!(f, "{}", symbol)?;
             }
-            write!(f, "\n")?;
+            writeln!(f)?;
         }
 
         Ok(())
@@ -614,7 +614,7 @@ fn play_button_start(btn: web_sys::HtmlButtonElement, sender: Sender) {
     let sender_clone = sender.clone();
     let ctx_clone = ctx.clone();
     let closure = Closure::wrap(Box::new(move || {
-        let is_paused = is_paused_clone.borrow().clone();
+        let is_paused = *is_paused_clone.borrow();
         if is_paused {
             sender_clone.borrow().play(PlayControl::Play);
             ctx_clone.borrow().set_text_content(Some("⏸"));
@@ -741,7 +741,7 @@ struct Hello {
 // websocketのタスクを開始する
 fn start_websocket(url: &str) -> Result<(), crate::error::Error> {
     use futures::{SinkExt, StreamExt};
-    let ws = WebSocket::open(url).map_err(|e| gloo_net::Error::JsError(e))?;
+    let ws = WebSocket::open(url).map_err(gloo_net::Error::JsError)?;
 
     let (mut write, mut read) = ws.split();
 

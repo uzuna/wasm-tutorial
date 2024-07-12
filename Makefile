@@ -17,3 +17,8 @@ npm-link:
 .PHONY: serve
 serve:
 	cd web-server && cargo run
+
+
+.PHONY: fmt
+fmt:
+	cargo clippy --fix --allow-staged

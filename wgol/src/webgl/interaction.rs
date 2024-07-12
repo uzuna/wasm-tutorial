@@ -262,7 +262,7 @@ impl VertexVbo {
             .ok_or(Error::gl("Failed to create buffer object".into()))?;
         gl.bind_buffer(Self::TARGET, Some(&buffer));
         unsafe {
-            let view = js_sys::Float32Array::view(&data);
+            let view = js_sys::Float32Array::view(data);
             gl.buffer_data_with_array_buffer_view(Self::TARGET, &view, usage);
         }
         gl.enable_vertex_attrib_array(location);
@@ -282,7 +282,7 @@ impl VertexVbo {
         };
         gl.bind_buffer(Self::TARGET, Some(&self.vbo));
         unsafe {
-            let view = js_sys::Float32Array::view(&data);
+            let view = js_sys::Float32Array::view(data);
             gl.buffer_sub_data_with_i32_and_array_buffer_view(Self::TARGET, 0, &view);
         }
         gl.enable_vertex_attrib_array(self.location);

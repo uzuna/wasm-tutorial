@@ -236,7 +236,7 @@ impl ColorVertexVao {
             .ok_or(Error::gl("Failed to create buffer object".into()))?;
         gl.bind_buffer(target, Some(&buffer));
         unsafe {
-            let view = js_sys::Float32Array::view(&data);
+            let view = js_sys::Float32Array::view(data);
             gl.buffer_data_with_array_buffer_view(target, &view, usage);
         }
         gl.enable_vertex_attrib_array(location);
