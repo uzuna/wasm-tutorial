@@ -3,15 +3,16 @@ mod utils;
 mod webgl;
 
 use fixedbitset::FixedBitSet;
-use futures_util::stream::StreamExt;
-use gloo_net::http::Request;
+use gloo_net::{
+    http::Request,
+    websocket::{futures::WebSocket, Message},
+};
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::JsFuture;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
+use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as gl};
 
 const GRID_COLOR: &str = "#CCCCCC";
 
@@ -719,6 +720,8 @@ pub fn run() -> Result<(), JsValue> {
         TimeoutFuture::new(4_000).await;
         token.cancel();
     });
+
+    start_websocket("ws://localhost:8080/api/ws/echo").unwrap();
     Ok(())
 }
 
@@ -733,4 +736,32 @@ async fn fetch_example<T: serde::de::DeserializeOwned>(
 #[derive(Debug, serde::Deserialize)]
 struct Hello {
     msg: String,
+}
+
+// websocketのタスクを開始する
+fn start_websocket(url: &str) -> Result<(), crate::error::Error> {
+    use futures::{SinkExt, StreamExt};
+    let ws = WebSocket::open(url).map_err(|e| gloo_net::Error::JsError(e))?;
+
+    let (mut write, mut read) = ws.split();
+
+    wasm_bindgen_futures::spawn_local(async move {
+        let mut count = 0;
+        loop {
+            write
+                .send(Message::Text(format!("test {}", count)))
+                .await
+                .unwrap();
+            count += 1;
+            TimeoutFuture::new(1_000).await;
+        }
+    });
+
+    wasm_bindgen_futures::spawn_local(async move {
+        while let Some(msg) = read.next().await {
+            log!("1. {:?}", msg);
+        }
+        log!("WebSocket Closed");
+    });
+    Ok(())
 }

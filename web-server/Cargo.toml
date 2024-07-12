@@ -8,6 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 axum = { version = "0.7", features = ["json", "query", "ws"] }
+futures-util = "0.3.30"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1.0", features = ["full"] }
 tower = { version = "0.4", features = ["util"] }

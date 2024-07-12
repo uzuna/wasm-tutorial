@@ -18,7 +18,9 @@ async fn main() {
     let router = Router::new()
         .nest(
             "/api",
-            Router::new().route("/hello", get(Hello::get_response)),
+            Router::new()
+                .route("/hello", get(Hello::get_response))
+                .route("/ws/echo", get(echo_ws)),
         )
         .fallback_service(serve_dir)
         .layer(TraceLayer::new_for_http());
@@ -43,4 +45,15 @@ impl Hello {
     async fn get_response() -> impl IntoResponse {
         Json(Self::DEFAULT)
     }
+}
+
+async fn echo_ws(ws: axum::extract::ws::WebSocketUpgrade) -> impl IntoResponse {
+    use futures_util::{stream::StreamExt, SinkExt};
+    ws.on_upgrade(|socket| async {
+        let (mut sender, mut receiver) = socket.split();
+        while let Some(msg) = receiver.next().await {
+            let msg = msg.unwrap();
+            sender.send(msg).await.unwrap();
+        }
+    })
 }
