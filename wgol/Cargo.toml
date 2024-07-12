@@ -30,23 +30,30 @@ wasm-timer = "0.2.5"
 thiserror = "1.0.61"
 nalgebra-glm = "0.19.0"
 tokio-util = "0.7.11"
+serde = { version = "1", features = ["derive"] }
+gloo-net = "0.5.0"
 
 [dependencies.web-sys]
 version = "0.3"
 features = [
+    'Headers',
+    'Request',
+    'RequestInit',
+    'RequestMode',
+    'Response',
+    "CanvasRenderingContext2d",
     "console",
+    "HtmlButtonElement",
     "HtmlCanvasElement",
     "MouseEvent",
-    "Window",
-    "CanvasRenderingContext2d",
-    "WebGl2RenderingContext",
-    "WebGlShader",
-    "WebGlProgram",
-    "WebGlBuffer",
-    "WebGlVertexArrayObject",
-    "WebGlUniformLocation",
-    "HtmlButtonElement",
     "Performance",
+    "WebGl2RenderingContext",
+    "WebGlBuffer",
+    "WebGlProgram",
+    "WebGlShader",
+    "WebGlUniformLocation",
+    "WebGlVertexArrayObject",
+    "Window",
 ]
 
 [dev-dependencies]
