@@ -346,7 +346,7 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
         let ticker = gloo_timers::future::IntervalStream::new(2000);
         ticker
             .for_each(|_| async {
-                log!("tick");
+                log!("tick1");
             })
             .await;
     });

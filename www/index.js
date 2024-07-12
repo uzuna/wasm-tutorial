@@ -1,4 +1,4 @@
-import { GolBuilder, golstart, webgl_start } from "wasm-game-of-life";
+import { GolBuilder, golstart, webgl_start } from "./wgol";
 
 // Give the canvas room for all of our cells and a 1px border
 // around each of them.
