@@ -25,6 +25,64 @@ pub trait GlPoint {
 /// 連続する2つの`f32`のデータとして見えなければならないのでCの構造体として定義する  
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[repr(C)]
+pub struct GlPoint2D {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl GlPoint2D {
+    pub const fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+    pub fn norm(&self) -> f32 {
+        (self.x * self.x + self.y * self.y).sqrt()
+    }
+}
+
+impl GlPoint for GlPoint2D {
+    fn size() -> GlInt {
+        2
+    }
+}
+
+impl std::ops::Sub for GlPoint2D {
+    type Output = GlPoint2D;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
+}
+impl std::ops::Mul<f32> for GlPoint2D {
+    type Output = GlPoint2D;
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
+    }
+}
+
+impl std::ops::DivAssign<f32> for GlPoint2D {
+    fn div_assign(&mut self, rhs: f32) {
+        self.x /= rhs;
+        self.y /= rhs;
+    }
+}
+
+impl std::ops::AddAssign for GlPoint2D {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+    }
+}
+
+/// OpenGLに渡す2次元の点の情報
+///
+/// 連続する2つの`f32`のデータとして見えなければならないのでCの構造体として定義する  
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[repr(C)]
 pub struct GlPoint3D {
     pub x: f32,
     pub y: f32,
