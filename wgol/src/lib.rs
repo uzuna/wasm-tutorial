@@ -3,12 +3,16 @@ mod utils;
 mod webgl;
 
 use fixedbitset::FixedBitSet;
-use futures_util::stream::StreamExt;
+use gloo_net::{
+    http::Request,
+    websocket::{futures::WebSocket, Message},
+};
+use gloo_timers::future::TimeoutFuture;
 use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use wasm_bindgen::prelude::*;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
+use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as gl};
 
 const GRID_COLOR: &str = "#CCCCCC";
 
@@ -16,6 +20,13 @@ const GRID_COLOR: &str = "#CCCCCC";
 macro_rules! log {
     ( $( $t:tt )* ) => {
         web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
+}
+
+#[macro_export]
+macro_rules! error {
+    ( $( $t:tt )* ) => {
+        web_sys::console::error_1(&format!( $( $t )* ).into());
     }
 }
 
@@ -108,6 +119,13 @@ impl Cell {
             Cell::Alive => Cell::Dead,
         };
         self
+    }
+
+    fn bool(&self) -> bool {
+        match *self {
+            Cell::Dead => false,
+            Cell::Alive => true,
+        }
     }
 }
 
@@ -270,7 +288,7 @@ impl fmt::Display for Universe {
             for col in 0..self.width {
                 let idx = self.get_index(row, col);
                 let cell = self.cells[idx];
-                let symbol = if cell == Cell::Dead.into() {
+                let symbol = if cell == Cell::Dead.bool() {
                     '◻'
                 } else {
                     '◼'
@@ -289,7 +307,7 @@ impl Universe {
     pub fn set_cells(&mut self, cells: &[(u32, u32)]) {
         for (row, col) in cells.iter().cloned() {
             let idx = self.get_index(row, col);
-            self.cells.set(idx, Cell::Alive.into());
+            self.cells.set(idx, Cell::Alive.bool());
         }
     }
 }
@@ -340,16 +358,6 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
     let mut fps = Fps::new(gb.fps.clone());
 
     gb.gol(sender.c_ctrl.clone());
-
-    // 非同期タイマー実験
-    wasm_bindgen_futures::spawn_local(async move {
-        let ticker = gloo_timers::future::IntervalStream::new(2000);
-        ticker
-            .for_each(|_| async {
-                log!("tick");
-            })
-            .await;
-    });
 
     // play/pause を制御するanimationIdを保持する変数
     // callbackによる仮面更新に動悸した再生と、cancelAnimationFrameによる停止ができる
@@ -505,7 +513,7 @@ impl Drawer {
             for col in 0..uni.width {
                 let idx = uni.get_index(row, col);
                 let cell = uni.cells[idx];
-                if cell == Cell::Alive.into() {
+                if cell == Cell::Alive.bool() {
                     ctx.fill_rect(
                         col as f64 * (cell_size + 1.0) + 1.0,
                         row as f64 * (cell_size + 1.0) + 1.0,
@@ -522,7 +530,7 @@ impl Drawer {
             for col in 0..uni.width {
                 let idx = uni.get_index(row, col);
                 let cell = uni.cells[idx];
-                if cell == Cell::Dead.into() {
+                if cell == Cell::Dead.bool() {
                     ctx.fill_rect(
                         col as f64 * (cell_size + 1.0) + 1.0,
                         row as f64 * (cell_size + 1.0) + 1.0,
@@ -668,4 +676,92 @@ impl Fps {
   max of last 100 = {max:.3}"#
         ));
     }
+}
+
+/// WASMのエントリポイント
+/// JSから関数を呼ばなくても実行される
+#[wasm_bindgen(start)]
+pub fn run() -> Result<(), JsValue> {
+    log!("Hello, wasm-bindgen!");
+
+    // 非同期ループ実験
+    let token = tokio_util::sync::CancellationToken::new();
+    let token_clone = token.clone();
+    // 無限ループと条件付き終了
+    // tokio spawnと違って戻り地がないため結果確認はできない
+    wasm_bindgen_futures::spawn_local(async move {
+        // 実行スレッドは1つしか無いのでawaitがなければ画面は固まる
+        // 確認は Google Chrome 125.0.6422.60 at 2024/07/12
+        loop {
+            tokio::select! {
+                _ = token_clone.cancelled() => {
+                    log!("cancelled");
+                    break;
+                }
+                // interval実装は無いため都度newする
+                _ = TimeoutFuture::new(1_000) => {
+                    log!("tick1");
+                }
+            }
+        }
+        log!("ticker finished");
+    });
+
+    // 上のFuture loopを停止するFuture
+    wasm_bindgen_futures::spawn_local(async move {
+        match fetch_example::<Hello>("/api/hello").await {
+            Ok(val) => {
+                log!("fetch_example: {:?}", val);
+            }
+            Err(e) => {
+                error!("fetch_example error: {:?}", e);
+            }
+        };
+        TimeoutFuture::new(4_000).await;
+        token.cancel();
+    });
+
+    start_websocket("ws://localhost:8080/api/ws/echo").unwrap();
+    Ok(())
+}
+
+async fn fetch_example<T: serde::de::DeserializeOwned>(
+    url: &str,
+) -> Result<T, crate::error::Error> {
+    // fetch apiをラップしているgoo-netを使ってリクエストを送る
+    let res = Request::get(url).send().await?;
+    Ok(res.json::<T>().await?)
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct Hello {
+    msg: String,
+}
+
+// websocketのタスクを開始する
+fn start_websocket(url: &str) -> Result<(), crate::error::Error> {
+    use futures::{SinkExt, StreamExt};
+    let ws = WebSocket::open(url).map_err(|e| gloo_net::Error::JsError(e))?;
+
+    let (mut write, mut read) = ws.split();
+
+    wasm_bindgen_futures::spawn_local(async move {
+        let mut count = 0;
+        loop {
+            write
+                .send(Message::Text(format!("test {}", count)))
+                .await
+                .unwrap();
+            count += 1;
+            TimeoutFuture::new(1_000).await;
+        }
+    });
+
+    wasm_bindgen_futures::spawn_local(async move {
+        while let Some(msg) = read.next().await {
+            log!("1. {:?}", msg);
+        }
+        log!("WebSocket Closed");
+    });
+    Ok(())
 }
