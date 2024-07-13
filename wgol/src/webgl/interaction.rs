@@ -1,3 +1,4 @@
+use wasm_bindgen::prelude::*;
 use web_sys::{WebGlBuffer, WebGlUniformLocation};
 
 use super::program::{gl, GlEnum, GlPoint, GlPoint2D, Program};
@@ -37,9 +38,9 @@ void main() {
 }
 "#;
 
-    pub fn new(gl: &gl, res: Resolution) -> Result<Self> {
+    pub fn new(gl: &gl, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
-        let particle = Particle::new(res);
+        let particle = Particle::new(res, ctrl);
         let vbo = VertexVbo::new(gl, &particle.position, 0)?;
         program.use_program(gl);
         let uniform = ParticleUniform::new(gl, &program)?;
@@ -59,8 +60,7 @@ void main() {
     pub fn update(&mut self, gl: &gl, target: Point, vector_update: bool) {
         self.particle.update(target, vector_update);
         self.vbo.update_vertex(gl, &self.particle.position);
-        self.uniform
-            .set_size(gl, self.particle.velocity * 1.25 + 0.25);
+        self.uniform.set_size(gl, self.particle.current_size);
     }
 
     pub fn draw(&self, gl: &gl) {
@@ -154,18 +154,56 @@ impl std::ops::Mul<f32> for Point {
     }
 }
 
+/// パーティクルに関する操作
+#[wasm_bindgen(inspectable)]
+pub struct ParticleControl {
+    // 追従移動速度の係数。小さいと実際の移動量が小さくなり、速度も遅いがマウスに追従しやすくなる
+    // 大きくするとオーバーシュートが増える
+    pub speed: f32,
+    // mouseup時のパーティクル移動速度の減衰係数
+    // 大きいほどすぐに止まる
+    pub speed_decay: f32,
+    // パーティクルの大きさの減衰係数
+    // 大きいほどすぐに見えない大きさに鳴る
+    pub size_decay: f32,
+    // 最大速度係数。speedとほぼ同じだが、こちらは減速速度にも影響する
+    pub max_velocity: f32,
+    // 最大パーティクルサイズ
+    pub max_size: f32,
+    // ベクトル更新レートの逆数
+    // これが大きいほど、パーティクルの方向転換が遅くなる = オーバーシュートしやすくなる
+    pub handle_rate: f32,
+}
+
+impl ParticleControl {
+    pub const DEFAULT: Self = Self {
+        speed: 0.02,
+        speed_decay: 0.95,
+        size_decay: 0.98,
+        max_velocity: 2.0,
+        max_size: 4.0,
+        handle_rate: 5.0,
+    };
+}
+
+#[wasm_bindgen]
+impl ParticleControl {
+    pub fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
 pub struct Particle {
     position: Vec<GlPoint2D>,
     vector: Vec<GlPoint2D>,
     res: Resolution,
-    velocity: f32,
+    current_velocity: f32,
+    current_size: f32,
+    ctrl: ParticleControl,
 }
 
 impl Particle {
-    const SPEED: f32 = 0.02;
-    const MAX_VELOCITY: f32 = 2.0;
-
-    pub fn new(res: Resolution) -> Self {
+    pub fn new(res: Resolution, ctrl: ParticleControl) -> Self {
         let mut position = Vec::new();
         let mut vector = Vec::new();
         // OpenGL空間を指定解像度で分割して点を配置
@@ -183,7 +221,9 @@ impl Particle {
             position,
             vector,
             res,
-            velocity: Self::MAX_VELOCITY,
+            current_velocity: 0.0,
+            current_size: 1.0,
+            ctrl,
         }
     }
 
@@ -192,13 +232,15 @@ impl Particle {
     }
 
     // 移動ベクトルの更新
-    fn update_vector(pos: GlPoint2D, target: Point, vector: GlPoint2D) -> GlPoint2D {
+    fn update_vector(&self, pos: GlPoint2D, target: Point, vector: GlPoint2D) -> GlPoint2D {
         let mut delta = GlPoint2D::from(target) - pos;
-        let r = delta.norm() * 5.0;
+        // ベクトルに対する加算量を計算
+        let r = delta.norm() * self.ctrl.handle_rate;
         if r != 0.0 {
             delta /= r;
         }
         delta += vector;
+        // ベクトルの長さが1.0に収束するように正規化
         let r = delta.norm();
         if r != 0.0 {
             delta /= r;
@@ -210,19 +252,21 @@ impl Particle {
     pub fn update(&mut self, target: Point, vector_update: bool) {
         match vector_update {
             true => {
-                self.velocity = Self::MAX_VELOCITY;
+                self.current_velocity = self.ctrl.max_velocity;
+                self.current_size = self.ctrl.max_size
             }
             false => {
-                self.velocity *= 0.95;
+                self.current_velocity *= self.ctrl.speed_decay;
+                self.current_size *= self.ctrl.size_decay;
             }
         }
         for x in 0..self.res.x {
             for y in 0..self.res.y {
                 let i = self.index(x, y);
                 if vector_update {
-                    self.vector[i] = Self::update_vector(self.position[i], target, self.vector[i]);
+                    self.vector[i] = self.update_vector(self.position[i], target, self.vector[i]);
                 }
-                self.position[i] += self.vector[i] * self.velocity * Self::SPEED;
+                self.position[i] += self.vector[i] * self.current_velocity * self.ctrl.speed;
             }
         }
     }

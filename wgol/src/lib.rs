@@ -13,6 +13,7 @@ use std::{cell::RefCell, fmt, rc::Rc};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use wasm_bindgen::prelude::*;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
+use webgl::interaction::ParticleControl;
 
 const GRID_COLOR: &str = "#CCCCCC";
 
@@ -767,7 +768,7 @@ fn start_websocket(url: &str) -> Result<(), crate::error::Error> {
 }
 
 #[wasm_bindgen]
-pub fn webgl_interaction(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
+pub fn webgl_interaction(canvas: HtmlCanvasElement, ctrl: ParticleControl) -> Result<(), JsValue> {
     use crate::webgl::interaction::*;
     canvas.set_width(768);
     canvas.set_height(768);
@@ -780,7 +781,7 @@ pub fn webgl_interaction(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
     gl.clear(gl::COLOR_BUFFER_BIT);
 
     let res = Resolution::DEFAULT;
-    let mut shader = ParticleShader::new(&gl, res)?;
+    let mut shader = ParticleShader::new(&gl, res, ctrl)?;
     gl.enable(gl::BLEND);
     gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE, gl::ONE, gl::ONE);
 

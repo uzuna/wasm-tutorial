@@ -1,4 +1,4 @@
-import init, { GolBuilder, golstart, webgl_start, webgl_interaction } from "./wgol/wasm_game_of_life.js";
+import init, { GolBuilder, golstart, webgl_start, webgl_interaction, ParticleControl } from "./wgol/wasm_game_of_life.js";
 
 // bundlerを伴わない場合はinitが必要
 // https://rustwasm.github.io/docs/wasm-bindgen/examples/without-a-bundler.html
@@ -16,4 +16,6 @@ const fps = document.getElementById("fps");
 const golb = GolBuilder.new(width, height, canvas, playPauseButton, fps);
 golstart(golb);
 webgl_start(canvas_webgl);
-webgl_interaction(canvas_interaction);
+const ctrl = ParticleControl.default();
+console.log(ctrl);
+webgl_interaction(canvas_interaction, ctrl);
