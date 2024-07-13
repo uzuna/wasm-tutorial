@@ -333,3 +333,98 @@ impl VertexVbo {
         gl.vertex_attrib_pointer_with_i32(self.location, GlPoint2D::size(), gl::FLOAT, false, 0, 0);
     }
 }
+
+pub struct ParticleGpgpuShader {
+    point: Program,
+    velocity: Program,
+    program: Program,
+}
+
+impl ParticleGpgpuShader {
+    // 頂点の位置を保持するシェーダー。テクスチャにある頂点情報を取り出してそのまま出力
+    const POINT_VERT: &'static str = r#"#version 300 es
+layout(location = 0) in float index;
+uniform vec2 resolution;
+uniform sampler2D u_texture;
+uniform float pointScale;
+
+void main(){
+    // index値から頂点データの位置を算出
+    vec2 p = vec2(
+        mod(index, resolution.x) / resolution.x,
+        floor(index / resolution.x) / resolution.y
+    );
+    vec4 t = texture(u_texture, p);
+    gl_Position = vec4(t.xy, 0.0, 1.0);
+    gl_PointSize = 0.1 + pointScale;
+}
+"#;
+    // 頂点の色はuniformから指定
+    const POINT_FRAG: &'static str = r#"#version 300 es
+precision mediump float;
+uniform vec4 ambient;
+out vec4 fragmentColor;
+void main(){
+	fragmentColor = ambient;
+}
+"#;
+
+    // 何が入っている?
+    const VELOCITY_VERT: &'static str = r#"#version 300 es
+layout(location = 0) in vec3 position;
+void main(){
+    gl_Position = vec4(position, 1.0);
+}
+"#;
+    // テクスチャから現在のVelocityを取り出して更新するロジック
+    const VELOCITY_FRAG: &'static str = r#"#version 300 es
+precision mediump float;
+
+uniform vec2 resolution;
+uniform sampler2D u_texture;
+uniform vec2 target;
+uniform bool vectorUpdate;
+uniform float velocity;
+uniform float speed;
+uniform float handleRate;
+
+out vec4 fragmentColor;
+void main(){
+    vec2 p = gl_FragCoord.xy / resolution;
+    vec4 t = texture(u_texture, p);
+    vec2 v = normalize(target - t.xy) * handleRate;
+    vec2 w = normalize(v + t.zw);
+    vec4 destColor = vec4(t.xy + w * speed * velocity, w);
+    if(!vectorUpdate){destColor.zw = t.zw;}
+    fragmentColor = destColor;
+}
+"#;
+
+    const VERT: &'static str = r#"#version 300 es
+layout(location = 0) in vec3 position;
+void main(){
+    gl_Position = vec4(position, 1.0);
+}
+"#;
+
+    const FRAG: &'static str = r#"#version 300 es
+precision mediump float;
+uniform vec2 resolution;
+out vec4 fragmentColor;
+void main(){
+    vec2 p = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+    fragmentColor = vec4(p, 0.0, 0.0);
+}
+"#;
+
+    pub fn new(gl: &gl, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
+        let point = Program::new(gl, Self::POINT_VERT, Self::POINT_FRAG)?;
+        let velocity = Program::new(gl, Self::VELOCITY_VERT, Self::VELOCITY_FRAG)?;
+        let program = Program::new(gl, Self::VERT, Self::FRAG)?;
+        Ok(Self {
+            point,
+            velocity,
+            program,
+        })
+    }
+}

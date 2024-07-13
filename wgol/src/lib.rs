@@ -770,8 +770,8 @@ fn start_websocket(url: &str) -> Result<(), crate::error::Error> {
 #[wasm_bindgen]
 pub fn webgl_interaction(canvas: HtmlCanvasElement, ctrl: ParticleControl) -> Result<(), JsValue> {
     use crate::webgl::interaction::*;
-    canvas.set_width(768);
-    canvas.set_height(768);
+    canvas.set_width(512);
+    canvas.set_height(512);
 
     let gl = canvas
         .get_context("webgl2")?
@@ -861,6 +861,30 @@ pub fn webgl_interaction(canvas: HtmlCanvasElement, ctrl: ParticleControl) -> Re
         .add_event_listener_with_callback("mousemove", mouse_move.as_ref().unchecked_ref())
         .unwrap();
     mouse_move.forget();
+
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn webgl_interaction_gpgpu(
+    canvas: HtmlCanvasElement,
+    ctrl: ParticleControl,
+) -> Result<(), JsValue> {
+    use crate::webgl::interaction::*;
+    canvas.set_width(512);
+    canvas.set_height(512);
+
+    let gl = canvas
+        .get_context("webgl2")?
+        .ok_or("Failed to get WebGl2RenderingContext")?
+        .dyn_into::<gl>()?;
+    gl.clear_color(0.0, 0.0, 0.0, 1.0);
+    gl.clear(gl::COLOR_BUFFER_BIT);
+
+    let res = Resolution::DEFAULT;
+    let mut shader = ParticleGpgpuShader::new(&gl, res, ctrl)?;
+    gl.enable(gl::BLEND);
+    gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE, gl::ONE, gl::ONE);
 
     Ok(())
 }
