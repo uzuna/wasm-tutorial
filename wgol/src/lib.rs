@@ -881,8 +881,22 @@ pub fn webgl_interaction_gpgpu(
     gl.clear_color(0.0, 0.0, 0.0, 1.0);
     gl.clear(gl::COLOR_BUFFER_BIT);
 
+    let unit_count = gl
+        .get_parameter(gl::MAX_VERTEX_TEXTURE_IMAGE_UNITS)?
+        .as_f64()
+        .unwrap() as u32;
+    if unit_count < 1 {
+        Err("MAX_VERTEX_TEXTURE_IMAGE_UNITS is less than 1")?;
+    }
+    log!("MAX_VERTEX_TEXTURE_IMAGE_UNITS: {:?}", unit_count);
+
+    // 浮動小数点数テクスチャが利用可能かどうかチェック
+    if gl.get_extension("OES_texture_float_linear")?.is_none() {
+        Err("OES_texture_float_linear is not supported")?;
+    }
+
     let res = Resolution::DEFAULT;
-    let mut shader = ParticleGpgpuShader::new(&gl, res, ctrl)?;
+    let shader = ParticleGpgpuShader::new(&gl, res, ctrl)?;
     gl.enable(gl::BLEND);
     gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE, gl::ONE, gl::ONE);
 

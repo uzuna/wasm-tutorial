@@ -3,6 +3,17 @@ use web_sys::{WebGlProgram, WebGlShader};
 
 use crate::error::{Error, Result};
 
+#[macro_export]
+macro_rules! uniform_location {
+    ($gl:expr, $program:expr, $name:expr) => {
+        $gl.get_uniform_location($program.program(), $name)
+            .ok_or(Error::gl(format!(
+                "Failed to get uniform location {}",
+                $name
+            )))
+    };
+}
+
 pub type GlEnum = u32;
 pub type GlInt = i32;
 

@@ -3,7 +3,10 @@ use web_sys::{WebGlBuffer, WebGlUniformLocation};
 
 use super::program::{gl, GlEnum, GlPoint, GlPoint2D, Program};
 
-use crate::error::{Error, Result};
+use crate::{
+    error::{Error, Result},
+    uniform_location,
+};
 
 pub struct ParticleShader {
     program: Program,
@@ -76,12 +79,8 @@ struct ParticleUniform {
 
 impl ParticleUniform {
     pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let size = gl
-            .get_uniform_location(program.program(), "pointSize")
-            .ok_or(Error::gl("Failed to get uniform location".into()))?;
-        let color = gl
-            .get_uniform_location(program.program(), "pointColor")
-            .ok_or(Error::gl("Failed to get uniform location".into()))?;
+        let size = uniform_location!(gl, program, "pointSize")?;
+        let color = uniform_location!(gl, program, "pointColor")?;
         Ok(Self { size, color })
     }
 
@@ -99,6 +98,7 @@ impl ParticleUniform {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Resolution {
     pub x: u32,
     pub y: u32,
@@ -156,6 +156,7 @@ impl std::ops::Mul<f32> for Point {
 
 /// パーティクルに関する操作
 #[wasm_bindgen(inspectable)]
+#[derive(Debug, Clone, Copy)]
 pub struct ParticleControl {
     // 追従移動速度の係数。小さいと実際の移動量が小さくなり、速度も遅いがマウスに追従しやすくなる
     // 大きくするとオーバーシュートが増える
@@ -338,6 +339,9 @@ pub struct ParticleGpgpuShader {
     point: Program,
     velocity: Program,
     program: Program,
+    u_point: ParticleGpgpuPointUniform,
+    u_velocity: ParticleGpgpuVelocityUniform,
+    u_normal: ParticleGpgpuNormalUniform,
 }
 
 impl ParticleGpgpuShader {
@@ -421,10 +425,147 @@ void main(){
         let point = Program::new(gl, Self::POINT_VERT, Self::POINT_FRAG)?;
         let velocity = Program::new(gl, Self::VELOCITY_VERT, Self::VELOCITY_FRAG)?;
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
+        point.use_program(gl);
+        let u_point = ParticleGpgpuPointUniform::new(gl, &point)?;
+        u_point.init(gl, &res);
+
+        velocity.use_program(gl);
+        let u_velocity = ParticleGpgpuVelocityUniform::new(gl, &velocity)?;
+        u_velocity.init(gl, &res, &ctrl);
+
+        program.use_program(gl);
+        let u_normal = ParticleGpgpuNormalUniform::new(gl, &program)?;
+        u_normal.init(gl, &res);
         Ok(Self {
             point,
             velocity,
             program,
+            u_point,
+            u_velocity,
+            u_normal,
         })
+    }
+}
+
+struct ParticleGpgpuPointUniform {
+    resolution: WebGlUniformLocation,
+    u_texture: WebGlUniformLocation,
+    ambient: WebGlUniformLocation,
+}
+
+impl ParticleGpgpuPointUniform {
+    pub fn new(gl: &gl, program: &Program) -> Result<Self> {
+        let resolution = uniform_location!(gl, program, "resolution")?;
+        let u_texture = uniform_location!(gl, program, "u_texture")?;
+        let ambient = uniform_location!(gl, program, "ambient")?;
+        Ok(Self {
+            resolution,
+            u_texture,
+            ambient,
+        })
+    }
+
+    fn init(&self, gl: &gl, res: &Resolution) {
+        self.set_resolution(gl, res);
+        self.set_ambient(gl, [1.0, 1.0, 1.0, 1.0]);
+    }
+
+    pub fn set_resolution(&self, gl: &gl, res: &Resolution) {
+        gl.uniform2f(Some(&self.resolution), res.x as f32, res.y as f32);
+    }
+
+    pub fn set_texture_unit(&self, gl: &gl, texture_unit: i32) {
+        gl.uniform1i(Some(&self.u_texture), texture_unit);
+    }
+
+    pub fn set_ambient(&self, gl: &gl, color: [f32; 4]) {
+        gl.uniform4f(Some(&self.ambient), color[0], color[1], color[2], color[3]);
+    }
+}
+
+struct ParticleGpgpuVelocityUniform {
+    resolution: WebGlUniformLocation,
+    u_texture: WebGlUniformLocation,
+    target: WebGlUniformLocation,
+    vector_update: WebGlUniformLocation,
+    velocity: WebGlUniformLocation,
+    speed: WebGlUniformLocation,
+    handle_rate: WebGlUniformLocation,
+}
+
+impl ParticleGpgpuVelocityUniform {
+    pub fn new(gl: &gl, program: &Program) -> Result<Self> {
+        let resolution = uniform_location!(gl, program, "resolution")?;
+        let u_texture = uniform_location!(gl, program, "u_texture")?;
+        let target = uniform_location!(gl, program, "target")?;
+        let vector_update = uniform_location!(gl, program, "vectorUpdate")?;
+        let velocity = uniform_location!(gl, program, "velocity")?;
+        let speed = uniform_location!(gl, program, "speed")?;
+        let handle_rate = uniform_location!(gl, program, "handleRate")?;
+        Ok(Self {
+            resolution,
+            u_texture,
+            target,
+            vector_update,
+            velocity,
+            speed,
+            handle_rate,
+        })
+    }
+
+    fn init(&self, gl: &gl, res: &Resolution, ctrl: &ParticleControl) {
+        self.set_resolution(gl, res);
+        self.set_target(gl, Point::new(0.0, 0.0));
+        self.set_vector_update(gl, false);
+        self.set_velocity(gl, 0.0);
+        self.set_speed(gl, ctrl.speed);
+        self.set_handle_rate(gl, ctrl.handle_rate);
+    }
+
+    pub fn set_texture_unit(&self, gl: &gl, texture_unit: i32) {
+        gl.uniform1i(Some(&self.u_texture), texture_unit);
+    }
+
+    pub fn set_resolution(&self, gl: &gl, res: &Resolution) {
+        gl.uniform2f(Some(&self.resolution), res.x as f32, res.y as f32);
+    }
+
+    pub fn set_target(&self, gl: &gl, target: Point) {
+        gl.uniform2f(Some(&self.target), target.x, target.y);
+    }
+
+    pub fn set_vector_update(&self, gl: &gl, update: bool) {
+        gl.uniform1i(Some(&self.vector_update), update as i32);
+    }
+
+    pub fn set_velocity(&self, gl: &gl, velocity: f32) {
+        gl.uniform1f(Some(&self.velocity), velocity);
+    }
+
+    pub fn set_speed(&self, gl: &gl, speed: f32) {
+        gl.uniform1f(Some(&self.speed), speed);
+    }
+
+    pub fn set_handle_rate(&self, gl: &gl, rate: f32) {
+        gl.uniform1f(Some(&self.handle_rate), rate);
+    }
+}
+
+struct ParticleGpgpuNormalUniform {
+    resolution: WebGlUniformLocation,
+}
+
+impl ParticleGpgpuNormalUniform {
+    pub fn new(gl: &gl, program: &Program) -> Result<Self> {
+        let resolution = uniform_location!(gl, program, "resolution")?;
+        Ok(Self { resolution })
+    }
+
+    fn init(&self, gl: &gl, res: &Resolution) {
+        self.set_resolution(gl, res);
+    }
+
+    pub fn set_resolution(&self, gl: &gl, res: &Resolution) {
+        gl.uniform2f(Some(&self.resolution), res.x as f32, res.y as f32);
     }
 }
