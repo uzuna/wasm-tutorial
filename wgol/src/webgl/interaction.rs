@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGlBuffer, WebGlUniformLocation};
 
-use super::program::{gl, GlEnum, GlPoint, GlPoint2D, Program};
+use super::program::{gl, GlEnum, GlPoint, GlPoint2D, GlPoint3D, Program};
 
 use crate::{
     error::{Error, Result},
@@ -280,19 +280,17 @@ pub struct VertexVbo {
 
 impl VertexVbo {
     const TARGET: GlEnum = gl::ARRAY_BUFFER;
-    pub fn new(gl: &gl, data: &[GlPoint2D], location: u32) -> Result<Self> {
-        let vbo = Self::create_vertex_buffer(
-            gl,
-            unsafe {
-                std::slice::from_raw_parts(
-                    data.as_ptr() as *const f32,
-                    data.len() * GlPoint2D::size() as usize,
-                )
-            },
-            location,
-            gl::DYNAMIC_DRAW,
-        )?;
 
+    #[inline]
+    pub fn new<P: GlPoint>(gl: &gl, data: &[P], location: u32) -> Result<Self> {
+        let data = unsafe {
+            std::slice::from_raw_parts(data.as_ptr() as *const f32, data.len() * P::size() as usize)
+        };
+        Self::new_raw(gl, data, location)
+    }
+
+    pub fn new_raw(gl: &gl, data: &[f32], location: u32) -> Result<Self> {
+        let vbo = Self::create_vertex_buffer(gl, data, location, gl::DYNAMIC_DRAW)?;
         Ok(Self { vbo, location })
     }
 
@@ -318,12 +316,9 @@ impl VertexVbo {
     }
 
     // VBOの更新
-    pub fn update_vertex(&self, gl: &gl, data: &[GlPoint2D]) {
+    pub fn update_vertex<P: GlPoint>(&self, gl: &gl, data: &[P]) {
         let data = unsafe {
-            std::slice::from_raw_parts(
-                data.as_ptr() as *const f32,
-                data.len() * GlPoint2D::size() as usize,
-            )
+            std::slice::from_raw_parts(data.as_ptr() as *const f32, data.len() * P::size() as usize)
         };
         gl.bind_buffer(Self::TARGET, Some(&self.vbo));
         unsafe {
@@ -331,7 +326,11 @@ impl VertexVbo {
             gl.buffer_sub_data_with_i32_and_array_buffer_view(Self::TARGET, 0, &view);
         }
         gl.enable_vertex_attrib_array(self.location);
-        gl.vertex_attrib_pointer_with_i32(self.location, GlPoint2D::size(), gl::FLOAT, false, 0, 0);
+        gl.vertex_attrib_pointer_with_i32(self.location, P::size(), gl::FLOAT, false, 0, 0);
+    }
+
+    pub fn bind(&self, gl: &gl) {
+        gl.bind_buffer(Self::TARGET, Some(&self.vbo));
     }
 }
 
@@ -342,6 +341,8 @@ pub struct ParticleGpgpuShader {
     u_point: ParticleGpgpuPointUniform,
     u_velocity: ParticleGpgpuVelocityUniform,
     u_normal: ParticleGpgpuNormalUniform,
+    texture_vbo: VertexVbo,
+    normal_vbo: VertexVbo,
 }
 
 impl ParticleGpgpuShader {
@@ -421,6 +422,14 @@ void main(){
 }
 "#;
 
+    // 画面全体を覆うポリゴンの頂点情報
+    const TEXTURE_VERTEX: [GlPoint3D; 4] = [
+        GlPoint3D::new(-1.0, 1.0, 0.0),
+        GlPoint3D::new(-1.0, -1.0, 0.0),
+        GlPoint3D::new(1.0, 1.0, 0.0),
+        GlPoint3D::new(1.0, -1.0, 0.0),
+    ];
+
     pub fn new(gl: &gl, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
         let point = Program::new(gl, Self::POINT_VERT, Self::POINT_FRAG)?;
         let velocity = Program::new(gl, Self::VELOCITY_VERT, Self::VELOCITY_FRAG)?;
@@ -436,6 +445,9 @@ void main(){
         program.use_program(gl);
         let u_normal = ParticleGpgpuNormalUniform::new(gl, &program)?;
         u_normal.init(gl, &res);
+
+        let texture_vbo = Self::make_texture_vertex(gl, res, 0)?;
+        let normal_vbo = Self::make_normal_vertex(gl, 0)?;
         Ok(Self {
             point,
             velocity,
@@ -443,7 +455,21 @@ void main(){
             u_point,
             u_velocity,
             u_normal,
+            texture_vbo,
+            normal_vbo,
         })
+    }
+
+    // レンダリングする点と同じ数の頂点を持つVBOを作成して、連番で埋める
+    fn make_texture_vertex(gl: &gl, res: Resolution, location: u32) -> Result<VertexVbo> {
+        let data = (0..(res.x * res.y) as usize)
+            .map(|i| i as f32)
+            .collect::<Vec<f32>>();
+        VertexVbo::new_raw(&gl, &data, location)
+    }
+
+    fn make_normal_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
+        VertexVbo::new(&gl, &Self::TEXTURE_VERTEX, location)
     }
 }
 
