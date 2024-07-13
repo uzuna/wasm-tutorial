@@ -881,6 +881,8 @@ pub fn webgl_interaction_gpgpu(
     gl.clear_color(0.0, 0.0, 0.0, 1.0);
     gl.clear(gl::COLOR_BUFFER_BIT);
 
+    log!("extensions: {:?}", gl.get_supported_extensions());
+
     let unit_count = gl
         .get_parameter(gl::MAX_VERTEX_TEXTURE_IMAGE_UNITS)?
         .as_f64()
@@ -891,8 +893,9 @@ pub fn webgl_interaction_gpgpu(
     log!("MAX_VERTEX_TEXTURE_IMAGE_UNITS: {:?}", unit_count);
 
     // 浮動小数点数テクスチャが利用可能かどうかチェック
-    if gl.get_extension("OES_texture_float_linear")?.is_none() {
-        Err("OES_texture_float_linear is not supported")?;
+    // WebGL2なら常に利用可能なはず
+    if gl.get_extension("EXT_color_buffer_float")?.is_none() {
+        Err("EXT_color_buffer_float is not supported")?;
     }
 
     let res = Resolution::DEFAULT;

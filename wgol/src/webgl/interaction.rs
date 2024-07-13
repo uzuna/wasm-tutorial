@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-use web_sys::{WebGlBuffer, WebGlUniformLocation};
+use web_sys::{WebGlBuffer, WebGlFramebuffer, WebGlTexture, WebGlUniformLocation};
 
 use super::program::{gl, GlEnum, GlPoint, GlPoint2D, GlPoint3D, Program};
 
@@ -343,6 +343,8 @@ pub struct ParticleGpgpuShader {
     u_normal: ParticleGpgpuNormalUniform,
     texture_vbo: VertexVbo,
     normal_vbo: VertexVbo,
+    front_fbo: TextureFBO,
+    back_fbo: TextureFBO,
 }
 
 impl ParticleGpgpuShader {
@@ -351,7 +353,7 @@ impl ParticleGpgpuShader {
 layout(location = 0) in float index;
 uniform vec2 resolution;
 uniform sampler2D u_texture;
-uniform float pointScale;
+uniform float pointSize;
 
 void main(){
     // index値から頂点データの位置を算出
@@ -361,7 +363,7 @@ void main(){
     );
     vec4 t = texture(u_texture, p);
     gl_Position = vec4(t.xy, 0.0, 1.0);
-    gl_PointSize = 0.1 + pointScale;
+    gl_PointSize = pointSize;
 }
 "#;
     // 頂点の色はuniformから指定
@@ -446,8 +448,14 @@ void main(){
         let u_normal = ParticleGpgpuNormalUniform::new(gl, &program)?;
         u_normal.init(gl, &res);
 
+        // 必要な頂点データを作成
         let texture_vbo = Self::make_texture_vertex(gl, res, 0)?;
         let normal_vbo = Self::make_normal_vertex(gl, 0)?;
+
+        // 頂点向けにテクスチャとして書き出すFBOを作成
+        let back_fbo = TextureFBO::new_float_vec2(gl, res)?;
+        let front_fbo = TextureFBO::new_float_vec2(gl, res)?;
+
         Ok(Self {
             point,
             velocity,
@@ -457,24 +465,28 @@ void main(){
             u_normal,
             texture_vbo,
             normal_vbo,
+            front_fbo,
+            back_fbo,
         })
     }
 
     // レンダリングする点と同じ数の頂点を持つVBOを作成して、連番で埋める
+    //
     fn make_texture_vertex(gl: &gl, res: Resolution, location: u32) -> Result<VertexVbo> {
         let data = (0..(res.x * res.y) as usize)
             .map(|i| i as f32)
             .collect::<Vec<f32>>();
-        VertexVbo::new_raw(&gl, &data, location)
+        VertexVbo::new_raw(gl, &data, location)
     }
 
     fn make_normal_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
-        VertexVbo::new(&gl, &Self::TEXTURE_VERTEX, location)
+        VertexVbo::new(gl, &Self::TEXTURE_VERTEX, location)
     }
 }
 
 struct ParticleGpgpuPointUniform {
     resolution: WebGlUniformLocation,
+    point_size: WebGlUniformLocation,
     u_texture: WebGlUniformLocation,
     ambient: WebGlUniformLocation,
 }
@@ -482,10 +494,12 @@ struct ParticleGpgpuPointUniform {
 impl ParticleGpgpuPointUniform {
     pub fn new(gl: &gl, program: &Program) -> Result<Self> {
         let resolution = uniform_location!(gl, program, "resolution")?;
+        let point_size = uniform_location!(gl, program, "pointSize")?;
         let u_texture = uniform_location!(gl, program, "u_texture")?;
         let ambient = uniform_location!(gl, program, "ambient")?;
         Ok(Self {
             resolution,
+            point_size,
             u_texture,
             ambient,
         })
@@ -506,6 +520,10 @@ impl ParticleGpgpuPointUniform {
 
     pub fn set_ambient(&self, gl: &gl, color: [f32; 4]) {
         gl.uniform4f(Some(&self.ambient), color[0], color[1], color[2], color[3]);
+    }
+
+    pub fn set_point_size(&self, gl: &gl, size: f32) {
+        gl.uniform1f(Some(&self.point_size), size);
     }
 }
 
@@ -593,5 +611,93 @@ impl ParticleGpgpuNormalUniform {
 
     pub fn set_resolution(&self, gl: &gl, res: &Resolution) {
         gl.uniform2f(Some(&self.resolution), res.x as f32, res.y as f32);
+    }
+}
+
+struct TextureFBO {
+    fbo: WebGlFramebuffer,
+    texture: WebGlTexture,
+}
+impl TextureFBO {
+    #[inline]
+    fn new_rgba(gl: &gl, res: Resolution) -> Result<Self> {
+        Self::new_inner(gl, res, gl::RGBA, gl::RGBA, gl::UNSIGNED_BYTE)
+    }
+
+    #[inline]
+    fn new_half_float(gl: &gl, res: Resolution) -> Result<Self> {
+        Self::new_inner(gl, res, gl::R16F, gl::RED, gl::FLOAT)
+    }
+
+    #[inline]
+    fn new_float_vec2(gl: &gl, res: Resolution) -> Result<Self> {
+        Self::new_inner(gl, res, gl::RG32F, gl::RG, gl::FLOAT)
+    }
+
+    fn new_inner(
+        gl: &gl,
+        res: Resolution,
+        internal_format: GlEnum,
+        src_format: GlEnum,
+        type_: GlEnum,
+    ) -> Result<Self> {
+        // フレームバッファにテクスチャ用の領域を確保
+        let texture = gl
+            .create_texture()
+            .ok_or(Error::gl("Failed to create texture".into()))?;
+        gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
+        gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
+            gl::TEXTURE_2D,
+            0,
+            internal_format as i32,
+            res.x as i32,
+            res.y as i32,
+            0,
+            src_format,
+            type_,
+            None,
+        )
+        .map_err(|e| Error::gl(format!("Failed to tex_image_2d: {:?}", e)))?;
+
+        gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+        gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+        gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+        gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+
+        let fbo = gl
+            .create_framebuffer()
+            .ok_or(Error::gl("Failed to create framebuffer".into()))?;
+        gl.bind_framebuffer(gl::FRAMEBUFFER, Some(&fbo));
+
+        // フレームバッファにテクスチャをアタッチ
+        gl.framebuffer_texture_2d(
+            gl::FRAMEBUFFER,
+            gl::COLOR_ATTACHMENT0,
+            gl::TEXTURE_2D,
+            Some(&texture),
+            0,
+        );
+
+        // フレームバッファの状態を確認
+        if gl.check_framebuffer_status(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE {
+            return Err(Error::gl(format!(
+                "Framebuffer is not complete. code={}",
+                gl.get_error()
+            )));
+        }
+
+        // バインド解除
+        gl.bind_texture(gl::TEXTURE_2D, None);
+        gl.bind_framebuffer(gl::FRAMEBUFFER, None);
+
+        Ok(Self { fbo, texture })
+    }
+
+    fn bind(&self, gl: &gl) {
+        gl.bind_framebuffer(gl::FRAMEBUFFER, Some(&self.fbo));
+    }
+
+    fn unbind(&self, gl: &gl) {
+        gl.bind_framebuffer(gl::FRAMEBUFFER, None);
     }
 }
