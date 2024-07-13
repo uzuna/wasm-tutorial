@@ -10,7 +10,7 @@ use gloo_net::{
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use wasm_bindgen::prelude::*;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
 use webgl::interaction::ParticleControl;
@@ -785,26 +785,44 @@ pub fn webgl_interaction(canvas: HtmlCanvasElement, ctrl: ParticleControl) -> Re
     gl.enable(gl::BLEND);
     gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE, gl::ONE, gl::ONE);
 
+    // mouse event
+    let canvas_ctx = Rc::new(RefCell::new(canvas));
+    let (hander, mut recv) = MouseEventHandler::new(canvas_ctx.clone());
+    hander.start();
+
     // アニメーションループ
-    let mouse_down_flag = Rc::new(RefCell::new(false));
-    let mouse_down_flag_clone = mouse_down_flag.clone();
-    let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
-    let mouse_pos_clone = mouse_pos.clone();
     let closure = Rc::new(RefCell::new(None));
     let closure_clone = closure.clone();
     let a_ctx = Rc::new(RefCell::new(None));
     let a_ctx_clone = a_ctx.clone();
+    let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
+    let mouse_down_flag = Rc::new(RefCell::new(false));
     *closure.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<i32, JsValue>>::new(
         move |timestamp_msec| {
             let t = timestamp_msec as f32;
             let color = hsva(t / 30., 1.0, 1.0, 0.5);
             gl.clear(gl::COLOR_BUFFER_BIT);
             shader.set_color(&gl, color);
-            shader.update(
-                &gl,
-                *mouse_pos_clone.borrow(),
-                *mouse_down_flag_clone.borrow(),
-            );
+
+            let event = {
+                let mut event = None;
+                while let Ok(e) = recv.try_recv() {
+                    event = Some(e);
+                }
+                event
+            };
+            match event {
+                Some(MouseMessage::Move(pos)) => {
+                    *mouse_pos.borrow_mut() = pos;
+                    *mouse_down_flag.borrow_mut() = true;
+                }
+                Some(MouseMessage::Off) => {
+                    *mouse_down_flag.borrow_mut() = false;
+                }
+                None => {}
+            }
+
+            shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow());
             shader.draw(&gl);
             let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());
             match res {
@@ -818,51 +836,96 @@ pub fn webgl_interaction(canvas: HtmlCanvasElement, ctrl: ParticleControl) -> Re
     ));
     *a_ctx.borrow_mut() = Some(request_animation_frame(closure.borrow().as_ref().unwrap())?);
 
-    // mouse event
-    let canvas_ctx = Rc::new(RefCell::new(canvas));
-    let mouse_down_flag_clone = mouse_down_flag.clone();
-    let mouse_down = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
-        mouse_down_flag_clone.replace(true);
-    }) as Box<dyn FnMut(_)>);
-    let mouse_down_flag_clone = mouse_down_flag.clone();
-    let mouse_up = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
-        mouse_down_flag_clone.replace(false);
-    }) as Box<dyn FnMut(_)>);
-    let mouse_down_flag_clone = mouse_down_flag.clone();
-    let mouse_pos_clone = mouse_pos.clone();
-    let canvas_ctx_clone = canvas_ctx.clone();
-    let mouse_move = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
-        if *mouse_down_flag_clone.borrow() {
-            let pos = Point::new(event.client_x() as f32, event.client_y() as f32);
-            let (offset_c, area_c) = {
-                let canvas = canvas_ctx_clone.borrow();
-                (
-                    Point::new(canvas.offset_left() as f32, canvas.offset_top() as f32),
-                    Point::new(canvas.width() as f32, canvas.height() as f32),
-                )
-            };
-            let mut mouse_pos = (pos - offset_c - area_c / 2.) / area_c * 2.;
-            mouse_pos.y = -mouse_pos.y;
-            *mouse_pos_clone.borrow_mut() = mouse_pos;
-        }
-    }) as Box<dyn FnMut(_)>);
-    canvas_ctx
-        .borrow()
-        .add_event_listener_with_callback("mousedown", mouse_down.as_ref().unchecked_ref())
-        .unwrap();
-    mouse_down.forget();
-    canvas_ctx
-        .borrow()
-        .add_event_listener_with_callback("mouseup", mouse_up.as_ref().unchecked_ref())
-        .unwrap();
-    mouse_up.forget();
-    canvas_ctx
-        .borrow()
-        .add_event_listener_with_callback("mousemove", mouse_move.as_ref().unchecked_ref())
-        .unwrap();
-    mouse_move.forget();
-
     Ok(())
+}
+
+#[derive(Debug)]
+enum MouseMessage {
+    Move(crate::webgl::interaction::Point),
+    Off,
+}
+
+struct MouseEventHandler {
+    canvas: Rc<RefCell<web_sys::HtmlCanvasElement>>,
+    sender: UnboundedSender<MouseMessage>,
+}
+
+impl MouseEventHandler {
+    fn new(
+        canvas: Rc<RefCell<web_sys::HtmlCanvasElement>>,
+    ) -> (Self, UnboundedReceiver<MouseMessage>) {
+        let (sender, recv) = mpsc::unbounded_channel();
+        let h = MouseEventHandler { canvas, sender };
+        (h, recv)
+    }
+
+    fn get_point(
+        canvas: &web_sys::HtmlCanvasElement,
+        event: &web_sys::MouseEvent,
+    ) -> crate::webgl::interaction::Point {
+        use crate::webgl::interaction::Point;
+        let pos = Point::new(event.client_x() as f32, event.client_y() as f32);
+        let (offset_c, area_c) = {
+            (
+                Point::new(canvas.offset_left() as f32, canvas.offset_top() as f32),
+                Point::new(canvas.width() as f32, canvas.height() as f32),
+            )
+        };
+        let mut mouse_pos = (pos - offset_c - area_c / 2.) / area_c * 2.;
+        mouse_pos.y = -mouse_pos.y;
+        mouse_pos
+    }
+
+    fn start(self) {
+        use crate::webgl::interaction::Point;
+
+        let Self { canvas, sender } = self;
+
+        let mouse_down_flag = Rc::new(RefCell::new(false));
+        let mouse_down_flag_clone = mouse_down_flag.clone();
+        let canvas_clone_down = canvas.clone();
+        let sender_clone_down = sender.clone();
+        let mouse_down = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
+            mouse_down_flag_clone.replace(true);
+            let pos = Self::get_point(&canvas_clone_down.borrow(), &event);
+            sender_clone_down.send(MouseMessage::Move(pos)).unwrap();
+            log!("mouse down");
+        }) as Box<dyn FnMut(_)>);
+
+        let mouse_down_flag_clone = mouse_down_flag.clone();
+        let sender_clone_up = sender.clone();
+        let mouse_up = Closure::wrap(Box::new(move |_: web_sys::MouseEvent| {
+            mouse_down_flag_clone.replace(false);
+            sender_clone_up.send(MouseMessage::Off).unwrap();
+        }) as Box<dyn FnMut(_)>);
+        let mouse_down_flag_clone = mouse_down_flag.clone();
+
+        let canvas_clone = canvas.clone();
+        let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
+        let mouse_pos_clone = mouse_pos.clone();
+        let mouse_move = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
+            if *mouse_down_flag_clone.borrow() {
+                let pos = Self::get_point(&canvas_clone.borrow(), &event);
+                sender.send(MouseMessage::Move(pos)).unwrap();
+                mouse_pos_clone.replace(pos);
+            }
+        }) as Box<dyn FnMut(_)>);
+        canvas
+            .borrow()
+            .add_event_listener_with_callback("mousedown", mouse_down.as_ref().unchecked_ref())
+            .unwrap();
+        mouse_down.forget();
+        canvas
+            .borrow()
+            .add_event_listener_with_callback("mouseup", mouse_up.as_ref().unchecked_ref())
+            .unwrap();
+        mouse_up.forget();
+        canvas
+            .borrow()
+            .add_event_listener_with_callback("mousemove", mouse_move.as_ref().unchecked_ref())
+            .unwrap();
+        mouse_move.forget();
+    }
 }
 
 #[wasm_bindgen]
@@ -899,14 +962,64 @@ pub fn webgl_interaction_gpgpu(
         Err("EXT_color_buffer_float is not supported")?;
     }
 
-    let res = Resolution::DEFAULT;
-    let mut shader = ParticleGpgpuShader::new(&gl, res, ctrl)?;
+    let mut shader = ParticleGpgpuShader::new(&gl, target_res, ctrl)?;
     gl.enable(gl::BLEND);
     gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE, gl::ONE, gl::ONE);
 
     // test rendering
     shader.update(&gl, Point::new(0., 0.), true, [1.0, 0.0, 0.0, 1.0]);
+    // shader.draw_index(&gl, &target_res);
     shader.draw(&gl, &target_res);
+
+    // mouse event
+    let canvas_ctx = Rc::new(RefCell::new(canvas));
+    let (hander, mut recv) = MouseEventHandler::new(canvas_ctx.clone());
+    hander.start();
+
+    let closure = Rc::new(RefCell::new(None));
+    let closure_clone = closure.clone();
+    let a_ctx = Rc::new(RefCell::new(None));
+    let a_ctx_clone = a_ctx.clone();
+    let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
+    let mouse_down_flag = Rc::new(RefCell::new(false));
+    *closure.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<i32, JsValue>>::new(
+        move |timestamp_msec| {
+            let t = timestamp_msec as f32;
+            let color = hsva(t / 30., 1.0, 1.0, 0.5);
+
+            let event = {
+                let mut event = None;
+                while let Ok(e) = recv.try_recv() {
+                    event = Some(e);
+                }
+                event
+            };
+
+            match event {
+                Some(MouseMessage::Move(pos)) => {
+                    *mouse_pos.borrow_mut() = pos;
+                    *mouse_down_flag.borrow_mut() = true;
+                }
+                Some(MouseMessage::Off) => {
+                    *mouse_down_flag.borrow_mut() = false;
+                }
+                None => {}
+            }
+
+            shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow(), color);
+            shader.draw(&gl, &target_res);
+
+            let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());
+            match res {
+                Ok(handle) => {
+                    *a_ctx_clone.borrow_mut() = Some(handle);
+                    Ok(handle)
+                }
+                Err(e) => Err(e),
+            }
+        },
+    ));
+    *a_ctx.borrow_mut() = Some(request_animation_frame(closure.borrow().as_ref().unwrap())?);
 
     Ok(())
 }

@@ -4,8 +4,7 @@ use web_sys::{WebGlBuffer, WebGlFramebuffer, WebGlTexture, WebGlUniformLocation}
 use super::program::{gl, GlEnum, GlInt, GlPoint, GlPoint2D, GlPoint3D, Program};
 
 use crate::{
-    error::{Error, Result},
-    uniform_location,
+    error::{Error, Result}, uniform_location,
 };
 
 pub struct ParticleShader {
@@ -187,7 +186,7 @@ impl ParticleControl {
         size_decay: 0.98,
         max_velocity: 2.0,
         max_size: 4.0,
-        handle_rate: 5.0,
+        handle_rate: 1.0 / 5.0,
     };
 }
 
@@ -240,7 +239,7 @@ impl Particle {
     fn update_vector(&self, pos: GlPoint2D, target: Point, vector: GlPoint2D) -> GlPoint2D {
         let mut delta = GlPoint2D::from(target) - pos;
         // ベクトルに対する加算量を計算
-        let r = delta.norm() * self.ctrl.handle_rate;
+        let r = delta.norm() / self.ctrl.handle_rate;
         if r != 0.0 {
             delta /= r;
         }
@@ -292,11 +291,17 @@ impl VertexVbo {
         let data = unsafe {
             std::slice::from_raw_parts(data.as_ptr() as *const f32, data.len() * P::size() as usize)
         };
-        Self::new_raw(gl, data, location, count)
+        Self::new_raw(gl, data, location, count, P::size())
     }
 
-    pub fn new_raw(gl: &gl, data: &[f32], location: u32, count: GlInt) -> Result<Self> {
-        let vbo = Self::create_vertex_buffer(gl, data, location, gl::DYNAMIC_DRAW)?;
+    pub fn new_raw(
+        gl: &gl,
+        data: &[f32],
+        location: u32,
+        count: GlInt,
+        size: GlInt,
+    ) -> Result<Self> {
+        let vbo = Self::create_vertex_buffer(gl, data, location, gl::DYNAMIC_DRAW, size)?;
         Ok(Self {
             vbo,
             location,
@@ -309,6 +314,7 @@ impl VertexVbo {
         data: &[f32],
         location: u32,
         usage: GlEnum,
+        size: GlInt,
     ) -> Result<WebGlBuffer> {
         let buffer = gl
             .create_buffer()
@@ -319,7 +325,7 @@ impl VertexVbo {
             gl.buffer_data_with_array_buffer_view(Self::TARGET, &view, usage);
         }
         gl.enable_vertex_attrib_array(location);
-        gl.vertex_attrib_pointer_with_i32(location, GlPoint2D::size(), gl::FLOAT, false, 0, 0);
+        gl.vertex_attrib_pointer_with_i32(location, size, gl::FLOAT, false, 0, 0);
 
         // GLES2.0と違ってVAOにつなぐのでunbing不要
         Ok(buffer)
@@ -356,7 +362,7 @@ pub struct ParticleGpgpuShader {
     u_point: ParticleGpgpuPointUniform,
     u_velocity: ParticleGpgpuVelocityUniform,
     u_index: ParticleGpgpuIndexUniform,
-    texture_vbo: VertexVbo,
+    point_vbo: VertexVbo,
     index_vbo: VertexVbo,
     fbos: [TextureFBO; 2],
     fbo_prev_index: usize,
@@ -467,12 +473,12 @@ void main(){
         u_velocity.init(gl, &res, &state);
 
         index_map.use_program(gl);
-        let u_normal = ParticleGpgpuIndexUniform::new(gl, &index_map)?;
-        u_normal.init(gl, &res);
+        let u_index = ParticleGpgpuIndexUniform::new(gl, &index_map)?;
+        u_index.init(gl, &res);
 
         // 必要な頂点データを作成
-        let texture_vbo = Self::make_texture_vertex(gl, res, 0)?;
-        let index_vbo = Self::make_normal_vertex(gl, 0)?;
+        let point_vbo = Self::make_texture_vertex(gl, res, 0)?;
+        let index_vbo = Self::make_index_vertex(gl, 0)?;
 
         // 位置と速度の情報は2つのバッファを使って交互に更新する
         let fbos = [
@@ -487,8 +493,8 @@ void main(){
             index: index_map,
             u_point,
             u_velocity,
-            u_index: u_normal,
-            texture_vbo,
+            u_index,
+            point_vbo,
             index_vbo,
             fbos,
             fbo_prev_index: 0,
@@ -505,10 +511,10 @@ void main(){
         let data = (0..(res.x * res.y) as usize)
             .map(|i| i as f32)
             .collect::<Vec<f32>>();
-        VertexVbo::new_raw(gl, &data, location, data.len() as GlInt)
+        VertexVbo::new_raw(gl, &data, location, data.len() as GlInt, 1)
     }
 
-    fn make_normal_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
+    fn make_index_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
         VertexVbo::new(gl, &Self::TEXTURE_VERTEX, location)
     }
 
@@ -522,12 +528,25 @@ void main(){
         gl.blend_func(gl::ONE, gl::ONE);
         self.fbos[0].bind(gl);
         gl.viewport(0, 0, self.res.x as i32, self.res.y as i32);
-        gl.clear_color(0.0, 0.0, 0.0, 1.0);
+        gl.clear_color(0.0, 0.0, 0.0, 0.0);
         gl.clear(gl::COLOR_BUFFER_BIT);
         self.index.use_program(gl);
         self.index_vbo.bind(gl);
         gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
         TextureFBO::unbind(gl);
+    }
+
+    /// 画面全体にインデックスを描画。インデックス確認用
+    #[allow(dead_code)]
+    pub fn draw_index(&self, gl: &gl, target_res: &Resolution) {
+        gl.disable(gl::BLEND);
+        gl.blend_func(gl::ONE, gl::ONE);
+        gl.viewport(0, 0, target_res.x as i32, target_res.y as i32);
+        gl.clear_color(0.0, 0.0, 0.0, 1.0);
+        gl.clear(gl::COLOR_BUFFER_BIT);
+        self.index.use_program(gl);
+        self.index_vbo.bind(gl);
+        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
     }
 
     pub fn update(&mut self, gl: &gl, target: Point, vector_update: bool, color: [f32; 4]) {
@@ -557,25 +576,27 @@ void main(){
         // 次のFBOに位置と速度を書き込む
         fbos[1].bind(gl);
         gl.viewport(0, 0, self.res.x as i32, self.res.y as i32);
-        gl.clear_color(0.0, 0.0, 0.0, 1.0);
+        gl.clear_color(0.0, 0.0, 0.0, 0.0);
         gl.clear(gl::COLOR_BUFFER_BIT);
 
         self.velocity.use_program(gl);
         gl.active_texture(gl::TEXTURE0);
         // 前のFBOの状態をテクスチャの仕組みで取得
         gl.bind_texture(gl::TEXTURE_2D, Some(&fbos[0].texture));
-        self.texture_vbo.bind(gl);
+        self.index_vbo.bind(gl);
         gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
         TextureFBO::unbind(gl);
 
         // FBOをもとに描画
         gl.viewport(0, 0, target_res.x as i32, target_res.y as i32);
         gl.enable(gl::BLEND);
+        gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.clear(gl::COLOR_BUFFER_BIT);
 
         self.point.use_program(gl);
         gl.bind_texture(gl::TEXTURE_2D, Some(&fbos[1].texture));
-        gl.draw_arrays(gl::POINTS, 0, self.texture_vbo.count());
+        self.point_vbo.bind(gl);
+        gl.draw_arrays(gl::POINTS, 0, self.point_vbo.count());
 
         gl.flush();
 
