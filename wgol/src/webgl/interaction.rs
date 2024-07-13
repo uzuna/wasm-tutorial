@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGlBuffer, WebGlFramebuffer, WebGlTexture, WebGlUniformLocation};
 
-use super::program::{gl, GlEnum, GlPoint, GlPoint2D, GlPoint3D, Program};
+use super::program::{gl, GlEnum, GlInt, GlPoint, GlPoint2D, GlPoint3D, Program};
 
 use crate::{
     error::{Error, Result},
@@ -68,7 +68,7 @@ void main() {
 
     pub fn draw(&self, gl: &gl) {
         self.program.use_program(gl);
-        gl.draw_arrays(gl::POINTS, 0, self.particle.position.len() as i32);
+        gl.draw_arrays(gl::POINTS, 0, self.vbo.count());
     }
 }
 
@@ -106,6 +106,10 @@ pub struct Resolution {
 
 impl Resolution {
     pub const DEFAULT: Self = Self { x: 64, y: 64 };
+
+    pub fn new(x: u32, y: u32) -> Self {
+        Self { x, y }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -276,6 +280,7 @@ impl Particle {
 pub struct VertexVbo {
     vbo: WebGlBuffer,
     location: u32,
+    count: GlInt,
 }
 
 impl VertexVbo {
@@ -283,15 +288,20 @@ impl VertexVbo {
 
     #[inline]
     pub fn new<P: GlPoint>(gl: &gl, data: &[P], location: u32) -> Result<Self> {
+        let count = data.len() as GlInt;
         let data = unsafe {
             std::slice::from_raw_parts(data.as_ptr() as *const f32, data.len() * P::size() as usize)
         };
-        Self::new_raw(gl, data, location)
+        Self::new_raw(gl, data, location, count)
     }
 
-    pub fn new_raw(gl: &gl, data: &[f32], location: u32) -> Result<Self> {
+    pub fn new_raw(gl: &gl, data: &[f32], location: u32, count: GlInt) -> Result<Self> {
         let vbo = Self::create_vertex_buffer(gl, data, location, gl::DYNAMIC_DRAW)?;
-        Ok(Self { vbo, location })
+        Ok(Self {
+            vbo,
+            location,
+            count,
+        })
     }
 
     fn create_vertex_buffer(
@@ -332,19 +342,25 @@ impl VertexVbo {
     pub fn bind(&self, gl: &gl) {
         gl.bind_buffer(Self::TARGET, Some(&self.vbo));
     }
+
+    pub fn count(&self) -> GlInt {
+        self.count
+    }
 }
 
 pub struct ParticleGpgpuShader {
+    res: Resolution,
     point: Program,
     velocity: Program,
-    program: Program,
+    index: Program,
     u_point: ParticleGpgpuPointUniform,
     u_velocity: ParticleGpgpuVelocityUniform,
-    u_normal: ParticleGpgpuNormalUniform,
+    u_index: ParticleGpgpuIndexUniform,
     texture_vbo: VertexVbo,
-    normal_vbo: VertexVbo,
-    front_fbo: TextureFBO,
-    back_fbo: TextureFBO,
+    index_vbo: VertexVbo,
+    fbos: [TextureFBO; 2],
+    fbo_prev_index: usize,
+    state: ParticleGpgpuState,
 }
 
 impl ParticleGpgpuShader {
@@ -407,6 +423,7 @@ void main(){
 }
 "#;
 
+    // 初期状態を作るシェーダープログラム
     const VERT: &'static str = r#"#version 300 es
 layout(location = 0) in vec3 position;
 void main(){
@@ -420,6 +437,8 @@ uniform vec2 resolution;
 out vec4 fragmentColor;
 void main(){
     vec2 p = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+    // RGは位置情報、BAは速度情報
+    // 初期位置は位置をもとに。速度は0
     fragmentColor = vec4(p, 0.0, 0.0);
 }
 "#;
@@ -435,39 +454,49 @@ void main(){
     pub fn new(gl: &gl, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
         let point = Program::new(gl, Self::POINT_VERT, Self::POINT_FRAG)?;
         let velocity = Program::new(gl, Self::VELOCITY_VERT, Self::VELOCITY_FRAG)?;
-        let program = Program::new(gl, Self::VERT, Self::FRAG)?;
+        let index_map = Program::new(gl, Self::VERT, Self::FRAG)?;
+
+        let state = ParticleGpgpuState::new(ctrl);
+
         point.use_program(gl);
         let u_point = ParticleGpgpuPointUniform::new(gl, &point)?;
-        u_point.init(gl, &res);
+        u_point.init(gl, &res, &state);
 
         velocity.use_program(gl);
         let u_velocity = ParticleGpgpuVelocityUniform::new(gl, &velocity)?;
-        u_velocity.init(gl, &res, &ctrl);
+        u_velocity.init(gl, &res, &state);
 
-        program.use_program(gl);
-        let u_normal = ParticleGpgpuNormalUniform::new(gl, &program)?;
+        index_map.use_program(gl);
+        let u_normal = ParticleGpgpuIndexUniform::new(gl, &index_map)?;
         u_normal.init(gl, &res);
 
         // 必要な頂点データを作成
         let texture_vbo = Self::make_texture_vertex(gl, res, 0)?;
-        let normal_vbo = Self::make_normal_vertex(gl, 0)?;
+        let index_vbo = Self::make_normal_vertex(gl, 0)?;
 
-        // 頂点向けにテクスチャとして書き出すFBOを作成
-        let back_fbo = TextureFBO::new_float_vec2(gl, res)?;
-        let front_fbo = TextureFBO::new_float_vec2(gl, res)?;
+        // 位置と速度の情報は2つのバッファを使って交互に更新する
+        let fbos = [
+            TextureFBO::new_float_vec4(gl, res)?,
+            TextureFBO::new_float_vec4(gl, res)?,
+        ];
 
-        Ok(Self {
+        let s = Self {
+            res,
             point,
             velocity,
-            program,
+            index: index_map,
             u_point,
             u_velocity,
-            u_normal,
+            u_index: u_normal,
             texture_vbo,
-            normal_vbo,
-            front_fbo,
-            back_fbo,
-        })
+            index_vbo,
+            fbos,
+            fbo_prev_index: 0,
+            state,
+        };
+        s.draw_init(gl);
+
+        Ok(s)
     }
 
     // レンダリングする点と同じ数の頂点を持つVBOを作成して、連番で埋める
@@ -476,11 +505,119 @@ void main(){
         let data = (0..(res.x * res.y) as usize)
             .map(|i| i as f32)
             .collect::<Vec<f32>>();
-        VertexVbo::new_raw(gl, &data, location)
+        VertexVbo::new_raw(gl, &data, location, data.len() as GlInt)
     }
 
     fn make_normal_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
         VertexVbo::new(gl, &Self::TEXTURE_VERTEX, location)
+    }
+
+    fn next_fbo_index(&self) -> usize {
+        (self.fbo_prev_index + 1) % 2
+    }
+
+    // 0番目のFBOに初期状態を書き込む
+    fn draw_init(&self, gl: &gl) {
+        gl.disable(gl::BLEND);
+        gl.blend_func(gl::ONE, gl::ONE);
+        self.fbos[0].bind(gl);
+        gl.viewport(0, 0, self.res.x as i32, self.res.y as i32);
+        gl.clear_color(0.0, 0.0, 0.0, 1.0);
+        gl.clear(gl::COLOR_BUFFER_BIT);
+        self.index.use_program(gl);
+        self.index_vbo.bind(gl);
+        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
+        TextureFBO::unbind(gl);
+    }
+
+    pub fn update(&mut self, gl: &gl, target: Point, vector_update: bool, color: [f32; 4]) {
+        self.state.update(target, vector_update);
+        self.state.ambient = color;
+
+        // 移動制御uniformを更新
+        self.velocity.use_program(gl);
+        self.u_velocity.set_target(gl, self.state.target);
+        self.u_velocity.set_velocity(gl, self.state.velocity);
+        self.u_velocity
+            .set_vector_update(gl, self.state.vector_update);
+
+        // 描画uniformを更新
+        self.point.use_program(gl);
+        self.u_point.set_ambient(gl, self.state.ambient);
+        self.u_point.set_point_size(gl, self.state.size);
+    }
+
+    pub fn draw(&mut self, gl: &gl, target_res: &Resolution) {
+        // FBOは交互に使うので、インデックスを切り替える
+        let next = self.next_fbo_index();
+        let fbos = [&self.fbos[self.fbo_prev_index], &self.fbos[next]];
+        // ブレンドは無効化
+        gl.disable(gl::BLEND);
+
+        // 次のFBOに位置と速度を書き込む
+        fbos[1].bind(gl);
+        gl.viewport(0, 0, self.res.x as i32, self.res.y as i32);
+        gl.clear_color(0.0, 0.0, 0.0, 1.0);
+        gl.clear(gl::COLOR_BUFFER_BIT);
+
+        self.velocity.use_program(gl);
+        gl.active_texture(gl::TEXTURE0);
+        // 前のFBOの状態をテクスチャの仕組みで取得
+        gl.bind_texture(gl::TEXTURE_2D, Some(&fbos[0].texture));
+        self.texture_vbo.bind(gl);
+        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
+        TextureFBO::unbind(gl);
+
+        // FBOをもとに描画
+        gl.viewport(0, 0, target_res.x as i32, target_res.y as i32);
+        gl.enable(gl::BLEND);
+        gl.clear(gl::COLOR_BUFFER_BIT);
+
+        self.point.use_program(gl);
+        gl.bind_texture(gl::TEXTURE_2D, Some(&fbos[1].texture));
+        gl.draw_arrays(gl::POINTS, 0, self.texture_vbo.count());
+
+        gl.flush();
+
+        // 次のフレームのためにインデックスを更新
+        self.fbo_prev_index = next;
+    }
+}
+
+struct ParticleGpgpuState {
+    ctrl: ParticleControl,
+    velocity: f32,
+    size: f32,
+    vector_update: bool,
+    ambient: [f32; 4],
+    target: Point,
+}
+
+impl ParticleGpgpuState {
+    fn new(ctrl: ParticleControl) -> Self {
+        Self {
+            ctrl,
+            velocity: 0.0,
+            size: 0.0,
+            vector_update: false,
+            ambient: [1.0, 1.0, 1.0, 1.0],
+            target: Point::new(0.0, 0.0),
+        }
+    }
+
+    fn update(&mut self, target: Point, vector_update: bool) {
+        self.vector_update = vector_update;
+        self.target = target;
+        match vector_update {
+            true => {
+                self.velocity = self.ctrl.max_velocity;
+                self.size = self.ctrl.max_size
+            }
+            false => {
+                self.velocity *= self.ctrl.speed_decay;
+                self.size *= self.ctrl.size_decay;
+            }
+        }
     }
 }
 
@@ -505,9 +642,9 @@ impl ParticleGpgpuPointUniform {
         })
     }
 
-    fn init(&self, gl: &gl, res: &Resolution) {
+    fn init(&self, gl: &gl, res: &Resolution, state: &ParticleGpgpuState) {
         self.set_resolution(gl, res);
-        self.set_ambient(gl, [1.0, 1.0, 1.0, 1.0]);
+        self.set_ambient(gl, state.ambient);
     }
 
     pub fn set_resolution(&self, gl: &gl, res: &Resolution) {
@@ -557,13 +694,13 @@ impl ParticleGpgpuVelocityUniform {
         })
     }
 
-    fn init(&self, gl: &gl, res: &Resolution, ctrl: &ParticleControl) {
+    fn init(&self, gl: &gl, res: &Resolution, state: &ParticleGpgpuState) {
         self.set_resolution(gl, res);
-        self.set_target(gl, Point::new(0.0, 0.0));
-        self.set_vector_update(gl, false);
-        self.set_velocity(gl, 0.0);
-        self.set_speed(gl, ctrl.speed);
-        self.set_handle_rate(gl, ctrl.handle_rate);
+        self.set_target(gl, state.target);
+        self.set_vector_update(gl, state.vector_update);
+        self.set_velocity(gl, state.velocity);
+        self.set_speed(gl, state.ctrl.speed);
+        self.set_handle_rate(gl, state.ctrl.handle_rate);
     }
 
     pub fn set_texture_unit(&self, gl: &gl, texture_unit: i32) {
@@ -595,11 +732,11 @@ impl ParticleGpgpuVelocityUniform {
     }
 }
 
-struct ParticleGpgpuNormalUniform {
+struct ParticleGpgpuIndexUniform {
     resolution: WebGlUniformLocation,
 }
 
-impl ParticleGpgpuNormalUniform {
+impl ParticleGpgpuIndexUniform {
     pub fn new(gl: &gl, program: &Program) -> Result<Self> {
         let resolution = uniform_location!(gl, program, "resolution")?;
         Ok(Self { resolution })
@@ -632,6 +769,11 @@ impl TextureFBO {
     #[inline]
     fn new_float_vec2(gl: &gl, res: Resolution) -> Result<Self> {
         Self::new_inner(gl, res, gl::RG32F, gl::RG, gl::FLOAT)
+    }
+
+    #[inline]
+    fn new_float_vec4(gl: &gl, res: Resolution) -> Result<Self> {
+        Self::new_inner(gl, res, gl::RGBA32F, gl::RGBA, gl::FLOAT)
     }
 
     fn new_inner(
@@ -697,7 +839,7 @@ impl TextureFBO {
         gl.bind_framebuffer(gl::FRAMEBUFFER, Some(&self.fbo));
     }
 
-    fn unbind(&self, gl: &gl) {
+    fn unbind(gl: &gl) {
         gl.bind_framebuffer(gl::FRAMEBUFFER, None);
     }
 }

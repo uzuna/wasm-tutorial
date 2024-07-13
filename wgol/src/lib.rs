@@ -873,6 +873,7 @@ pub fn webgl_interaction_gpgpu(
     use crate::webgl::interaction::*;
     canvas.set_width(512);
     canvas.set_height(512);
+    let target_res = Resolution::new(512, 512);
 
     let gl = canvas
         .get_context("webgl2")?
@@ -899,9 +900,13 @@ pub fn webgl_interaction_gpgpu(
     }
 
     let res = Resolution::DEFAULT;
-    let shader = ParticleGpgpuShader::new(&gl, res, ctrl)?;
+    let mut shader = ParticleGpgpuShader::new(&gl, res, ctrl)?;
     gl.enable(gl::BLEND);
     gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE, gl::ONE, gl::ONE);
+
+    // test rendering
+    shader.update(&gl, Point::new(0., 0.), true, [1.0, 0.0, 0.0, 1.0]);
+    shader.draw(&gl, &target_res);
 
     Ok(())
 }
