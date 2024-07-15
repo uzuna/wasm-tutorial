@@ -5,16 +5,17 @@
 https://rustwasm.github.io/docs/book/game-of-life/debugging.html
 
 
-### setup
+### setup and start
 
 ```sh
 cargo install wasm-pack
 cargo install cargo-generate
 
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-source ~/.bashrc
-nvm install --lts
-nvm use --lts
+# terminal 1 start server
+make serve
+
+# terminal 2 build wasm
+make build
 ```
 
 ### Tips
