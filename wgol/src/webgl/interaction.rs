@@ -1,12 +1,9 @@
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGlBuffer, WebGlFramebuffer, WebGlTexture, WebGlUniformLocation};
 
-use super::program::{gl, GlEnum, GlInt, GlPoint, GlPoint2D, GlPoint3D, Program};
+use webgl2::{gl, uniform_location, GlEnum, GlInt, GlPoint, GlPoint2D, GlPoint3D, Program};
 
-use crate::{
-    error::{Error, Result},
-    uniform_location,
-};
+use crate::error::{Error, Result};
 
 pub struct ParticleShader {
     program: Program,
@@ -471,7 +468,7 @@ void main(){
         u_index.init(gl, &res);
 
         // 必要な頂点データを作成
-        let point_vbo = Self::make_texture_vertex(gl, res, 0)?;
+        let point_vbo = Self::make_texture_vertex(gl, 0)?;
         let index_vbo = Self::make_index_vertex(gl, 0)?;
 
         // 位置と速度の情報は2つのバッファを使って交互に更新する
@@ -504,7 +501,7 @@ void main(){
     // 原因調査のために点を直接指定
     // テクスチャデータを見る限りはRGのどちらもでているし、全面ノイズっぽくなっているので
     // データそのものは問題なくあるはずなのだけど、適切なテクスチャ位置を参照できてないのだと思われる
-    fn make_texture_vertex(gl: &gl, res: Resolution, location: u32) -> Result<VertexVbo> {
+    fn make_texture_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
         let data = vec![
             GlPoint2D::new(0.1, 0.1),
             GlPoint2D::new(0.1, -0.1),

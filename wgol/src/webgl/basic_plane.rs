@@ -1,8 +1,8 @@
 use nalgebra_glm::{TMat4, Vec3};
 use web_sys::{WebGlBuffer, WebGlUniformLocation, WebGlVertexArrayObject};
 
-use super::program::{gl, GlEnum, GlInt, GlPoint, GlPoint3D, GlPoint4D, Program};
 use crate::error::{Error, Result};
+use webgl2::{gl, GlEnum, GlInt, GlPoint, GlPoint3D, GlPoint4D, Program};
 
 pub struct Shader {
     program: Program,

@@ -1,7 +1,9 @@
 pub use web_sys::WebGl2RenderingContext as gl;
 use web_sys::{WebGlProgram, WebGlShader};
 
-use crate::error::{Error, Result};
+pub mod error;
+
+use error::{Error, Result};
 
 #[macro_export]
 macro_rules! uniform_location {
@@ -31,7 +33,7 @@ pub trait GlPoint {
     }
 }
 
-/// OpenGLに渡す2次元の点の情報
+/// OpenGLに渡す2次元の点の情報。主に平面座標に使う
 ///
 /// 連続する2つの`f32`のデータとして見えなければならないのでCの構造体として定義する  
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -89,9 +91,7 @@ impl std::ops::AddAssign for GlPoint2D {
     }
 }
 
-/// OpenGLに渡す2次元の点の情報
-///
-/// 連続する2つの`f32`のデータとして見えなければならないのでCの構造体として定義する  
+/// OpenGLに渡す3次元の点の情報。主に3次元空間の座標に使う
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[repr(C)]
 pub struct GlPoint3D {
@@ -112,9 +112,7 @@ impl GlPoint for GlPoint3D {
     }
 }
 
-/// OpenGLに渡す2次元の点の情報
-///
-/// 連続する2つの`f32`のデータとして見えなければならないのでCの構造体として定義する  
+/// OpenGLに渡す4次元の点の情報。主に色表現に使う
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[repr(C)]
 pub struct GlPoint4D {
@@ -136,7 +134,8 @@ impl GlPoint for GlPoint4D {
     }
 }
 
-pub(crate) struct Program {
+/// VertexとFragmentを合わせたシェーダープログラムを扱う構造体
+pub struct Program {
     program: WebGlProgram,
     vertex: WebGlShader,
     fragment: WebGlShader,
@@ -180,6 +179,12 @@ impl Program {
 
     pub fn program(&self) -> &WebGlProgram {
         &self.program
+    }
+
+    pub fn delete(&self, gl: &gl) {
+        gl.delete_program(Some(&self.program));
+        gl.delete_shader(Some(&self.vertex));
+        gl.delete_shader(Some(&self.fragment));
     }
 }
 

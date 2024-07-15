@@ -1,6 +1,8 @@
 [workspace]
-members = [ "boids",
+members = [
+    "boids",
     "web-server",
+    "webgl2",
     "wgol",
 ]
 resolver = "2"
@@ -11,3 +13,11 @@ edition = "2021"
 authors = ["FUJINAKA Fumiya <uzuna.kf@gmail.com>"]
 repository = "https://github.com/uzuna/wasm-tutorial"
 rust-version = "1.79"
+
+[workspace.dependencies]
+console_error_panic_hook = "0.1.7"
+thiserror = "1.0.61"
+wasm-bindgen = "0.2.84"
+wasm-bindgen-test = "0.3.34"
+web-sys = "0.3"
+webgl2 = { path = "./webgl2" }
