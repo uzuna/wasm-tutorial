@@ -89,6 +89,9 @@ fn gl_clear_color(gl: &gl, color: [f32; 4]) {
     gl.clear(gl::COLOR_BUFFER_BIT);
 }
 
+/// Boidのパラメータを設定するための構造体
+///
+/// 既定値で動作しているので、必要な値だけ設定して渡すことができる。
 #[wasm_bindgen(inspectable)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BoidParamSetter {
@@ -136,11 +139,13 @@ impl BoidController {
 
 #[wasm_bindgen]
 impl BoidController {
+    /// boidsが周辺の個体を群れとして扱う範囲を設定する
     pub fn set_visual_range(&mut self, visual_range: f32) {
         self.last.visual_range = Some(visual_range);
         self.param_ch.send(self.last).unwrap();
     }
 
+    /// 群れの中心に向かう力の強さを設定する
     pub fn set_center_factor(&mut self, center_factor: f32) {
         self.last.center_factor = Some(center_factor);
         self.param_ch.send(self.last).unwrap();

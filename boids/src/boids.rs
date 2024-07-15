@@ -5,6 +5,8 @@ use nalgebra_glm::Vec3;
 pub struct Boid {
     pos: Vec3,
     vel: Vec3,
+    // ボイドの制御パラメータ。
+    // 遺伝的アルゴリズムで最適化することを考えているので個別にもたせる
     param: BoidsParameter,
 }
 
@@ -100,11 +102,17 @@ impl Boid {
 /// ボイドの制御パラメータ
 #[derive(Debug, Clone, Copy)]
 pub struct BoidsParameter {
+    // 速度の制限min, max
     speed_limit: (f32, f32),
+    // centering, alignmentで使う可視範囲
     visual_range: f32,
+    // 見えている群れの中央に向かう力の強さ
     center_factor: f32,
+    // 避ける対象となる最小距離
     avoid_distance: f32,
+    // 避ける力の強さ
     avoid_factor: f32,
+    // 同じ方向に進もうとする力の強さ
     alignment_factor: f32,
 }
 
