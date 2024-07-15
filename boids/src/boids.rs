@@ -57,12 +57,31 @@ impl Boid {
         avoid
     }
 
+    fn get_alingment(&self, boids: &[Boid]) -> Vec3 {
+        let mut align = Vec3::zeros();
+        let mut count = 0;
+        for boid in boids {
+            if self.distance(boid) < self.param.visual_range {
+                align += boid.vel;
+                count += 1;
+            }
+        }
+
+        if count == 0 {
+            return align;
+        }
+
+        align / count as f32
+    }
+
     pub fn next_velocity(&self, boids: &[Boid]) -> Vec3 {
         let center = self.get_swarm_center_in_visual_range(boids);
         let avoid = self.get_avoidance(boids);
+        let align = self.get_alingment(boids);
         let v = self.vel
             + (center - self.pos) * self.param.center_factor
-            + avoid * self.param.avoid_factor;
+            + avoid * self.param.avoid_factor
+            + align * self.param.alignment_factor;
         let norm = v.norm();
         if norm < self.param.speed_limit.0 {
             v * self.param.speed_limit.0 / norm
@@ -82,6 +101,7 @@ pub struct BoidsParameter {
     center_factor: f32,
     avoid_distance: f32,
     avoid_factor: f32,
+    alignment_factor: f32,
 }
 
 impl Default for BoidsParameter {
@@ -89,9 +109,10 @@ impl Default for BoidsParameter {
         Self {
             speed_limit: (0.005, 0.01),
             visual_range: 0.2,
-            center_factor: 0.01,
+            center_factor: 0.005,
             avoid_distance: 0.05,
             avoid_factor: 0.01,
+            alignment_factor: 0.05,
         }
     }
 }
