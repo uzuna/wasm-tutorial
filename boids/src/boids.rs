@@ -91,6 +91,10 @@ impl Boid {
             v
         }
     }
+
+    pub fn get_param_mut(&mut self) -> &mut BoidsParameter {
+        &mut self.param
+    }
 }
 
 /// ボイドの制御パラメータ
@@ -102,6 +106,15 @@ pub struct BoidsParameter {
     avoid_distance: f32,
     avoid_factor: f32,
     alignment_factor: f32,
+}
+
+impl BoidsParameter {
+    pub fn set_visual_range(&mut self, visual_range: f32) {
+        self.visual_range = visual_range;
+    }
+    pub fn set_center_factor(&mut self, center_factor: f32) {
+        self.center_factor = center_factor;
+    }
 }
 
 impl Default for BoidsParameter {
