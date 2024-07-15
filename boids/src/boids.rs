@@ -123,6 +123,15 @@ impl BoidsParameter {
     pub fn set_center_factor(&mut self, center_factor: f32) {
         self.center_factor = center_factor;
     }
+    pub fn set_alignment_factor(&mut self, alignment_factor: f32) {
+        self.alignment_factor = alignment_factor;
+    }
+    pub fn set_avoid_distance(&mut self, avoid_distance: f32) {
+        self.avoid_distance = avoid_distance;
+    }
+    pub fn set_avoid_factor(&mut self, avoid_factor: f32) {
+        self.avoid_factor = avoid_factor;
+    }
 }
 
 impl Default for BoidsParameter {

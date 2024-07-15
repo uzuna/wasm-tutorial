@@ -93,10 +93,13 @@ fn gl_clear_color(gl: &gl, color: [f32; 4]) {
 ///
 /// 既定値で動作しているので、必要な値だけ設定して渡すことができる。
 #[wasm_bindgen(inspectable)]
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct BoidParamSetter {
     pub visual_range: Option<f32>,
     pub center_factor: Option<f32>,
+    pub alignment_factor: Option<f32>,
+    pub avoid_distance: Option<f32>,
+    pub avoid_factor: Option<f32>,
 }
 
 impl Mergeable for BoidParamSetter {
@@ -119,6 +122,27 @@ impl BoidParamSetter {
         if let Some(v) = self.center_factor {
             p.set_center_factor(v);
         }
+        if let Some(v) = self.alignment_factor {
+            p.set_alignment_factor(v);
+        }
+        if let Some(v) = self.avoid_distance {
+            p.set_avoid_distance(v);
+        }
+        if let Some(v) = self.avoid_factor {
+            p.set_avoid_factor(v);
+        }
+    }
+}
+
+impl Default for BoidParamSetter {
+    fn default() -> Self {
+        Self {
+            visual_range: Some(0.2),
+            center_factor: Some(0.005),
+            alignment_factor: Some(0.05),
+            avoid_distance: Some(0.05),
+            avoid_factor: Some(0.01),
+        }
     }
 }
 
@@ -139,6 +163,10 @@ impl BoidController {
 
 #[wasm_bindgen]
 impl BoidController {
+    pub fn param(&self) -> BoidParamSetter {
+        self.last
+    }
+
     /// boidsが周辺の個体を群れとして扱う範囲を設定する
     pub fn set_visual_range(&mut self, visual_range: f32) {
         self.last.visual_range = Some(visual_range);
@@ -148,6 +176,21 @@ impl BoidController {
     /// 群れの中心に向かう力の強さを設定する
     pub fn set_center_factor(&mut self, center_factor: f32) {
         self.last.center_factor = Some(center_factor);
+        self.param_ch.send(self.last).unwrap();
+    }
+
+    pub fn set_alignment_factor(&mut self, alignment_factor: f32) {
+        self.last.alignment_factor = Some(alignment_factor);
+        self.param_ch.send(self.last).unwrap();
+    }
+
+    pub fn set_avoid_distance(&mut self, avoid_distance: f32) {
+        self.last.avoid_distance = Some(avoid_distance);
+        self.param_ch.send(self.last).unwrap();
+    }
+
+    pub fn set_avoid_factor(&mut self, avoid_factor: f32) {
+        self.last.avoid_factor = Some(avoid_factor);
         self.param_ch.send(self.last).unwrap();
     }
 }
