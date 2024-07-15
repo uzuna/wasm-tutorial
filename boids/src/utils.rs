@@ -11,6 +11,7 @@ pub fn set_panic_hook() {
     console_error_panic_hook::set_once();
 }
 
+/// 異なるイベントからのパラメータをマージするためのトレイト
 pub trait Mergeable {
     fn merge(&mut self, other: Self);
 }

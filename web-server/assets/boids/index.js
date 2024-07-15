@@ -10,8 +10,7 @@ const canvas_webgl = document.getElementById("webgl-canvas");
 const ctrl = start_boids(canvas_webgl);
 console.info(ctrl.param().toJSON());
 
-
-
+// スライダインタラクションの設定
 function setup_slider(slider_id, value_id, slide_params) {
     const slider = document.getElementById(slider_id);
     const value_elem = document.getElementById(value_id);
@@ -71,7 +70,6 @@ const avoid_factor_slider_params = {
 }
 setup_slider("avoid_factor", "avoid_factor_value", avoid_factor_slider_params);
 
-
 const speed_min_slider_params = {
     min: 0.0,
     max: 0.02,
@@ -80,7 +78,6 @@ const speed_min_slider_params = {
     callback: (v) => ctrl.set_speed_min(v)
 }
 setup_slider("speed_min", "speed_min_value", speed_min_slider_params);
-
 
 const speed_max_slider_params = {
     min: 0.005,

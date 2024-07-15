@@ -100,10 +100,12 @@ pub struct BoidParamSetter {
     pub alignment_factor: Option<f32>,
     pub avoid_distance: Option<f32>,
     pub avoid_factor: Option<f32>,
+    // WASMではタプルが使えないので、min, maxを別々に設定する
     pub speed_min: Option<f32>,
     pub speed_max: Option<f32>,
 }
 
+// 別々に発火させるためにMergeableを実装したが、Controllerで保持するようになったからいらないかも
 impl Mergeable for BoidParamSetter {
     fn merge(&mut self, other: Self) {
         if let Some(v) = other.visual_range {
@@ -156,6 +158,7 @@ impl Default for BoidParamSetter {
     }
 }
 
+/// Js側に露出して操作を受け付け、WASM側に指示を送るための構造体
 #[wasm_bindgen]
 pub struct BoidController {
     param_ch: mpsc::UnboundedSender<BoidParamSetter>,
@@ -189,26 +192,31 @@ impl BoidController {
         self.param_ch.send(self.last).unwrap();
     }
 
+    /// 群れの進む方向に揃える力の強さを設定する
     pub fn set_alignment_factor(&mut self, alignment_factor: f32) {
         self.last.alignment_factor = Some(alignment_factor);
         self.param_ch.send(self.last).unwrap();
     }
 
+    /// 避ける対象となる距離を設定する
     pub fn set_avoid_distance(&mut self, avoid_distance: f32) {
         self.last.avoid_distance = Some(avoid_distance);
         self.param_ch.send(self.last).unwrap();
     }
 
+    /// 避ける力の強さを設定する
     pub fn set_avoid_factor(&mut self, avoid_factor: f32) {
         self.last.avoid_factor = Some(avoid_factor);
         self.param_ch.send(self.last).unwrap();
     }
 
+    /// 速度の最小値を設定する
     pub fn set_speed_min(&mut self, speed_min: f32) {
         self.last.speed_min = Some(speed_min);
         self.param_ch.send(self.last).unwrap();
     }
 
+    /// 速度の最大値を設定する
     pub fn set_speed_max(&mut self, speed_max: f32) {
         self.last.speed_max = Some(speed_max);
         self.param_ch.send(self.last).unwrap();
