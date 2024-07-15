@@ -14,6 +14,7 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 console_error_panic_hook = { workspace = true, optional = true }
+nalgebra-glm.workspace = true
 wasm-bindgen.workspace = true
 webgl2.workspace = true
 

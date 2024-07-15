@@ -1,16 +1,27 @@
+use nalgebra_glm::Vec3;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 use webgl2::gl;
 
-use crate::info;
+use crate::{boids::Boid, info};
 
 const COLOR_BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+
+#[wasm_bindgen(start)]
+pub fn init() -> Result<(), JsValue> {
+    info!("execute init");
+    crate::utils::set_panic_hook();
+    Ok(())
+}
 
 #[wasm_bindgen]
 pub fn start_boids(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
     info!("Starting boids");
-    canvas.set_width(256);
-    canvas.set_height(256);
+    canvas.set_width(768);
+    canvas.set_height(768);
+
+    let boids = crate::boids::Boids::new(vec![Boid::new(Vec3::zeros(), Vec3::zeros())]);
+    info!("{:?}", boids);
 
     let _gl = get_webgl2_context(&canvas)?;
 
