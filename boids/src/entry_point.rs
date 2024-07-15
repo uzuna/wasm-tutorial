@@ -5,8 +5,9 @@ use webgl2::gl;
 
 use crate::{
     boids::Boid,
+    boids_shader::BoidShader,
+    camera::{Camera, ViewMatrix},
     info,
-    shader::{BoidsMemory, Shader},
 };
 
 const COLOR_BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
@@ -28,9 +29,14 @@ pub fn start_boids(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
     info!("{:?}", boids);
 
     let gl = get_webgl2_context(&canvas)?;
+    let camera = Camera::default();
+    let view = ViewMatrix::default();
 
-    let boids = BoidsMemory::new(1);
-    let _s = Shader::new(&gl, boids)?;
+    let bi = BoidShader::new(&gl, &Boid::zero())?;
+    bi.use_program(&gl);
+    bi.set_mvp(&gl, &camera, &view);
+    bi.set_ambient(&gl, [1.0, 0.0, 0.0, 1.0]);
+    bi.draw(&gl);
 
     Ok(())
 }

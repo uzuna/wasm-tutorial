@@ -11,6 +11,17 @@ impl Boid {
     pub fn new(pos: Vec3, vel: Vec3) -> Self {
         Self { pos, vel }
     }
+
+    pub fn pos(&self) -> Vec3 {
+        self.pos
+    }
+
+    pub fn zero() -> Self {
+        Self {
+            pos: Vec3::zeros(),
+            vel: Vec3::zeros(),
+        }
+    }
 }
 
 #[derive(Debug)]

@@ -46,9 +46,11 @@ pub struct GlPoint2D {
 }
 
 impl GlPoint2D {
+    #[inline]
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
+
     pub fn norm(&self) -> f32 {
         (self.x * self.x + self.y * self.y).sqrt()
     }
@@ -103,6 +105,7 @@ pub struct GlPoint3D {
 }
 
 impl GlPoint3D {
+    #[inline]
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
@@ -125,6 +128,7 @@ pub struct GlPoint4D {
 }
 
 impl GlPoint4D {
+    #[inline]
     pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
