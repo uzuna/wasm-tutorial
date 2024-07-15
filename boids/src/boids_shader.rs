@@ -12,9 +12,12 @@ pub struct BoidShader {
     mvp: WebGlUniformLocation,
     ambient: WebGlUniformLocation,
     vbo: VertexVbo,
+    size: f32,
 }
 
 impl BoidShader {
+
+    // TODO: mvpはUniformBufferObjectにする
     const VERT: &'static str = r#"#version 300 es
 layout(location = 0) in vec3 position;
 uniform mat4 mvp;
@@ -36,35 +39,39 @@ void main() {
 "#;
 
     const LOCATION_POSITION: u32 = 0;
-    const RECT_SIZE: f32 = 0.1;
 
     // for TRIANGLE STRIP
     // Z方向は無視していたポリゴンで描画する
-    fn rect(b: &Boid) -> [GlPoint3D; 4] {
+    fn rect(b: &Boid, size: f32) -> [GlPoint3D; 4] {
         let p = b.pos();
         [
-            GlPoint3D::new(p.x - Self::RECT_SIZE, p.y - Self::RECT_SIZE, p.z),
-            GlPoint3D::new(p.x + Self::RECT_SIZE, p.y - Self::RECT_SIZE, p.z),
-            GlPoint3D::new(p.x - Self::RECT_SIZE, p.y + Self::RECT_SIZE, p.z),
-            GlPoint3D::new(p.x + Self::RECT_SIZE, p.y + Self::RECT_SIZE, p.z),
+            GlPoint3D::new(p.x - size, p.y - size, p.z),
+            GlPoint3D::new(p.x + size, p.y - size, p.z),
+            GlPoint3D::new(p.x - size, p.y + size, p.z),
+            GlPoint3D::new(p.x + size, p.y + size, p.z),
         ]
     }
 
-    pub fn new(gl: &gl, b: &Boid) -> Result<Self> {
+    pub fn new(gl: &gl, b: &Boid, size: f32) -> Result<Self> {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
         let mvp = uniform_location!(gl, &program, "mvp")?;
         let ambient = uniform_location!(gl, &program, "ambient")?;
-        let vbo = VertexVbo::new(gl, &Self::rect(b), BoidShader::LOCATION_POSITION)?;
+        let vbo = VertexVbo::new(gl, &Self::rect(b, size), BoidShader::LOCATION_POSITION)?;
         Ok(Self {
             program,
             mvp,
             ambient,
             vbo,
+            size,
         })
     }
 
     pub fn use_program(&self, gl: &gl) {
         self.program.use_program(gl);
+    }
+
+    pub fn update(&mut self, gl: &gl, b: &Boid) {
+        self.vbo.update_vertex(gl, &Self::rect(b, self.size));
     }
 
     pub fn set_mvp(&self, gl: &gl, camera: &Camera, view: &ViewMatrix) {
