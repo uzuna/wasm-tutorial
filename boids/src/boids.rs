@@ -5,11 +5,12 @@ use nalgebra_glm::Vec3;
 pub struct Boid {
     pos: Vec3,
     vel: Vec3,
+    param: BoidsParameter,
 }
 
 impl Boid {
-    pub fn new(pos: Vec3, vel: Vec3) -> Self {
-        Self { pos, vel }
+    pub fn new(pos: Vec3, vel: Vec3, param: BoidsParameter) -> Self {
+        Self { pos, vel, param }
     }
 
     pub fn pos(&self) -> Vec3 {
@@ -20,6 +21,59 @@ impl Boid {
         Self {
             pos: Vec3::zeros(),
             vel: Vec3::zeros(),
+            param: BoidsParameter::default(),
+        }
+    }
+
+    pub fn distance(&self, other: &Boid) -> f32 {
+        (self.pos - other.pos).norm()
+    }
+
+    fn get_swarm_center_in_visual_range(&self, boids: &[Boid]) -> Vec3 {
+        let mut center = Vec3::zeros();
+        let mut count = 0;
+        for boid in boids {
+            if self.distance(boid) < self.param.visual_range {
+                center += boid.pos;
+                count += 1;
+            }
+        }
+
+        if count == 0 {
+            return center;
+        }
+
+        center / count as f32
+    }
+
+    pub fn next_velocity(&self, boids: &[Boid]) -> Vec3 {
+        let center = self.get_swarm_center_in_visual_range(boids);
+        let v = self.vel + (center - self.pos) * self.param.center_factor;
+        let norm = v.norm();
+        if norm < self.param.speed_limit.0 {
+            v * self.param.speed_limit.0 / norm
+        } else if norm > self.param.speed_limit.1 {
+            v / norm * self.param.speed_limit.1
+        } else {
+            v
+        }
+    }
+}
+
+/// ボイドの制御パラメータ
+#[derive(Debug, Clone, Copy)]
+pub struct BoidsParameter {
+    speed_limit: (f32, f32),
+    visual_range: f32,
+    center_factor: f32,
+}
+
+impl Default for BoidsParameter {
+    fn default() -> Self {
+        Self {
+            speed_limit: (0.005, 0.01),
+            visual_range: 0.1,
+            center_factor: 0.01,
         }
     }
 }
@@ -27,14 +81,17 @@ impl Boid {
 #[derive(Debug)]
 pub struct Boids {
     pub boids: Vec<Boid>,
+    vel_cache: Vec<Vec3>,
     bounds: CubeBounds,
 }
 
 impl Boids {
     pub fn new(boids: Vec<Boid>) -> Self {
+        let vel_cache = vec![Vec3::zeros(); boids.len()];
         Self {
             boids,
             bounds: CubeBounds::default(),
+            vel_cache,
         }
     }
 
@@ -44,17 +101,18 @@ impl Boids {
             let angle = 2.0 * std::f32::consts::PI * i as f32 / num as f32;
             let pos = Vec3::new(radius * angle.cos(), radius * angle.sin(), 0.0);
             let vel = Vec3::new(velocity * angle.cos(), velocity * angle.sin(), 0.0);
-            boids.push(Boid::new(pos, vel));
+            boids.push(Boid::new(pos, vel, BoidsParameter::default()));
         }
 
-        Self {
-            boids,
-            bounds: CubeBounds::default(),
-        }
+        Self::new(boids)
     }
 
     pub fn update(&mut self) {
-        for boid in &mut self.boids {
+        for (b, v) in self.boids.iter().zip(self.vel_cache.iter_mut()) {
+            *v = b.next_velocity(&self.boids);
+        }
+        for (boid, v) in self.boids.iter_mut().zip(self.vel_cache.iter()) {
+            boid.vel = *v;
             self.bounds.keep_within(boid);
         }
 
