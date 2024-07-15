@@ -1,4 +1,4 @@
-import init, { start_boids } from "./pkg/boids.js";
+import init, { start_boids, BoidsInitializeParam } from "./pkg/boids.js";
 
 // bundlerを伴わない場合はinitが必要
 // https://rustwasm.github.io/docs/wasm-bindgen/examples/without-a-bundler.html
@@ -7,7 +7,11 @@ await init();
 // Give the canvas room for all of our cells and a 1px border
 // around each of them.
 const canvas_webgl = document.getElementById("webgl-canvas");
-const ctrl = start_boids(canvas_webgl);
+const p = BoidsInitializeParam.init();
+p.boid_num = 180;
+p.history_len = 100;
+console.info(p.toJSON());
+const ctrl = start_boids(canvas_webgl, p);
 console.info(ctrl.param().toJSON());
 
 // スライダインタラクションの設定

@@ -73,6 +73,25 @@ impl VertexVbo {
         gl.vertex_attrib_pointer_with_i32(self.location, P::size(), gl::FLOAT, false, 0, 0);
     }
 
+    pub fn update_vertex_sub<P: GlPoint>(&self, gl: &gl, data: &[P], offset: GlInt) {
+        let data = unsafe {
+            std::slice::from_raw_parts(data.as_ptr() as *const f32, data.len() * P::size() as usize)
+        };
+        gl.bind_buffer(Self::TARGET, Some(&self.vbo));
+        unsafe {
+            let view = js_sys::Float32Array::view(data);
+            gl.buffer_sub_data_with_i32_and_array_buffer_view_and_src_offset_and_length(
+                Self::TARGET,
+                offset * P::size() as i32 * std::mem::size_of::<f32>() as i32,
+                &view,
+                0,
+                P::size() as u32,
+            );
+        }
+        gl.enable_vertex_attrib_array(self.location);
+        gl.vertex_attrib_pointer_with_i32(self.location, P::size(), gl::FLOAT, false, 0, 0);
+    }
+
     pub fn bind(&self, gl: &gl) {
         gl.bind_buffer(Self::TARGET, Some(&self.vbo));
     }

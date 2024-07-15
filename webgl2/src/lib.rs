@@ -109,6 +109,10 @@ impl GlPoint3D {
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
+    #[inline]
+    pub const fn zero() -> Self {
+        Self::new(0.0, 0.0, 0.0)
+    }
 }
 
 impl GlPoint for GlPoint3D {
