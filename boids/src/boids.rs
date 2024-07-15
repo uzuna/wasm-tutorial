@@ -46,9 +46,23 @@ impl Boid {
         center / count as f32
     }
 
+    fn get_avoidance(&self, boids: &[Boid]) -> Vec3 {
+        let mut avoid = Vec3::zeros();
+        for boid in boids {
+            if self.distance(boid) < self.param.avoid_distance {
+                avoid += self.pos - boid.pos;
+            }
+        }
+
+        avoid
+    }
+
     pub fn next_velocity(&self, boids: &[Boid]) -> Vec3 {
         let center = self.get_swarm_center_in_visual_range(boids);
-        let v = self.vel + (center - self.pos) * self.param.center_factor;
+        let avoid = self.get_avoidance(boids);
+        let v = self.vel
+            + (center - self.pos) * self.param.center_factor
+            + avoid * self.param.avoid_factor;
         let norm = v.norm();
         if norm < self.param.speed_limit.0 {
             v * self.param.speed_limit.0 / norm
@@ -66,14 +80,18 @@ pub struct BoidsParameter {
     speed_limit: (f32, f32),
     visual_range: f32,
     center_factor: f32,
+    avoid_distance: f32,
+    avoid_factor: f32,
 }
 
 impl Default for BoidsParameter {
     fn default() -> Self {
         Self {
             speed_limit: (0.005, 0.01),
-            visual_range: 0.1,
+            visual_range: 0.2,
             center_factor: 0.01,
+            avoid_distance: 0.05,
+            avoid_factor: 0.01,
         }
     }
 }
