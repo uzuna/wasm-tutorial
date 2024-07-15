@@ -5,16 +5,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// AsssetControlクレートのエラー型
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("WegGL Error {0}")]
-    Gl(#[from] webgl2::error::Error),
-    // gloo-netのエラー(serdeのエラーを含む)
-    #[error(transparent)]
-    GlooNet(#[from] gloo_net::Error),
+    #[error("WegGL Error {msg}")]
+    Gl { msg: String },
 }
 
 impl Error {
     pub fn gl(msg: String) -> Self {
-        webgl2::error::Error::gl(msg).into()
+        Self::Gl { msg }
     }
 }
 

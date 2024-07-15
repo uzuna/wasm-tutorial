@@ -1,0 +1,37 @@
+[package]
+name = "webgl2"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+vertex = ["web-sys/WebGlBuffer", "web-sys/WebGlUniformLocation"]
+
+[dependencies]
+js-sys.workspace = true
+thiserror.workspace = true
+wasm-bindgen.workspace = true
+
+[dependencies.web-sys]
+workspace = true
+features = [
+    "WebGl2RenderingContext",
+    "WebGlProgram",
+    "WebGlShader",
+]
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[dev-dependencies.web-sys]
+workspace = true
+features = [
+    'Element',
+    'HtmlElement',
+    'Node',
+    "Document",
+    "HtmlCanvasElement",
+    "Window",
+]

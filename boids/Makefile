@@ -6,4 +6,4 @@ test:
 
 .PHONY: build
 build:
-	wasm-pack build -d ${ASSETS_DIR}/wgol --target web
+	wasm-pack build -d ${ASSETS_DIR}/boids/pkg --target web
