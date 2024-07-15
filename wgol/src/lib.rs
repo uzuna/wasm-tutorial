@@ -10,9 +10,10 @@ use gloo_net::{
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as gl};
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
+use webgl::interaction::ParticleControl;
 
 const GRID_COLOR: &str = "#CCCCCC";
 
@@ -295,7 +296,7 @@ impl fmt::Display for Universe {
                 };
                 write!(f, "{}", symbol)?;
             }
-            write!(f, "\n")?;
+            writeln!(f)?;
         }
 
         Ok(())
@@ -352,7 +353,7 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
         .get_context("2d")
         .unwrap()
         .unwrap()
-        .dyn_into::<web_sys::CanvasRenderingContext2d>()
+        .dyn_into::<CanvasRenderingContext2d>()
         .unwrap();
     let play_btn = gb.play_button.clone();
     let mut fps = Fps::new(gb.fps.clone());
@@ -408,8 +409,8 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
     // アニメーション開始と再生継続と停止のためのコールバック
     let p_closure = p.clone();
     let closure_clone = closure.clone();
-    *closure_clone.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<i32, JsValue>>::new(
-        move || {
+    *closure_clone.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<i32, JsValue>>::new(
+        move |_time| {
             uni.borrow_mut().tick();
             drawer.draw_cells(&context, &uni.borrow());
             drawer.draw_grid(&context);
@@ -434,7 +435,7 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
 
 // 次のアニメーションフレームをリクエストする
 fn request_animation_frame(
-    closure: &Closure<dyn FnMut() -> Result<i32, JsValue>>,
+    closure: &Closure<dyn FnMut(f64) -> Result<i32, JsValue>>,
 ) -> Result<i32, JsValue> {
     let window = web_sys::window().unwrap();
     window.request_animation_frame(closure.as_ref().unchecked_ref())
@@ -503,7 +504,7 @@ struct Drawer {
 }
 
 impl Drawer {
-    fn draw_cells(&self, ctx: &web_sys::CanvasRenderingContext2d, uni: &Universe) {
+    fn draw_cells(&self, ctx: &CanvasRenderingContext2d, uni: &Universe) {
         let cell_size = self.cell_size;
         ctx.set_fill_style(&self.alive_color.into());
 
@@ -544,7 +545,7 @@ impl Drawer {
         ctx.stroke();
     }
 
-    fn draw_grid(&self, ctx: &web_sys::CanvasRenderingContext2d) {
+    fn draw_grid(&self, ctx: &CanvasRenderingContext2d) {
         ctx.begin_path();
         ctx.set_stroke_style(&GRID_COLOR.into());
 
@@ -578,9 +579,9 @@ impl Default for Drawer {
 
 #[wasm_bindgen]
 pub fn webgl_start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
-    use crate::webgl::*;
-    canvas.set_width(768);
-    canvas.set_height(768);
+    use crate::webgl::basic_plane::*;
+    canvas.set_width(256);
+    canvas.set_height(256);
 
     let gl = canvas
         .get_context("webgl2")?
@@ -614,7 +615,7 @@ fn play_button_start(btn: web_sys::HtmlButtonElement, sender: Sender) {
     let sender_clone = sender.clone();
     let ctx_clone = ctx.clone();
     let closure = Closure::wrap(Box::new(move || {
-        let is_paused = is_paused_clone.borrow().clone();
+        let is_paused = *is_paused_clone.borrow();
         if is_paused {
             sender_clone.borrow().play(PlayControl::Play);
             ctx_clone.borrow().set_text_content(Some("⏸"));
@@ -741,7 +742,7 @@ struct Hello {
 // websocketのタスクを開始する
 fn start_websocket(url: &str) -> Result<(), crate::error::Error> {
     use futures::{SinkExt, StreamExt};
-    let ws = WebSocket::open(url).map_err(|e| gloo_net::Error::JsError(e))?;
+    let ws = WebSocket::open(url).map_err(gloo_net::Error::JsError)?;
 
     let (mut write, mut read) = ws.split();
 
@@ -764,4 +765,282 @@ fn start_websocket(url: &str) -> Result<(), crate::error::Error> {
         log!("WebSocket Closed");
     });
     Ok(())
+}
+
+#[wasm_bindgen]
+pub fn webgl_interaction(canvas: HtmlCanvasElement, ctrl: ParticleControl) -> Result<(), JsValue> {
+    use crate::webgl::interaction::*;
+    canvas.set_width(512);
+    canvas.set_height(512);
+
+    let gl = canvas
+        .get_context("webgl2")?
+        .ok_or("Failed to get WebGl2RenderingContext")?
+        .dyn_into::<gl>()?;
+    gl.clear_color(0.0, 0.0, 0.0, 1.0);
+    gl.clear(gl::COLOR_BUFFER_BIT);
+
+    let res = Resolution::DEFAULT;
+    let mut shader = ParticleShader::new(&gl, res, ctrl)?;
+    gl.enable(gl::BLEND);
+    gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE, gl::ONE, gl::ONE);
+
+    // mouse event
+    let canvas_ctx = Rc::new(RefCell::new(canvas));
+    let (hander, mut recv) = MouseEventHandler::new(canvas_ctx.clone());
+    hander.start();
+
+    // アニメーションループ
+    let closure = Rc::new(RefCell::new(None));
+    let closure_clone = closure.clone();
+    let a_ctx = Rc::new(RefCell::new(None));
+    let a_ctx_clone = a_ctx.clone();
+    let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
+    let mouse_down_flag = Rc::new(RefCell::new(false));
+    *closure.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<i32, JsValue>>::new(
+        move |timestamp_msec| {
+            let t = timestamp_msec as f32;
+            let color = hsva(t / 30., 1.0, 1.0, 0.5);
+            gl.clear(gl::COLOR_BUFFER_BIT);
+            shader.set_color(&gl, color);
+
+            let event = {
+                let mut event = None;
+                while let Ok(e) = recv.try_recv() {
+                    event = Some(e);
+                }
+                event
+            };
+            match event {
+                Some(MouseMessage::Move(pos)) => {
+                    *mouse_pos.borrow_mut() = pos;
+                    *mouse_down_flag.borrow_mut() = true;
+                }
+                Some(MouseMessage::Off) => {
+                    *mouse_down_flag.borrow_mut() = false;
+                }
+                None => {}
+            }
+
+            shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow());
+            shader.draw(&gl);
+            let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());
+            match res {
+                Ok(handle) => {
+                    *a_ctx_clone.borrow_mut() = Some(handle);
+                    Ok(handle)
+                }
+                Err(e) => Err(e),
+            }
+        },
+    ));
+    *a_ctx.borrow_mut() = Some(request_animation_frame(closure.borrow().as_ref().unwrap())?);
+
+    Ok(())
+}
+
+#[derive(Debug)]
+enum MouseMessage {
+    Move(crate::webgl::interaction::Point),
+    Off,
+}
+
+struct MouseEventHandler {
+    canvas: Rc<RefCell<web_sys::HtmlCanvasElement>>,
+    sender: UnboundedSender<MouseMessage>,
+}
+
+impl MouseEventHandler {
+    fn new(
+        canvas: Rc<RefCell<web_sys::HtmlCanvasElement>>,
+    ) -> (Self, UnboundedReceiver<MouseMessage>) {
+        let (sender, recv) = mpsc::unbounded_channel();
+        let h = MouseEventHandler { canvas, sender };
+        (h, recv)
+    }
+
+    fn get_point(
+        canvas: &web_sys::HtmlCanvasElement,
+        event: &web_sys::MouseEvent,
+    ) -> crate::webgl::interaction::Point {
+        use crate::webgl::interaction::Point;
+        let pos = Point::new(event.client_x() as f32, event.client_y() as f32);
+        let (offset_c, area_c) = {
+            (
+                Point::new(canvas.offset_left() as f32, canvas.offset_top() as f32),
+                Point::new(canvas.width() as f32, canvas.height() as f32),
+            )
+        };
+        let mut mouse_pos = (pos - offset_c - area_c / 2.) / area_c * 2.;
+        mouse_pos.y = -mouse_pos.y;
+        mouse_pos
+    }
+
+    fn start(self) {
+        use crate::webgl::interaction::Point;
+
+        let Self { canvas, sender } = self;
+
+        let mouse_down_flag = Rc::new(RefCell::new(false));
+        let mouse_down_flag_clone = mouse_down_flag.clone();
+        let canvas_clone_down = canvas.clone();
+        let sender_clone_down = sender.clone();
+        let mouse_down = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
+            mouse_down_flag_clone.replace(true);
+            let pos = Self::get_point(&canvas_clone_down.borrow(), &event);
+            sender_clone_down.send(MouseMessage::Move(pos)).unwrap();
+            log!("mouse down");
+        }) as Box<dyn FnMut(_)>);
+
+        let mouse_down_flag_clone = mouse_down_flag.clone();
+        let sender_clone_up = sender.clone();
+        let mouse_up = Closure::wrap(Box::new(move |_: web_sys::MouseEvent| {
+            mouse_down_flag_clone.replace(false);
+            sender_clone_up.send(MouseMessage::Off).unwrap();
+        }) as Box<dyn FnMut(_)>);
+        let mouse_down_flag_clone = mouse_down_flag.clone();
+
+        let canvas_clone = canvas.clone();
+        let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
+        let mouse_pos_clone = mouse_pos.clone();
+        let mouse_move = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
+            if *mouse_down_flag_clone.borrow() {
+                let pos = Self::get_point(&canvas_clone.borrow(), &event);
+                sender.send(MouseMessage::Move(pos)).unwrap();
+                mouse_pos_clone.replace(pos);
+            }
+        }) as Box<dyn FnMut(_)>);
+        canvas
+            .borrow()
+            .add_event_listener_with_callback("mousedown", mouse_down.as_ref().unchecked_ref())
+            .unwrap();
+        mouse_down.forget();
+        canvas
+            .borrow()
+            .add_event_listener_with_callback("mouseup", mouse_up.as_ref().unchecked_ref())
+            .unwrap();
+        mouse_up.forget();
+        canvas
+            .borrow()
+            .add_event_listener_with_callback("mousemove", mouse_move.as_ref().unchecked_ref())
+            .unwrap();
+        mouse_move.forget();
+    }
+}
+
+#[wasm_bindgen]
+pub fn webgl_interaction_gpgpu(
+    canvas: HtmlCanvasElement,
+    ctrl: ParticleControl,
+) -> Result<(), JsValue> {
+    use crate::webgl::interaction::*;
+    canvas.set_width(512);
+    canvas.set_height(512);
+    let target_res = Resolution::new(512, 512);
+
+    let gl = canvas
+        .get_context("webgl2")?
+        .ok_or("Failed to get WebGl2RenderingContext")?
+        .dyn_into::<gl>()?;
+    gl.clear_color(0.0, 0.0, 0.0, 1.0);
+    gl.clear(gl::COLOR_BUFFER_BIT);
+
+    log!("extensions: {:?}", gl.get_supported_extensions());
+
+    let unit_count = gl
+        .get_parameter(gl::MAX_VERTEX_TEXTURE_IMAGE_UNITS)?
+        .as_f64()
+        .unwrap() as u32;
+    if unit_count < 1 {
+        Err("MAX_VERTEX_TEXTURE_IMAGE_UNITS is less than 1")?;
+    }
+    log!("MAX_VERTEX_TEXTURE_IMAGE_UNITS: {:?}", unit_count);
+
+    // 浮動小数点数テクスチャが利用可能かどうかチェック
+    // WebGL2なら常に利用可能なはず
+    if gl.get_extension("EXT_color_buffer_float")?.is_none() {
+        Err("EXT_color_buffer_float is not supported")?;
+    }
+
+    let mut shader = ParticleGpgpuShader::new(&gl, target_res, ctrl)?;
+    gl.enable(gl::BLEND);
+    gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE, gl::ONE, gl::ONE);
+
+    // test rendering
+    shader.update(&gl, Point::new(0., 0.), true, [1.0, 0.0, 0.0, 1.0]);
+    // shader.draw_index(&gl, &target_res);
+    shader.draw(&gl, &target_res);
+
+    // mouse event
+    let canvas_ctx = Rc::new(RefCell::new(canvas));
+    let (hander, mut recv) = MouseEventHandler::new(canvas_ctx.clone());
+    hander.start();
+
+    let closure = Rc::new(RefCell::new(None));
+    let closure_clone = closure.clone();
+    let a_ctx = Rc::new(RefCell::new(None));
+    let a_ctx_clone = a_ctx.clone();
+    let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
+    let mouse_down_flag = Rc::new(RefCell::new(false));
+    *closure.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<i32, JsValue>>::new(
+        move |timestamp_msec| {
+            let t = timestamp_msec as f32;
+            let color = hsva(t / 30., 1.0, 1.0, 0.5);
+
+            let event = {
+                let mut event = None;
+                while let Ok(e) = recv.try_recv() {
+                    event = Some(e);
+                }
+                event
+            };
+
+            match event {
+                Some(MouseMessage::Move(pos)) => {
+                    *mouse_pos.borrow_mut() = pos;
+                    *mouse_down_flag.borrow_mut() = true;
+                }
+                Some(MouseMessage::Off) => {
+                    *mouse_down_flag.borrow_mut() = false;
+                }
+                None => {}
+            }
+
+            shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow(), color);
+            shader.draw(&gl, &target_res);
+
+            let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());
+            match res {
+                Ok(handle) => {
+                    *a_ctx_clone.borrow_mut() = Some(handle);
+                    Ok(handle)
+                }
+                Err(e) => Err(e),
+            }
+        },
+    ));
+    *a_ctx.borrow_mut() = Some(request_animation_frame(closure.borrow().as_ref().unwrap())?);
+
+    Ok(())
+}
+
+fn hsva(h: f32, s: f32, v: f32, a: f32) -> [f32; 4] {
+    if s > 1. || v > 1. || a > 1. {
+        return [1., 1., 1., 1.];
+    }
+    let th = h % 360.;
+    let i = (th / 60.).floor();
+    let f = th / 60. - i;
+    let m = v * (1. - s);
+    let n = v * (1. - s * f);
+    let k = v * (1. - s * (1. - f));
+    if s == 0. {
+        [v, v, v, a]
+    } else {
+        let i = i as usize;
+        let r = [v, n, m, m, k, v];
+        let g = [k, v, v, n, m, m];
+        let b = [m, m, k, v, v, n];
+        [r[i], g[i], b[i], a]
+    }
 }

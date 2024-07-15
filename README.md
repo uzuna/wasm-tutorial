@@ -16,3 +16,8 @@ source ~/.bashrc
 nvm install --lts
 nvm use --lts
 ```
+
+### Tips
+
+Chromeの場合はキャッシュが効いて更新してもwasm関係が更新されないことがある。
+Devtool -> Network -> Disable cacheをonにしてキャッシュを使わせないことで防げる
