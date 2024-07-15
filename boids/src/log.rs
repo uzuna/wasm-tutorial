@@ -1,8 +1,8 @@
 
 #[macro_export]
-macro_rules! log {
+macro_rules! info {
     ( $( $t:tt )* ) => {
-        web_sys::console::log_1(&format!( $( $t )* ).into());
+        web_sys::console::info_1(&format!( $( $t )* ).into());
     }
 }
 
