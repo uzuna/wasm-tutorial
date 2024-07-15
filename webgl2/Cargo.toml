@@ -6,7 +6,11 @@ authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+vertex = ["web-sys/WebGlBuffer", "web-sys/WebGlUniformLocation"]
+
 [dependencies]
+js-sys.workspace = true
 thiserror.workspace = true
 wasm-bindgen.workspace = true
 
@@ -29,6 +33,5 @@ features = [
     'Node',
     "Document",
     "HtmlCanvasElement",
-    "WebGlUniformLocation",
     "Window",
 ]

@@ -1,4 +1,7 @@
 pub(crate) mod boids;
+pub(crate) mod camera;
 pub mod entry_point;
-mod log;
+pub mod error;
+pub(crate) mod log;
+pub(crate) mod shader;
 mod utils;

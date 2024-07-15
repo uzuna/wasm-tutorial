@@ -2,6 +2,8 @@ pub use web_sys::WebGl2RenderingContext as gl;
 use web_sys::{WebGlProgram, WebGlShader};
 
 pub mod error;
+#[cfg(feature = "vertex")]
+pub mod vertex;
 
 use error::{Error, Result};
 

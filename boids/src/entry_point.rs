@@ -3,7 +3,11 @@ use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 use webgl2::gl;
 
-use crate::{boids::Boid, info};
+use crate::{
+    boids::Boid,
+    info,
+    shader::{BoidsMemory, Shader},
+};
 
 const COLOR_BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
@@ -23,7 +27,10 @@ pub fn start_boids(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
     let boids = crate::boids::Boids::new(vec![Boid::new(Vec3::zeros(), Vec3::zeros())]);
     info!("{:?}", boids);
 
-    let _gl = get_webgl2_context(&canvas)?;
+    let gl = get_webgl2_context(&canvas)?;
+
+    let boids = BoidsMemory::new(1);
+    let _s = Shader::new(&gl, boids)?;
 
     Ok(())
 }
