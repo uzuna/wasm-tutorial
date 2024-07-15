@@ -4,7 +4,8 @@ use web_sys::{WebGlBuffer, WebGlFramebuffer, WebGlTexture, WebGlUniformLocation}
 use super::program::{gl, GlEnum, GlInt, GlPoint, GlPoint2D, GlPoint3D, Program};
 
 use crate::{
-    error::{Error, Result}, uniform_location,
+    error::{Error, Result},
+    uniform_location,
 };
 
 pub struct ParticleShader {
@@ -327,7 +328,6 @@ impl VertexVbo {
         gl.enable_vertex_attrib_array(location);
         gl.vertex_attrib_pointer_with_i32(location, size, gl::FLOAT, false, 0, 0);
 
-        // GLES2.0と違ってVAOにつなぐのでunbing不要
         Ok(buffer)
     }
 
@@ -372,18 +372,12 @@ pub struct ParticleGpgpuShader {
 impl ParticleGpgpuShader {
     // 頂点の位置を保持するシェーダー。テクスチャにある頂点情報を取り出してそのまま出力
     const POINT_VERT: &'static str = r#"#version 300 es
-layout(location = 0) in float index;
-uniform vec2 resolution;
+layout(location = 0) in vec2 pos;
 uniform sampler2D u_texture;
 uniform float pointSize;
 
 void main(){
-    // index値から頂点データの位置を算出
-    vec2 p = vec2(
-        mod(index, resolution.x) / resolution.x,
-        floor(index / resolution.x) / resolution.y
-    );
-    vec4 t = texture(u_texture, p);
+    vec4 t = texture(u_texture, pos);
     gl_Position = vec4(t.xy, 0.0, 1.0);
     gl_PointSize = pointSize;
 }
@@ -505,13 +499,19 @@ void main(){
         Ok(s)
     }
 
-    // レンダリングする点と同じ数の頂点を持つVBOを作成して、連番で埋める
-    //
+    // レンダリングする点と同じ数の頂点を持つVBOを作成
+    // ...を、本来はするのだけど、texture()参照が4象限分しか取り出せていない。
+    // 原因調査のために点を直接指定
+    // テクスチャデータを見る限りはRGのどちらもでているし、全面ノイズっぽくなっているので
+    // データそのものは問題なくあるはずなのだけど、適切なテクスチャ位置を参照できてないのだと思われる
     fn make_texture_vertex(gl: &gl, res: Resolution, location: u32) -> Result<VertexVbo> {
-        let data = (0..(res.x * res.y) as usize)
-            .map(|i| i as f32)
-            .collect::<Vec<f32>>();
-        VertexVbo::new_raw(gl, &data, location, data.len() as GlInt, 1)
+        let data = vec![
+            GlPoint2D::new(0.1, 0.1),
+            GlPoint2D::new(0.1, -0.1),
+            GlPoint2D::new(-0.1, 0.1),
+            GlPoint2D::new(-0.1, -0.1),
+        ];
+        VertexVbo::new(gl, &data, location)
     }
 
     fn make_index_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
@@ -563,7 +563,7 @@ void main(){
         // 描画uniformを更新
         self.point.use_program(gl);
         self.u_point.set_ambient(gl, self.state.ambient);
-        self.u_point.set_point_size(gl, self.state.size);
+        // self.u_point.set_point_size(gl, self.state.size);
     }
 
     pub fn draw(&mut self, gl: &gl, target_res: &Resolution) {
@@ -593,8 +593,15 @@ void main(){
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.clear(gl::COLOR_BUFFER_BIT);
 
-        self.point.use_program(gl);
+        // 上で描画したテクスチャをバインド
         gl.bind_texture(gl::TEXTURE_2D, Some(&fbos[1].texture));
+
+        // Debug: パラメータをそのまま描画
+        self.index_vbo.bind(gl);
+        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
+
+        // ポイントで描画
+        self.point.use_program(gl);
         self.point_vbo.bind(gl);
         gl.draw_arrays(gl::POINTS, 0, self.point_vbo.count());
 
@@ -643,7 +650,6 @@ impl ParticleGpgpuState {
 }
 
 struct ParticleGpgpuPointUniform {
-    resolution: WebGlUniformLocation,
     point_size: WebGlUniformLocation,
     u_texture: WebGlUniformLocation,
     ambient: WebGlUniformLocation,
@@ -651,12 +657,11 @@ struct ParticleGpgpuPointUniform {
 
 impl ParticleGpgpuPointUniform {
     pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let resolution = uniform_location!(gl, program, "resolution")?;
         let point_size = uniform_location!(gl, program, "pointSize")?;
         let u_texture = uniform_location!(gl, program, "u_texture")?;
         let ambient = uniform_location!(gl, program, "ambient")?;
         Ok(Self {
-            resolution,
+            // resolution,
             point_size,
             u_texture,
             ambient,
@@ -664,12 +669,8 @@ impl ParticleGpgpuPointUniform {
     }
 
     fn init(&self, gl: &gl, res: &Resolution, state: &ParticleGpgpuState) {
-        self.set_resolution(gl, res);
         self.set_ambient(gl, state.ambient);
-    }
-
-    pub fn set_resolution(&self, gl: &gl, res: &Resolution) {
-        gl.uniform2f(Some(&self.resolution), res.x as f32, res.y as f32);
+        self.set_point_size(gl, 20.0)
     }
 
     pub fn set_texture_unit(&self, gl: &gl, texture_unit: i32) {
