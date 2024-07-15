@@ -132,6 +132,12 @@ impl BoidsParameter {
     pub fn set_avoid_factor(&mut self, avoid_factor: f32) {
         self.avoid_factor = avoid_factor;
     }
+    pub fn set_speed_min(&mut self, speed_min: f32) {
+        self.speed_limit.0 = speed_min;
+    }
+    pub fn set_speed_max(&mut self, speed_max: f32) {
+        self.speed_limit.1 = speed_max;
+    }
 }
 
 impl Default for BoidsParameter {

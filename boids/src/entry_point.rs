@@ -100,6 +100,8 @@ pub struct BoidParamSetter {
     pub alignment_factor: Option<f32>,
     pub avoid_distance: Option<f32>,
     pub avoid_factor: Option<f32>,
+    pub speed_min: Option<f32>,
+    pub speed_max: Option<f32>,
 }
 
 impl Mergeable for BoidParamSetter {
@@ -131,6 +133,12 @@ impl BoidParamSetter {
         if let Some(v) = self.avoid_factor {
             p.set_avoid_factor(v);
         }
+        if let Some(v) = self.speed_min {
+            p.set_speed_min(v);
+        }
+        if let Some(v) = self.speed_max {
+            p.set_speed_max(v);
+        }
     }
 }
 
@@ -142,6 +150,8 @@ impl Default for BoidParamSetter {
             alignment_factor: Some(0.05),
             avoid_distance: Some(0.05),
             avoid_factor: Some(0.01),
+            speed_min: Some(0.005),
+            speed_max: Some(0.01),
         }
     }
 }
@@ -191,6 +201,16 @@ impl BoidController {
 
     pub fn set_avoid_factor(&mut self, avoid_factor: f32) {
         self.last.avoid_factor = Some(avoid_factor);
+        self.param_ch.send(self.last).unwrap();
+    }
+
+    pub fn set_speed_min(&mut self, speed_min: f32) {
+        self.last.speed_min = Some(speed_min);
+        self.param_ch.send(self.last).unwrap();
+    }
+
+    pub fn set_speed_max(&mut self, speed_max: f32) {
+        self.last.speed_max = Some(speed_max);
         self.param_ch.send(self.last).unwrap();
     }
 }

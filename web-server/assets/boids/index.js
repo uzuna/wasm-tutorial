@@ -48,7 +48,7 @@ const alignment_factor_slider_params = {
     min: 0.0,
     max: 0.1,
     value: ctrl.param().alignment_factor,
-    rate: 500.0,
+    rate: 5000.0,
     callback: (v) => ctrl.set_alignment_factor(v)
 }
 setup_slider("alignment_factor", "alignment_factor_value", alignment_factor_slider_params);
@@ -66,8 +66,28 @@ const avoid_factor_slider_params = {
     min: 0.0,
     max: 0.05,
     value: ctrl.param().avoid_factor,
-    rate: 1000.0,
+    rate: 10000.0,
     callback: (v) => ctrl.set_avoid_factor(v)
 }
 setup_slider("avoid_factor", "avoid_factor_value", avoid_factor_slider_params);
+
+
+const speed_min_slider_params = {
+    min: 0.0,
+    max: 0.02,
+    value: ctrl.param().speed_min,
+    rate: 5000.0,
+    callback: (v) => ctrl.set_speed_min(v)
+}
+setup_slider("speed_min", "speed_min_value", speed_min_slider_params);
+
+
+const speed_max_slider_params = {
+    min: 0.005,
+    max: 0.02,
+    value: ctrl.param().speed_max,
+    rate: 10000.0,
+    callback: (v) => ctrl.set_speed_max(v)
+}
+setup_slider("speed_max", "speed_max_value", speed_max_slider_params);
 
