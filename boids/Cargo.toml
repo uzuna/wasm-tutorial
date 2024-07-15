@@ -24,6 +24,7 @@ workspace = true
 features = [
     "console",
     "HtmlCanvasElement",
+    "Window",
 ]
 
 [dev-dependencies]

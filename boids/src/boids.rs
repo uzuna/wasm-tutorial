@@ -26,7 +26,7 @@ impl Boid {
 
 #[derive(Debug)]
 pub struct Boids {
-    boids: Vec<Boid>,
+    pub boids: Vec<Boid>,
 }
 
 impl Boids {

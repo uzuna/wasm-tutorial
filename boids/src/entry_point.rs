@@ -4,6 +4,7 @@ use web_sys::HtmlCanvasElement;
 use webgl2::gl;
 
 use crate::{
+    animation,
     boids::Boid,
     boids_shader::BoidShader,
     camera::{Camera, ViewMatrix},
@@ -25,18 +26,38 @@ pub fn start_boids(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
     canvas.set_width(768);
     canvas.set_height(768);
 
-    let boids = crate::boids::Boids::new(vec![Boid::new(Vec3::zeros(), Vec3::zeros())]);
+    let mut boids =
+        crate::boids::Boids::new(vec![Boid::new(Vec3::zeros(), Vec3::new(0.001, 0.0, 0.0))]);
     info!("{:?}", boids);
 
     let gl = get_webgl2_context(&canvas)?;
     let camera = Camera::default();
     let view = ViewMatrix::default();
 
-    let bi = BoidShader::new(&gl, &Boid::zero())?;
-    bi.use_program(&gl);
-    bi.set_mvp(&gl, &camera, &view);
-    bi.set_ambient(&gl, [1.0, 0.0, 0.0, 1.0]);
-    bi.draw(&gl);
+    let mut boids_shaders = vec![];
+    for b in boids.boids.iter() {
+        let bi = BoidShader::new(&gl, b)?;
+        bi.use_program(&gl);
+        bi.set_mvp(&gl, &camera, &view);
+        bi.set_ambient(&gl, [1.0, 0.0, 0.0, 1.0]);
+        bi.draw(&gl);
+        boids_shaders.push(bi);
+    }
+
+    let a = animation::AnimationLoop::new(move |_| {
+        gl_clear_color(&gl, COLOR_BLACK);
+        for b in boids.boids.iter() {
+            let bi = BoidShader::new(&gl, b)?;
+            bi.use_program(&gl);
+            bi.set_mvp(&gl, &camera, &view);
+            bi.set_ambient(&gl, [1.0, 0.0, 0.0, 1.0]);
+            bi.draw(&gl);
+            boids_shaders.push(bi);
+        }
+        boids.update();
+        Ok(())
+    });
+    a.start()?;
 
     Ok(())
 }

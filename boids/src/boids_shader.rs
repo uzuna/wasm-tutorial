@@ -36,16 +36,17 @@ void main() {
 "#;
 
     const LOCATION_POSITION: u32 = 0;
+    const RECT_SIZE: f32 = 0.1;
 
     // for TRIANGLE STRIP
     // Z方向は無視していたポリゴンで描画する
     fn rect(b: &Boid) -> [GlPoint3D; 4] {
         let p = b.pos();
         [
-            GlPoint3D::new(p.x - 0.5, p.y - 0.5, p.z),
-            GlPoint3D::new(p.x + 0.5, p.y - 0.5, p.z),
-            GlPoint3D::new(p.x - 0.5, p.y + 0.5, p.z),
-            GlPoint3D::new(p.x + 0.5, p.y + 0.5, p.z),
+            GlPoint3D::new(p.x - Self::RECT_SIZE, p.y - Self::RECT_SIZE, p.z),
+            GlPoint3D::new(p.x + Self::RECT_SIZE, p.y - Self::RECT_SIZE, p.z),
+            GlPoint3D::new(p.x - Self::RECT_SIZE, p.y + Self::RECT_SIZE, p.z),
+            GlPoint3D::new(p.x + Self::RECT_SIZE, p.y + Self::RECT_SIZE, p.z),
         ]
     }
 
