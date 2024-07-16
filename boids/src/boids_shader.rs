@@ -152,7 +152,6 @@ void main() {
 "#;
 
     const LOCATION_POSITION: u32 = 0;
-    const VBO_LEN: usize = 128;
 
     fn new(gl: &gl, b: &Boid, hist_len: usize) -> Result<Self> {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
