@@ -195,12 +195,12 @@ impl BoidParamSetter {
 impl Default for BoidParamSetter {
     fn default() -> Self {
         Self {
-            visual_range: Some(0.2),
-            center_factor: Some(0.005),
-            alignment_factor: Some(0.05),
-            avoid_distance: Some(0.05),
-            avoid_factor: Some(0.01),
-            speed_min: Some(0.005),
+            visual_range: Some(0.16),
+            center_factor: Some(0.0014),
+            alignment_factor: Some(0.0224),
+            avoid_distance: Some(0.045),
+            avoid_factor: Some(0.017),
+            speed_min: Some(0.0014),
             speed_max: Some(0.01),
         }
     }
