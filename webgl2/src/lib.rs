@@ -18,6 +18,17 @@ macro_rules! uniform_location {
     };
 }
 
+#[macro_export]
+macro_rules! uniform_block_binding {
+    ($gl:expr, $program:expr, $name:expr, $index:expr) => {
+        $gl.uniform_block_binding(
+            $program.program(),
+            $gl.get_uniform_block_index($program.program(), $name),
+            $index,
+        );
+    };
+}
+
 pub type GlEnum = u32;
 pub type GlInt = i32;
 

@@ -1,9 +1,9 @@
 use web_sys::{js_sys, WebGlBuffer, WebGlUniformLocation};
-use webgl2::{gl, uniform_location, vertex::VertexVbo, GlPoint3D, Program};
+use webgl2::{gl, uniform_block_binding, uniform_location, vertex::VertexVbo, GlPoint3D, Program};
 
 use crate::{
     boids::Boid,
-    camera::{self, Camera, ViewMatrix},
+    camera::{Camera, ViewMatrix},
     error::*,
 };
 
@@ -41,14 +41,12 @@ impl BoidsShaderBuilder {
         let camera_ubo = CameraUBO::new(gl, camera, view)?;
         let mut boids_shaders: Vec<BoidShader> = vec![];
         for b in boids {
-            let bi = BoidShader::new(gl, b, self.boid_size, self.history_len)?;
+            let bi = BoidShader::new(gl, b, self.boid_size, self.history_len, &camera_ubo)?;
             bi.use_program(gl);
-            bi.set_mvp(gl, camera, view);
             bi.set_ambient(gl, self.color);
             bi.draw(gl);
             let hist = bi.history();
             hist.use_program(gl);
-            hist.set_mvp(gl, camera, view);
             hist.set_ambient(gl, self.history_color);
             hist.set_point_size(gl, self.history_size);
             hist.draw(gl);
@@ -63,10 +61,10 @@ impl BoidsShaderBuilder {
 
 pub struct BoidsShader {
     pub boids: Vec<BoidShader>,
-    camera: CameraUBO,
+    pub camera: CameraUBO,
 }
 
-struct CameraUBO {
+pub struct CameraUBO {
     ubo: WebGlBuffer,
 }
 
@@ -106,7 +104,6 @@ impl CameraUBO {
 
 pub struct BoidShader {
     program: Program,
-    mvp: WebGlUniformLocation,
     ambient: WebGlUniformLocation,
     vbo: VertexVbo,
     size: f32,
@@ -117,10 +114,12 @@ impl BoidShader {
     // TODO: mvpはUniformBufferObjectにする
     const VERT: &'static str = r#"#version 300 es
 layout(location = 0) in vec3 position;
-uniform mat4 mvp;
+layout (std140) uniform matrix {
+    mat4 mvp;
+} mat;
 
 void main() {
-    gl_Position = mvp * vec4(position, 1.0);
+    gl_Position = mat.mvp * vec4(position, 1.0);
 }
 "#;
 
@@ -136,6 +135,7 @@ void main() {
 "#;
 
     const LOCATION_POSITION: u32 = 0;
+    const MVP_UBI: u32 = 0;
 
     // for TRIANGLE STRIP
     // Z方向は無視していたポリゴンで描画する
@@ -149,15 +149,15 @@ void main() {
         ]
     }
 
-    pub fn new(gl: &gl, b: &Boid, size: f32, hist_len: usize) -> Result<Self> {
+    pub fn new(gl: &gl, b: &Boid, size: f32, hist_len: usize, camera: &CameraUBO) -> Result<Self> {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
-        let mvp = uniform_location!(gl, &program, "mvp")?;
+        uniform_block_binding!(gl, &program, "matrix", Self::MVP_UBI);
+        gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
         let ambient = uniform_location!(gl, &program, "ambient")?;
         let vbo = VertexVbo::new(gl, &Self::rect(b, size), BoidShader::LOCATION_POSITION)?;
-        let history = BoidHistoryShader::new(gl, b, hist_len)?;
+        let history = BoidHistoryShader::new(gl, b, hist_len, camera)?;
         Ok(Self {
             program,
-            mvp,
             ambient,
             vbo,
             size,
@@ -171,20 +171,6 @@ void main() {
 
     pub fn update(&mut self, gl: &gl, b: &Boid) {
         self.vbo.update_vertex(gl, &Self::rect(b, self.size));
-    }
-
-    pub fn set_mvp(&self, gl: &gl, camera: &Camera, view: &ViewMatrix) {
-        let mvp = camera.perspective() * view.look_at();
-        let mvp_arrays: [[f32; 4]; 4] = mvp.into();
-        let mvp_matrices = mvp_arrays.iter().flat_map(|a| *a).collect::<Vec<_>>();
-
-        gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
-            Some(&self.mvp),
-            false,
-            &mvp_matrices,
-            0,
-            0,
-        );
     }
 
     pub fn set_ambient(&self, gl: &gl, ambient: [f32; 4]) {
@@ -214,7 +200,6 @@ void main() {
 /// posの記録を行うシェーダー
 pub struct BoidHistoryShader {
     program: Program,
-    mvp: WebGlUniformLocation,
     ambient: WebGlUniformLocation,
     point_size: WebGlUniformLocation,
     vbo: VertexVbo,
@@ -228,11 +213,13 @@ impl BoidHistoryShader {
     // TODO: mvpはUniformBufferObjectにする
     const VERT: &'static str = r#"#version 300 es
 layout(location = 0) in vec3 position;
-uniform mat4 mvp;
+layout (std140) uniform matrix {
+    mat4 mvp;
+} mat;
 uniform float pointSize;
 
 void main() {
-    gl_Position = mvp * vec4(position, 1.0);
+    gl_Position = mat.mvp * vec4(position, 1.0);
     gl_PointSize = pointSize;
 }
 "#;
@@ -249,10 +236,14 @@ void main() {
 "#;
 
     const LOCATION_POSITION: u32 = 0;
+    const MVP_UBI: u32 = 0;
 
-    fn new(gl: &gl, b: &Boid, hist_len: usize) -> Result<Self> {
+    fn new(gl: &gl, b: &Boid, hist_len: usize, camera: &CameraUBO) -> Result<Self> {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
-        let mvp = uniform_location!(gl, &program, "mvp")?;
+
+        uniform_block_binding!(gl, &program, "matrix", Self::MVP_UBI);
+        gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
+
         let ambient = uniform_location!(gl, &program, "ambient")?;
         let point_size = uniform_location!(gl, &program, "pointSize")?;
 
@@ -263,7 +254,6 @@ void main() {
         let vbo = VertexVbo::new(gl, &v, BoidHistoryShader::LOCATION_POSITION)?;
         Ok(Self {
             program,
-            mvp,
             ambient,
             point_size,
             vbo,
@@ -286,20 +276,6 @@ void main() {
         let pos = GlPoint3D::new(b.pos().x, b.pos().y, b.pos().z);
         self.vbo.update_vertex_sub(gl, &[pos], next);
         self.current_index = next;
-    }
-
-    pub fn set_mvp(&self, gl: &gl, camera: &Camera, view: &ViewMatrix) {
-        let mvp = camera.perspective() * view.look_at();
-        let mvp_arrays: [[f32; 4]; 4] = mvp.into();
-        let mvp_matrices = mvp_arrays.iter().flat_map(|a| *a).collect::<Vec<_>>();
-
-        gl.uniform_matrix4fv_with_f32_array_and_src_offset_and_src_length(
-            Some(&self.mvp),
-            false,
-            &mvp_matrices,
-            0,
-            0,
-        );
     }
 
     pub fn set_ambient(&self, gl: &gl, ambient: [f32; 4]) {

@@ -79,14 +79,7 @@ pub fn start_boids(
             view.eye.x = event.x;
             view.eye.y = event.y;
             view.eye.z = event.z;
-            for s in boids_shader.boids.iter_mut() {
-                s.use_program(&gl);
-                s.set_mvp(&gl, &camera, &view);
-
-                let hist = s.history_mut();
-                hist.use_program(&gl);
-                hist.set_mvp(&gl, &camera, &view);
-            }
+            boids_shader.camera.update_mvp(&gl, &camera, &view);
         }
 
         gl_clear_color(&gl, COLOR_BLACK);
