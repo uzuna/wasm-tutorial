@@ -1,9 +1,9 @@
 use nalgebra_glm::{TMat4, Vec3};
 
 pub struct ViewMatrix {
-    eye: Vec3,
-    center: Vec3,
-    up: Vec3,
+    pub eye: Vec3,
+    pub center: Vec3,
+    pub up: Vec3,
 }
 
 impl ViewMatrix {
@@ -29,10 +29,10 @@ impl Default for ViewMatrix {
 }
 
 pub struct Camera {
-    aspect: f32,
-    fovy: f32,
-    near: f32,
-    far: f32,
+    pub aspect: f32,
+    pub fovy: f32,
+    pub near: f32,
+    pub far: f32,
 }
 
 impl Camera {

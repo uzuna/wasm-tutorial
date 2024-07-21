@@ -55,7 +55,7 @@ pub fn start_boids(
 
     let gl = get_webgl2_context(&canvas)?;
     let camera = Camera::default();
-    let view = ViewMatrix::default();
+    let mut view = ViewMatrix::default();
 
     let mut boids_shaders: Vec<BoidShader> = vec![];
     for b in boids.boids.iter() {
@@ -74,12 +74,26 @@ pub fn start_boids(
     }
 
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let ctrl = BoidController::new(tx);
+    let (c_tx, mut c_rx) = mpsc::unbounded_channel();
+    let ctrl = BoidController::new(tx, c_tx);
 
     let a = animation::AnimationLoop::new(move |_| {
         if let Some(event) = merge_events(&mut rx) {
             for b in boids.boids.iter_mut() {
                 event.apply(b);
+            }
+        }
+        if let Some(event) = merge_events(&mut c_rx) {
+            view.eye.x = event.x;
+            view.eye.y = event.y;
+            view.eye.z = event.z;
+            for s in boids_shaders.iter_mut() {
+                s.use_program(&gl);
+                s.set_mvp(&gl, &camera, &view);
+
+                let hist = s.history_mut();
+                hist.use_program(&gl);
+                hist.set_mvp(&gl, &camera, &view);
             }
         }
 
@@ -197,13 +211,20 @@ impl Default for BoidParamSetter {
 pub struct BoidController {
     param_ch: mpsc::UnboundedSender<BoidParamSetter>,
     last: BoidParamSetter,
+    camera_ch: mpsc::UnboundedSender<CameraParamSetter>,
+    camera_last: CameraParamSetter,
 }
 
 impl BoidController {
-    pub fn new(tx: mpsc::UnboundedSender<BoidParamSetter>) -> Self {
+    pub fn new(
+        tx: mpsc::UnboundedSender<BoidParamSetter>,
+        c_tx: mpsc::UnboundedSender<CameraParamSetter>,
+    ) -> Self {
         Self {
             param_ch: tx,
             last: BoidParamSetter::default(),
+            camera_ch: c_tx,
+            camera_last: CameraParamSetter::DEFAULT,
         }
     }
 }
@@ -254,5 +275,52 @@ impl BoidController {
     pub fn set_speed_max(&mut self, speed_max: f32) {
         self.last.speed_max = Some(speed_max);
         self.param_ch.send(self.last).unwrap();
+    }
+
+    pub fn camera(&self) -> CameraParamSetter {
+        self.camera_last
+    }
+
+    pub fn set_camera_x(&mut self, x: f32) {
+        self.camera_last.x = x;
+        self.camera_ch.send(self.camera_last).unwrap();
+    }
+
+    pub fn set_camera_y(&mut self, y: f32) {
+        self.camera_last.y = y;
+        self.camera_ch.send(self.camera_last).unwrap();
+    }
+
+    pub fn set_camera_z(&mut self, z: f32) {
+        self.camera_last.z = z;
+        self.camera_ch.send(self.camera_last).unwrap();
+    }
+
+    pub fn reset_camera_position(&mut self) {
+        self.camera_ch.send(CameraParamSetter::DEFAULT).unwrap();
+    }
+}
+
+#[wasm_bindgen(inspectable)]
+#[derive(Debug, Clone, Copy)]
+pub struct CameraParamSetter {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl CameraParamSetter {
+    const DEFAULT: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 3.0,
+    };
+}
+
+impl Mergeable for CameraParamSetter {
+    fn merge(&mut self, other: Self) {
+        self.x = other.x;
+        self.y = other.y;
+        self.z = other.z;
     }
 }

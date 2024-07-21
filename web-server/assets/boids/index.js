@@ -18,7 +18,7 @@ console.info(ctrl.param().toJSON());
 function setup_slider(slider_id, value_id, slide_params) {
     const slider = document.getElementById(slider_id);
     const value_elem = document.getElementById(value_id);
-    slider.min = slide_params.min;
+    slider.min = slide_params.min * slide_params.rate;
     slider.max = slide_params.max * slide_params.rate;
     slider.value = slide_params.value * slide_params.rate;
     value_elem.innerText = slider.value / slide_params.rate;
@@ -92,3 +92,36 @@ const speed_max_slider_params = {
 }
 setup_slider("speed_max", "speed_max_value", speed_max_slider_params);
 
+const camera_x_params = {
+    min: -5.0,
+    max: 5.0,
+    value: ctrl.camera().x,
+    rate: 100.0,
+    callback: (v) => ctrl.set_camera_x(v)
+}
+setup_slider("camera_x", "camera_x_value", camera_x_params);
+
+const camera_y_params = {
+    min: -5.0,
+    max: 5.0,
+    value: ctrl.camera().y,
+    rate: 100.0,
+    callback: (v) => ctrl.set_camera_y(v)
+}
+setup_slider("camera_y", "camera_y_value", camera_y_params);
+
+const camera_z_params = {
+    min: -5.0,
+    max: 5.0,
+    value: ctrl.camera().z,
+    rate: 100.0,
+    callback: (v) => ctrl.set_camera_z(v)
+}
+setup_slider("camera_z", "camera_z_value", camera_z_params);
+
+
+const camera_reset = document.getElementById("camera_reset");
+
+camera_reset.onclick = function () {
+    ctrl.reset_camera_position();
+}
