@@ -1,11 +1,108 @@
-use web_sys::WebGlUniformLocation;
+use web_sys::{js_sys, WebGlBuffer, WebGlUniformLocation};
 use webgl2::{gl, uniform_location, vertex::VertexVbo, GlPoint3D, Program};
 
 use crate::{
     boids::Boid,
-    camera::{Camera, ViewMatrix},
+    camera::{self, Camera, ViewMatrix},
     error::*,
 };
+
+pub struct BoidsShaderBuilder {
+    /// ボイドの描画サイズ(Gl空間サイズ)
+    pub boid_size: f32,
+    /// ボイドの色
+    pub color: [f32; 4],
+    /// ボイド履歴の色
+    pub history_color: [f32; 4],
+    /// ボイド履歴の描画ポイントサイズ
+    pub history_size: f32,
+    /// ボイドの履歴を残す数
+    pub history_len: usize,
+}
+
+impl BoidsShaderBuilder {
+    pub fn new() -> Self {
+        Self {
+            boid_size: 0.01,
+            color: [1.0, 0.0, 0.0, 1.0],
+            history_color: [0.0, 0.5, 0.4, 1.0],
+            history_size: 1.0,
+            history_len: 200,
+        }
+    }
+
+    pub fn build(
+        self,
+        gl: &gl,
+        boids: &[Boid],
+        camera: &Camera,
+        view: &ViewMatrix,
+    ) -> Result<BoidsShader> {
+        let camera_ubo = CameraUBO::new(gl, camera, view)?;
+        let mut boids_shaders: Vec<BoidShader> = vec![];
+        for b in boids {
+            let bi = BoidShader::new(gl, b, self.boid_size, self.history_len)?;
+            bi.use_program(gl);
+            bi.set_mvp(gl, camera, view);
+            bi.set_ambient(gl, self.color);
+            bi.draw(gl);
+            let hist = bi.history();
+            hist.use_program(gl);
+            hist.set_mvp(gl, camera, view);
+            hist.set_ambient(gl, self.history_color);
+            hist.set_point_size(gl, self.history_size);
+            hist.draw(gl);
+            boids_shaders.push(bi);
+        }
+        Ok(BoidsShader {
+            boids: boids_shaders,
+            camera: camera_ubo,
+        })
+    }
+}
+
+pub struct BoidsShader {
+    pub boids: Vec<BoidShader>,
+    camera: CameraUBO,
+}
+
+struct CameraUBO {
+    ubo: WebGlBuffer,
+}
+
+impl CameraUBO {
+    fn new(gl: &gl, camera: &Camera, view: &ViewMatrix) -> Result<Self> {
+        let ubo = gl
+            .create_buffer()
+            .ok_or(Error::gl("failed to create buffer".into()))?;
+        let mvp = Self::gen_matrix(camera, view);
+
+        gl.bind_buffer(gl::UNIFORM_BUFFER, Some(&ubo));
+        unsafe {
+            let view = js_sys::Float32Array::view(&mvp);
+            gl.buffer_data_with_array_buffer_view(gl::UNIFORM_BUFFER, &view, gl::DYNAMIC_DRAW);
+        }
+        gl.bind_buffer(gl::UNIFORM_BUFFER, None);
+        Ok(Self { ubo })
+    }
+
+    fn gen_matrix(camera: &Camera, view: &ViewMatrix) -> Vec<f32> {
+        let mvp = camera.perspective() * view.look_at();
+        let mvp_arrays: [[f32; 4]; 4] = mvp.into();
+        mvp_arrays.iter().flat_map(|a| *a).collect::<Vec<_>>()
+    }
+
+    pub fn update_mvp(&self, gl: &gl, camera: &Camera, view: &ViewMatrix) {
+        let mvp = Self::gen_matrix(camera, view);
+
+        gl.bind_buffer(gl::UNIFORM_BUFFER, Some(&self.ubo));
+        unsafe {
+            let view = js_sys::Float32Array::view(&mvp);
+            gl.buffer_sub_data_with_i32_and_array_buffer_view(gl::UNIFORM_BUFFER, 0, &view);
+        }
+        gl.bind_buffer(gl::UNIFORM_BUFFER, None);
+    }
+}
 
 pub struct BoidShader {
     program: Program,

@@ -5,7 +5,7 @@ use webgl2::gl;
 
 use crate::{
     animation,
-    boids_shader::BoidShader,
+    boids_shader::BoidsShaderBuilder,
     camera::{Camera, ViewMatrix},
     info,
     utils::{merge_events, Mergeable},
@@ -52,26 +52,18 @@ pub fn start_boids(
     canvas.set_height(768);
 
     let mut boids = crate::boids::Boids::new_circle(ip.boid_num, 0.5, 0.01);
+    let mut buillder = BoidsShaderBuilder::new();
 
     let gl = get_webgl2_context(&canvas)?;
     let camera = Camera::default();
     let mut view = ViewMatrix::default();
 
-    let mut boids_shaders: Vec<BoidShader> = vec![];
-    for b in boids.boids.iter() {
-        let bi = BoidShader::new(&gl, b, ip.boid_size, ip.history_len)?;
-        bi.use_program(&gl);
-        bi.set_mvp(&gl, &camera, &view);
-        bi.set_ambient(&gl, [1.0, 0.0, 0.0, 1.0]);
-        bi.draw(&gl);
-        let hist = bi.history();
-        hist.use_program(&gl);
-        hist.set_mvp(&gl, &camera, &view);
-        hist.set_ambient(&gl, [0.0, 0.5, 0.4, ip.history_alpha]);
-        hist.set_point_size(&gl, ip.history_size);
-        hist.draw(&gl);
-        boids_shaders.push(bi);
-    }
+    buillder.boid_size = ip.boid_size;
+    buillder.history_size = ip.history_size;
+    buillder.history_len = ip.history_len;
+    buillder.history_color = [0.0, 0.5, 0.4, ip.history_alpha];
+
+    let mut boids_shader = buillder.build(&gl, &boids.boids, &camera, &view)?;
 
     let (tx, mut rx) = mpsc::unbounded_channel();
     let (c_tx, mut c_rx) = mpsc::unbounded_channel();
@@ -87,7 +79,7 @@ pub fn start_boids(
             view.eye.x = event.x;
             view.eye.y = event.y;
             view.eye.z = event.z;
-            for s in boids_shaders.iter_mut() {
+            for s in boids_shader.boids.iter_mut() {
                 s.use_program(&gl);
                 s.set_mvp(&gl, &camera, &view);
 
@@ -98,7 +90,7 @@ pub fn start_boids(
         }
 
         gl_clear_color(&gl, COLOR_BLACK);
-        for (b, s) in boids.boids.iter().zip(boids_shaders.iter_mut()) {
+        for (b, s) in boids.boids.iter().zip(boids_shader.boids.iter_mut()) {
             s.use_program(&gl);
             s.update(&gl, b);
             s.draw(&gl);
@@ -111,7 +103,8 @@ pub fn start_boids(
         Ok(())
     });
     a.start()?;
-
+    // 初期値送信
+    ctrl.init();
     Ok(ctrl)
 }
 
@@ -231,6 +224,10 @@ impl BoidController {
 
 #[wasm_bindgen]
 impl BoidController {
+    fn init(&self) {
+        self.param_ch.send(self.last).unwrap();
+    }
+
     pub fn param(&self) -> BoidParamSetter {
         self.last
     }
