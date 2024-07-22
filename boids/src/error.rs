@@ -7,6 +7,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("WegGL Error {0}")]
     Gl(#[from] webgl2::error::Error),
+    #[error(transparent)]
+    GlooNet(#[from] gloo_net::Error),
 }
 
 impl Error {

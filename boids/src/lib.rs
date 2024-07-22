@@ -6,3 +6,4 @@ pub mod entry_point;
 pub mod error;
 pub(crate) mod log;
 mod utils;
+pub(crate) mod ws;

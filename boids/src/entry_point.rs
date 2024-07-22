@@ -9,6 +9,7 @@ use crate::{
     camera::{Camera, ViewMatrix},
     info,
     utils::{merge_events, Mergeable},
+    ws::start_websocket,
 };
 
 const COLOR_BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
@@ -98,6 +99,9 @@ pub fn start_boids(
     a.start()?;
     // 初期値送信
     ctrl.init();
+
+    // start ws
+    start_websocket("ws://localhost:8080/api/ws/boid/gen_stream")?;
     Ok(ctrl)
 }
 

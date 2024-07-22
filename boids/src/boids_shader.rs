@@ -5,6 +5,7 @@ use crate::{
     boids::Boid,
     camera::{Camera, ViewMatrix},
     error::*,
+    info,
 };
 
 pub struct BoidsShaderBuilder {
@@ -74,6 +75,7 @@ impl CameraUBO {
             .create_buffer()
             .ok_or(Error::gl("failed to create buffer".into()))?;
         let mvp = Self::gen_matrix(camera, view);
+        info!("CameraUBO: mvp: {:?}", mvp);
 
         gl.bind_buffer(gl::UNIFORM_BUFFER, Some(&ubo));
         unsafe {
@@ -86,6 +88,8 @@ impl CameraUBO {
 
     fn gen_matrix(camera: &Camera, view: &ViewMatrix) -> Vec<f32> {
         let mvp = camera.perspective() * view.look_at();
+        info!("perspective: {:?}", camera.perspective());
+        info!("lookat: {:?}", view.look_at());
         let mvp_arrays: [[f32; 4]; 4] = mvp.into();
         mvp_arrays.iter().flat_map(|a| *a).collect::<Vec<_>>()
     }
@@ -159,7 +163,7 @@ void main() {
         Ok(Self {
             program,
             ambient,
-            vbo,
+            vbo, 
             size,
             history,
         })
