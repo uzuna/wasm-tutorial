@@ -1,5 +1,5 @@
 use web_sys::{js_sys, WebGlBuffer, WebGlUniformLocation};
-use webgl2::{gl, uniform_block_binding, uniform_location, vertex::VertexVbo, GlPoint3D, Program};
+use webgl2::{gl, uniform_block_binding, uniform_location, vertex::VertexVbo, GlPoint3d, Program};
 
 use crate::{
     boids::Boid,
@@ -143,13 +143,13 @@ void main() {
 
     // for TRIANGLE STRIP
     // Z方向は無視していたポリゴンで描画する
-    fn rect(b: &Boid, size: f32) -> [GlPoint3D; 4] {
+    fn rect(b: &Boid, size: f32) -> [GlPoint3d; 4] {
         let p = b.pos();
         [
-            GlPoint3D::new(p.x - size, p.y - size, p.z),
-            GlPoint3D::new(p.x + size, p.y - size, p.z),
-            GlPoint3D::new(p.x - size, p.y + size, p.z),
-            GlPoint3D::new(p.x + size, p.y + size, p.z),
+            GlPoint3d::new(p.x - size, p.y - size, p.z),
+            GlPoint3d::new(p.x + size, p.y - size, p.z),
+            GlPoint3d::new(p.x - size, p.y + size, p.z),
+            GlPoint3d::new(p.x + size, p.y + size, p.z),
         ]
     }
 
@@ -253,7 +253,7 @@ void main() {
 
         let vbo_len = hist_len.next_power_of_two();
         let pos = b.pos();
-        let pos = GlPoint3D::new(pos.x, pos.y, pos.z);
+        let pos = GlPoint3d::new(pos.x, pos.y, pos.z);
         let v = vec![pos; vbo_len];
         let vbo = VertexVbo::new(gl, &v, BoidHistoryShader::LOCATION_POSITION)?;
         Ok(Self {
@@ -277,7 +277,7 @@ void main() {
 
     pub fn update(&mut self, gl: &gl, b: &Boid) {
         let next = self.index(self.current_index + 1);
-        let pos = GlPoint3D::new(b.pos().x, b.pos().y, b.pos().z);
+        let pos = GlPoint3d::new(b.pos().x, b.pos().y, b.pos().z);
         self.vbo.update_vertex_sub(gl, &[pos], next);
         self.current_index = next;
     }

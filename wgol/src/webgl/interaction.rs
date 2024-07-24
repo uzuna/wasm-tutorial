@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGlFramebuffer, WebGlTexture, WebGlUniformLocation};
 
-use webgl2::{gl, uniform_location, vertex::VertexVbo, GlEnum, GlPoint2D, GlPoint3D, Program};
+use webgl2::{gl, uniform_location, vertex::VertexVbo, GlEnum, GlPoint2d, GlPoint3d, Program};
 
 use crate::error::{Error, Result};
 
@@ -121,9 +121,9 @@ impl Point {
     }
 }
 
-impl From<Point> for GlPoint2D {
-    fn from(p: Point) -> GlPoint2D {
-        GlPoint2D::new(p.x, p.y)
+impl From<Point> for GlPoint2d {
+    fn from(p: Point) -> GlPoint2d {
+        GlPoint2d::new(p.x, p.y)
     }
 }
 
@@ -196,8 +196,8 @@ impl ParticleControl {
 }
 
 pub struct Particle {
-    position: Vec<GlPoint2D>,
-    vector: Vec<GlPoint2D>,
+    position: Vec<GlPoint2d>,
+    vector: Vec<GlPoint2d>,
     res: Resolution,
     current_velocity: f32,
     current_size: f32,
@@ -212,11 +212,11 @@ impl Particle {
         let (ix, iy) = (1. / res.x as f32, 1. / res.y as f32);
         for y in 0..res.y {
             for x in 0..res.x {
-                position.push(GlPoint2D::new(
+                position.push(GlPoint2d::new(
                     x as f32 * ix * 2.0 - 1.0,
                     y as f32 * iy * 2.0 - 1.0,
                 ));
-                vector.push(GlPoint2D::new(0.0, 0.0));
+                vector.push(GlPoint2d::new(0.0, 0.0));
             }
         }
         Self {
@@ -234,8 +234,8 @@ impl Particle {
     }
 
     // 移動ベクトルの更新
-    fn update_vector(&self, pos: GlPoint2D, target: Point, vector: GlPoint2D) -> GlPoint2D {
-        let mut delta = GlPoint2D::from(target) - pos;
+    fn update_vector(&self, pos: GlPoint2d, target: Point, vector: GlPoint2d) -> GlPoint2d {
+        let mut delta = GlPoint2d::from(target) - pos;
         // ベクトルに対する加算量を計算
         let r = delta.norm() / self.ctrl.handle_rate;
         if r != 0.0 {
@@ -364,11 +364,11 @@ void main(){
 "#;
 
     // 画面全体を覆うポリゴンの頂点情報
-    const TEXTURE_VERTEX: [GlPoint3D; 4] = [
-        GlPoint3D::new(-1.0, 1.0, 0.0),
-        GlPoint3D::new(-1.0, -1.0, 0.0),
-        GlPoint3D::new(1.0, 1.0, 0.0),
-        GlPoint3D::new(1.0, -1.0, 0.0),
+    const TEXTURE_VERTEX: [GlPoint3d; 4] = [
+        GlPoint3d::new(-1.0, 1.0, 0.0),
+        GlPoint3d::new(-1.0, -1.0, 0.0),
+        GlPoint3d::new(1.0, 1.0, 0.0),
+        GlPoint3d::new(1.0, -1.0, 0.0),
     ];
 
     pub fn new(gl: &gl, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
@@ -426,10 +426,10 @@ void main(){
     // データそのものは問題なくあるはずなのだけど、適切なテクスチャ位置を参照できてないのだと思われる
     fn make_texture_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
         let data = vec![
-            GlPoint2D::new(0.1, 0.1),
-            GlPoint2D::new(0.1, -0.1),
-            GlPoint2D::new(-0.1, 0.1),
-            GlPoint2D::new(-0.1, -0.1),
+            GlPoint2d::new(0.1, 0.1),
+            GlPoint2d::new(0.1, -0.1),
+            GlPoint2d::new(-0.1, 0.1),
+            GlPoint2d::new(-0.1, -0.1),
         ];
         Ok(VertexVbo::new(gl, &data, location)?)
     }

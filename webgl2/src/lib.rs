@@ -1,3 +1,4 @@
+use bytemuck::{Pod, Zeroable};
 pub use web_sys::WebGl2RenderingContext as gl;
 use web_sys::{WebGlProgram, WebGlShader};
 
@@ -49,14 +50,14 @@ pub trait GlPoint {
 /// OpenGLに渡す2次元の点の情報。主に平面座標に使う
 ///
 /// 連続する2つの`f32`のデータとして見えなければならないのでCの構造体として定義する  
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
 #[repr(C)]
-pub struct GlPoint2D {
+pub struct GlPoint2d {
     pub x: f32,
     pub y: f32,
 }
 
-impl GlPoint2D {
+impl GlPoint2d {
     #[inline]
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
@@ -67,14 +68,15 @@ impl GlPoint2D {
     }
 }
 
-impl GlPoint for GlPoint2D {
+impl GlPoint for GlPoint2d {
     fn size() -> GlInt {
         2
     }
 }
 
-impl std::ops::Sub for GlPoint2D {
-    type Output = GlPoint2D;
+
+impl std::ops::Sub for GlPoint2d {
+    type Output = GlPoint2d;
     fn sub(self, rhs: Self) -> Self::Output {
         Self {
             x: self.x - rhs.x,
@@ -82,8 +84,8 @@ impl std::ops::Sub for GlPoint2D {
         }
     }
 }
-impl std::ops::Mul<f32> for GlPoint2D {
-    type Output = GlPoint2D;
+impl std::ops::Mul<f32> for GlPoint2d {
+    type Output = GlPoint2d;
     fn mul(self, rhs: f32) -> Self::Output {
         Self {
             x: self.x * rhs,
@@ -92,14 +94,14 @@ impl std::ops::Mul<f32> for GlPoint2D {
     }
 }
 
-impl std::ops::DivAssign<f32> for GlPoint2D {
+impl std::ops::DivAssign<f32> for GlPoint2d {
     fn div_assign(&mut self, rhs: f32) {
         self.x /= rhs;
         self.y /= rhs;
     }
 }
 
-impl std::ops::AddAssign for GlPoint2D {
+impl std::ops::AddAssign for GlPoint2d {
     fn add_assign(&mut self, rhs: Self) {
         self.x += rhs.x;
         self.y += rhs.y;
@@ -107,15 +109,15 @@ impl std::ops::AddAssign for GlPoint2D {
 }
 
 /// OpenGLに渡す3次元の点の情報。主に3次元空間の座標に使う
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
 #[repr(C)]
-pub struct GlPoint3D {
+pub struct GlPoint3d {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
-impl GlPoint3D {
+impl GlPoint3d {
     #[inline]
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
@@ -126,30 +128,29 @@ impl GlPoint3D {
     }
 }
 
-impl GlPoint for GlPoint3D {
+impl GlPoint for GlPoint3d {
     fn size() -> GlInt {
         3
     }
 }
 
 /// OpenGLに渡す4次元の点の情報。主に色表現に使う
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
 #[repr(C)]
-pub struct GlPoint4D {
+pub struct GlPoint4d {
     pub x: f32,
     pub y: f32,
     pub z: f32,
     pub w: f32,
 }
 
-impl GlPoint4D {
+impl GlPoint4d {
     #[inline]
     pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
 }
-
-impl GlPoint for GlPoint4D {
+impl GlPoint for GlPoint4d {
     fn size() -> GlInt {
         4
     }

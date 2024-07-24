@@ -2,7 +2,7 @@ use nalgebra_glm::{TMat4, Vec3};
 use web_sys::{WebGlBuffer, WebGlUniformLocation, WebGlVertexArrayObject};
 
 use crate::error::{Error, Result};
-use webgl2::{gl, GlEnum, GlInt, GlPoint, GlPoint3D, GlPoint4D, Program};
+use webgl2::{gl, GlEnum, GlInt, GlPoint, GlPoint3d, GlPoint4d, Program};
 
 pub struct Shader {
     program: Program,
@@ -146,24 +146,24 @@ impl Default for Camera {
 }
 
 pub struct ColorVertexData {
-    pub vertex: Vec<GlPoint3D>,
-    pub color: Vec<GlPoint4D>,
+    pub vertex: Vec<GlPoint3d>,
+    pub color: Vec<GlPoint4d>,
     pub index: Vec<u16>,
 }
 
 impl ColorVertexData {
-    const VERT_RECT: &'static [GlPoint3D] = &[
-        GlPoint3D::new(-1.0, -1.0, 0.0),
-        GlPoint3D::new(1.0, -1.0, 0.0),
-        GlPoint3D::new(-1.0, 1.0, 0.0),
-        GlPoint3D::new(1.0, 1.0, 0.0),
+    const VERT_RECT: &'static [GlPoint3d] = &[
+        GlPoint3d::new(-1.0, -1.0, 0.0),
+        GlPoint3d::new(1.0, -1.0, 0.0),
+        GlPoint3d::new(-1.0, 1.0, 0.0),
+        GlPoint3d::new(1.0, 1.0, 0.0),
     ];
 
-    const COLOR_COORD: &'static [GlPoint4D] = &[
-        GlPoint4D::new(1.0, 0.0, 0.0, 1.0),
-        GlPoint4D::new(0.0, 1.0, 0.0, 1.0),
-        GlPoint4D::new(0.0, 0.0, 1.0, 1.0),
-        GlPoint4D::new(1.0, 1.0, 1.0, 1.0),
+    const COLOR_COORD: &'static [GlPoint4d] = &[
+        GlPoint4d::new(1.0, 0.0, 0.0, 1.0),
+        GlPoint4d::new(0.0, 1.0, 0.0, 1.0),
+        GlPoint4d::new(0.0, 0.0, 1.0, 1.0),
+        GlPoint4d::new(1.0, 1.0, 1.0, 1.0),
     ];
 
     const INDEX: &'static [u16] = &[0, 1, 2, 2, 1, 3];
@@ -194,10 +194,10 @@ impl ColorVertexVao {
             unsafe {
                 std::slice::from_raw_parts(
                     data.vertex.as_ptr() as *const f32,
-                    data.vertex.len() * GlPoint3D::size() as usize,
+                    data.vertex.len() * GlPoint3d::size() as usize,
                 )
             },
-            GlPoint3D::size(),
+            GlPoint3d::size(),
             locations[0],
             gl::ARRAY_BUFFER,
             gl::STATIC_DRAW,
@@ -207,10 +207,10 @@ impl ColorVertexVao {
             unsafe {
                 std::slice::from_raw_parts(
                     data.color.as_ptr() as *const f32,
-                    data.color.len() * GlPoint4D::size() as usize,
+                    data.color.len() * GlPoint4d::size() as usize,
                 )
             },
-            GlPoint4D::size(),
+            GlPoint4d::size(),
             locations[1],
             gl::ARRAY_BUFFER,
             gl::STATIC_DRAW,
