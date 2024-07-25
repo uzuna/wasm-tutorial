@@ -1,3 +1,4 @@
+use wasm_bindgen::JsError;
 use web_sys::{js_sys, WebGlBuffer, WebGlUniformLocation};
 use webgl2::{gl, uniform_block_binding, uniform_location, vertex::VertexVbo, GlPoint3d, Program};
 
@@ -73,7 +74,7 @@ impl CameraUBO {
     fn new(gl: &gl, camera: &Camera, view: &ViewMatrix) -> Result<Self> {
         let ubo = gl
             .create_buffer()
-            .ok_or(Error::gl("failed to create buffer".into()))?;
+            .ok_or(JsError::new("failed to create buffer"))?;
         let mvp = Self::gen_matrix(camera, view);
         info!("CameraUBO: mvp: {:?}", mvp);
 
@@ -163,7 +164,7 @@ void main() {
         Ok(Self {
             program,
             ambient,
-            vbo, 
+            vbo,
             size,
             history,
         })

@@ -1,10 +1,8 @@
-use bytemuck::{AnyBitPattern, Pod};
+use bytemuck::Pod;
+use wasm_bindgen::JsError;
 use web_sys::WebGlBuffer;
 
-use crate::{
-    error::{Error, Result},
-    gl, GlEnum, GlInt, GlPoint,
-};
+use crate::{error::Result, gl, GlEnum, GlInt, GlPoint};
 
 pub struct VertexVbo {
     vbo: WebGlBuffer,
@@ -48,7 +46,7 @@ impl VertexVbo {
     ) -> Result<WebGlBuffer> {
         let buffer = gl
             .create_buffer()
-            .ok_or(Error::gl("Failed to create buffer object".into()))?;
+            .ok_or(JsError::new("Failed to create buffer object"))?;
         gl.bind_buffer(Self::TARGET, Some(&buffer));
         unsafe {
             let view = js_sys::Float32Array::view(data);

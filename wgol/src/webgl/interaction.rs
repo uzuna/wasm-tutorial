@@ -3,7 +3,7 @@ use web_sys::{WebGlFramebuffer, WebGlTexture, WebGlUniformLocation};
 
 use webgl2::{gl, uniform_location, vertex::VertexVbo, GlEnum, GlPoint2d, GlPoint3d, Program};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 pub struct ParticleShader {
     program: Program,
@@ -431,11 +431,11 @@ void main(){
             GlPoint2d::new(-0.1, 0.1),
             GlPoint2d::new(-0.1, -0.1),
         ];
-        Ok(VertexVbo::new(gl, &data, location)?)
+        VertexVbo::new(gl, &data, location)
     }
 
     fn make_index_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
-        Ok(VertexVbo::new(gl, &Self::TEXTURE_VERTEX, location)?)
+        VertexVbo::new(gl, &Self::TEXTURE_VERTEX, location)
     }
 
     fn next_fbo_index(&self) -> usize {
@@ -728,7 +728,7 @@ impl TextureFBO {
         // フレームバッファにテクスチャ用の領域を確保
         let texture = gl
             .create_texture()
-            .ok_or(Error::gl("Failed to create texture".into()))?;
+            .ok_or(JsError::new("Failed to create texture"))?;
         gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
         gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
             gl::TEXTURE_2D,
@@ -741,7 +741,7 @@ impl TextureFBO {
             type_,
             None,
         )
-        .map_err(|e| Error::gl(format!("Failed to tex_image_2d: {:?}", e)))?;
+        .map_err(|e| JsError::new(&format!("Failed to tex_image_2d: {:?}", e)))?;
 
         gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
@@ -750,7 +750,7 @@ impl TextureFBO {
 
         let fbo = gl
             .create_framebuffer()
-            .ok_or(Error::gl("Failed to create framebuffer".into()))?;
+            .ok_or(JsError::new("Failed to create framebuffer"))?;
         gl.bind_framebuffer(gl::FRAMEBUFFER, Some(&fbo));
 
         // フレームバッファにテクスチャをアタッチ
@@ -764,7 +764,7 @@ impl TextureFBO {
 
         // フレームバッファの状態を確認
         if gl.check_framebuffer_status(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE {
-            return Err(Error::gl(format!(
+            return Err(JsError::new(&format!(
                 "Framebuffer is not complete. code={}",
                 gl.get_error()
             )));

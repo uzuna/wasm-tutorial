@@ -1,7 +1,8 @@
 use nalgebra_glm::{TMat4, Vec3};
+use wasm_bindgen::JsError;
 use web_sys::{WebGlBuffer, WebGlUniformLocation, WebGlVertexArrayObject};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use webgl2::{gl, GlEnum, GlInt, GlPoint, GlPoint3d, GlPoint4d, Program};
 
 pub struct Shader {
@@ -45,7 +46,7 @@ void main() {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
         let mvp = gl
             .get_uniform_location(program.program(), "mvp")
-            .ok_or(Error::gl("Failed to get uniform location".into()))?;
+            .ok_or(JsError::new("Failed to get uniform location"))?;
         let data = ColorVertexData::rect();
         let vao = ColorVertexVao::new(gl, &data, Self::LOCATIONS)?;
 
@@ -186,7 +187,7 @@ impl ColorVertexVao {
     pub fn new(gl: &gl, data: &ColorVertexData, locations: [u32; 2]) -> Result<Self> {
         let vao = gl
             .create_vertex_array()
-            .ok_or(Error::gl("Failed to create vertex array object".into()))?;
+            .ok_or(JsError::new("Failed to create vertex array object"))?;
         gl.bind_vertex_array(Some(&vao));
 
         let _vertex = Self::create_vertex_buffer(
@@ -233,7 +234,7 @@ impl ColorVertexVao {
     ) -> Result<WebGlBuffer> {
         let buffer = gl
             .create_buffer()
-            .ok_or(Error::gl("Failed to create buffer object".into()))?;
+            .ok_or(JsError::new("Failed to create buffer object"))?;
         gl.bind_buffer(target, Some(&buffer));
         unsafe {
             let view = js_sys::Float32Array::view(data);
@@ -249,7 +250,7 @@ impl ColorVertexVao {
     fn create_index_buffer(gl: &gl, data: &[u16]) -> Result<WebGlBuffer> {
         let ibo = gl
             .create_buffer()
-            .ok_or(Error::gl("Failed to create buffer".into()))?;
+            .ok_or(JsError::new("Failed to create buffer"))?;
         gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(&ibo));
         unsafe {
             let view = js_sys::Uint16Array::view(data);

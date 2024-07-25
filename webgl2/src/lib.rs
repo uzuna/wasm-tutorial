@@ -1,4 +1,5 @@
 use bytemuck::{Pod, Zeroable};
+use wasm_bindgen::JsError;
 pub use web_sys::WebGl2RenderingContext as gl;
 use web_sys::{WebGlProgram, WebGlShader};
 
@@ -6,13 +7,13 @@ pub mod error;
 #[cfg(feature = "vertex")]
 pub mod vertex;
 
-use error::{Error, Result};
+use error::Result;
 
 #[macro_export]
 macro_rules! uniform_location {
     ($gl:expr, $program:expr, $name:expr) => {
         $gl.get_uniform_location($program.program(), $name)
-            .ok_or(Error::gl(format!(
+            .ok_or(wasm_bindgen::JsError::new(&format!(
                 "Failed to get uniform location {}",
                 $name
             )))
@@ -73,7 +74,6 @@ impl GlPoint for GlPoint2d {
         2
     }
 }
-
 
 impl std::ops::Sub for GlPoint2d {
     type Output = GlPoint2d;
@@ -171,7 +171,7 @@ impl Program {
         // Link shaders
         let program = gl
             .create_program()
-            .ok_or(Error::gl("Failed to create program object".into()))?;
+            .ok_or(JsError::new("Failed to create program object"))?;
         gl.attach_shader(&program, &vertex);
         gl.attach_shader(&program, &fragment);
         gl.link_program(&program);
@@ -191,7 +191,7 @@ impl Program {
                 .get_program_info_log(&program)
                 .unwrap_or(String::from("Failed to link program"));
             gl.delete_program(Some(&program));
-            Err(Error::gl(log))
+            Err(JsError::new(&log))
         }
     }
 
@@ -242,7 +242,7 @@ pub fn compile_fragment(gl: &gl, fragment: &str) -> Result<WebGlShader> {
 unsafe fn compile_shader(gl: &gl, shader_script: &str, type_: ShaderType) -> Result<WebGlShader> {
     let shader = gl
         .create_shader(type_.to_glenum())
-        .ok_or(Error::gl("Failed to create shader object".into()))?;
+        .ok_or(JsError::new("Failed to create shader object"))?;
     gl.shader_source(&shader, shader_script);
     gl.compile_shader(&shader);
 
@@ -257,6 +257,6 @@ unsafe fn compile_shader(gl: &gl, shader_script: &str, type_: ShaderType) -> Res
             .get_shader_info_log(&shader)
             .unwrap_or(String::from("Failed to compile shader"));
         gl.delete_shader(Some(&shader));
-        Err(Error::gl(log))
+        Err(JsError::new(&log))
     }
 }

@@ -6,7 +6,7 @@ extern crate wasm_bindgen_test;
 
 use std::assert_eq;
 
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{prelude::*, JsError};
 use wasm_bindgen_test::*;
 use web_sys::WebGlUniformLocation;
 use webgl2::{
@@ -56,7 +56,7 @@ void main() {
             let program = Program::new(gl, Self::VERT, Self::FRAG)?;
             let mvp = gl
                 .get_uniform_location(program.program(), "mvp")
-                .ok_or(Error::gl("Failed to get uniform location".into()))?;
+                .ok_or(JsError::new("Failed to get uniform location"))?;
 
             Ok(Self { program, mvp })
         }
