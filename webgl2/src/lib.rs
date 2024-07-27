@@ -1,3 +1,5 @@
+use bytemuck::{Pod, Zeroable};
+use wasm_bindgen::JsError;
 pub use web_sys::WebGl2RenderingContext as gl;
 use web_sys::{WebGlProgram, WebGlShader};
 
@@ -5,17 +7,25 @@ pub mod error;
 #[cfg(feature = "vertex")]
 pub mod vertex;
 
-use error::{Error, Result};
+use error::Result;
 
 #[macro_export]
 macro_rules! uniform_location {
     ($gl:expr, $program:expr, $name:expr) => {
         $gl.get_uniform_location($program.program(), $name)
-            .ok_or(Error::gl(format!(
+            .ok_or(wasm_bindgen::JsError::new(&format!(
                 "Failed to get uniform location {}",
                 $name
             )))
     };
+}
+
+pub fn uniform_block_binding(gl: &gl, program: &Program, name: &str, index: u32) {
+    gl.uniform_block_binding(
+        program.program(),
+        gl.get_uniform_block_index(program.program(), name),
+        index,
+    );
 }
 
 pub type GlEnum = u32;
@@ -38,14 +48,14 @@ pub trait GlPoint {
 /// OpenGLに渡す2次元の点の情報。主に平面座標に使う
 ///
 /// 連続する2つの`f32`のデータとして見えなければならないのでCの構造体として定義する  
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
 #[repr(C)]
-pub struct GlPoint2D {
+pub struct GlPoint2d {
     pub x: f32,
     pub y: f32,
 }
 
-impl GlPoint2D {
+impl GlPoint2d {
     #[inline]
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
@@ -56,14 +66,14 @@ impl GlPoint2D {
     }
 }
 
-impl GlPoint for GlPoint2D {
+impl GlPoint for GlPoint2d {
     fn size() -> GlInt {
         2
     }
 }
 
-impl std::ops::Sub for GlPoint2D {
-    type Output = GlPoint2D;
+impl std::ops::Sub for GlPoint2d {
+    type Output = GlPoint2d;
     fn sub(self, rhs: Self) -> Self::Output {
         Self {
             x: self.x - rhs.x,
@@ -71,8 +81,9 @@ impl std::ops::Sub for GlPoint2D {
         }
     }
 }
-impl std::ops::Mul<f32> for GlPoint2D {
-    type Output = GlPoint2D;
+
+impl std::ops::Mul<f32> for GlPoint2d {
+    type Output = GlPoint2d;
     fn mul(self, rhs: f32) -> Self::Output {
         Self {
             x: self.x * rhs,
@@ -81,14 +92,14 @@ impl std::ops::Mul<f32> for GlPoint2D {
     }
 }
 
-impl std::ops::DivAssign<f32> for GlPoint2D {
+impl std::ops::DivAssign<f32> for GlPoint2d {
     fn div_assign(&mut self, rhs: f32) {
         self.x /= rhs;
         self.y /= rhs;
     }
 }
 
-impl std::ops::AddAssign for GlPoint2D {
+impl std::ops::AddAssign for GlPoint2d {
     fn add_assign(&mut self, rhs: Self) {
         self.x += rhs.x;
         self.y += rhs.y;
@@ -96,45 +107,48 @@ impl std::ops::AddAssign for GlPoint2D {
 }
 
 /// OpenGLに渡す3次元の点の情報。主に3次元空間の座標に使う
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
 #[repr(C)]
-pub struct GlPoint3D {
+pub struct GlPoint3d {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
-impl GlPoint3D {
+impl GlPoint3d {
     #[inline]
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
+    #[inline]
+    pub const fn zero() -> Self {
+        Self::new(0.0, 0.0, 0.0)
+    }
 }
 
-impl GlPoint for GlPoint3D {
+impl GlPoint for GlPoint3d {
     fn size() -> GlInt {
         3
     }
 }
 
 /// OpenGLに渡す4次元の点の情報。主に色表現に使う
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
 #[repr(C)]
-pub struct GlPoint4D {
+pub struct GlPoint4d {
     pub x: f32,
     pub y: f32,
     pub z: f32,
     pub w: f32,
 }
 
-impl GlPoint4D {
+impl GlPoint4d {
     #[inline]
     pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
 }
-
-impl GlPoint for GlPoint4D {
+impl GlPoint for GlPoint4d {
     fn size() -> GlInt {
         4
     }
@@ -155,7 +169,7 @@ impl Program {
         // Link shaders
         let program = gl
             .create_program()
-            .ok_or(Error::gl("Failed to create program object".into()))?;
+            .ok_or(JsError::new("Failed to create program object"))?;
         gl.attach_shader(&program, &vertex);
         gl.attach_shader(&program, &fragment);
         gl.link_program(&program);
@@ -175,7 +189,7 @@ impl Program {
                 .get_program_info_log(&program)
                 .unwrap_or(String::from("Failed to link program"));
             gl.delete_program(Some(&program));
-            Err(Error::gl(log))
+            Err(JsError::new(&log))
         }
     }
 
@@ -212,21 +226,21 @@ impl ShaderType {
 
 /// 頂点シェーダーをコンパイルする
 pub fn compile_vertex(gl: &gl, vertex: &str) -> Result<WebGlShader> {
-    let s = unsafe { compile_shader(gl, vertex, ShaderType::Vertex)? };
+    let s = compile_shader(gl, vertex, ShaderType::Vertex)?;
     Ok(s)
 }
 
 /// フラグメントシェーダーをコンパイルする
 pub fn compile_fragment(gl: &gl, fragment: &str) -> Result<WebGlShader> {
-    let s = unsafe { compile_shader(gl, fragment, ShaderType::Fragment)? };
+    let s = compile_shader(gl, fragment, ShaderType::Fragment)?;
     Ok(s)
 }
 
 // Shaderのコンパイルする
-unsafe fn compile_shader(gl: &gl, shader_script: &str, type_: ShaderType) -> Result<WebGlShader> {
+fn compile_shader(gl: &gl, shader_script: &str, type_: ShaderType) -> Result<WebGlShader> {
     let shader = gl
         .create_shader(type_.to_glenum())
-        .ok_or(Error::gl("Failed to create shader object".into()))?;
+        .ok_or(JsError::new("Failed to create shader object"))?;
     gl.shader_source(&shader, shader_script);
     gl.compile_shader(&shader);
 
@@ -241,6 +255,6 @@ unsafe fn compile_shader(gl: &gl, shader_script: &str, type_: ShaderType) -> Res
             .get_shader_info_log(&shader)
             .unwrap_or(String::from("Failed to compile shader"));
         gl.delete_shader(Some(&shader));
-        Err(Error::gl(log))
+        Err(JsError::new(&log))
     }
 }

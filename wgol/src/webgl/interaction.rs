@@ -1,9 +1,13 @@
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGlFramebuffer, WebGlTexture, WebGlUniformLocation};
 
-use webgl2::{gl, uniform_location, vertex::VertexVbo, GlEnum, GlPoint2D, GlPoint3D, Program};
+use webgl2::{
+    gl, uniform_location,
+    vertex::{Vao, VertexVbo},
+    GlEnum, GlPoint2d, GlPoint3d, Program,
+};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 pub struct ParticleShader {
     program: Program,
@@ -121,9 +125,9 @@ impl Point {
     }
 }
 
-impl From<Point> for GlPoint2D {
-    fn from(p: Point) -> GlPoint2D {
-        GlPoint2D::new(p.x, p.y)
+impl From<Point> for GlPoint2d {
+    fn from(p: Point) -> GlPoint2d {
+        GlPoint2d::new(p.x, p.y)
     }
 }
 
@@ -196,8 +200,8 @@ impl ParticleControl {
 }
 
 pub struct Particle {
-    position: Vec<GlPoint2D>,
-    vector: Vec<GlPoint2D>,
+    position: Vec<GlPoint2d>,
+    vector: Vec<GlPoint2d>,
     res: Resolution,
     current_velocity: f32,
     current_size: f32,
@@ -212,11 +216,11 @@ impl Particle {
         let (ix, iy) = (1. / res.x as f32, 1. / res.y as f32);
         for y in 0..res.y {
             for x in 0..res.x {
-                position.push(GlPoint2D::new(
+                position.push(GlPoint2d::new(
                     x as f32 * ix * 2.0 - 1.0,
                     y as f32 * iy * 2.0 - 1.0,
                 ));
-                vector.push(GlPoint2D::new(0.0, 0.0));
+                vector.push(GlPoint2d::new(0.0, 0.0));
             }
         }
         Self {
@@ -234,8 +238,8 @@ impl Particle {
     }
 
     // 移動ベクトルの更新
-    fn update_vector(&self, pos: GlPoint2D, target: Point, vector: GlPoint2D) -> GlPoint2D {
-        let mut delta = GlPoint2D::from(target) - pos;
+    fn update_vector(&self, pos: GlPoint2d, target: Point, vector: GlPoint2d) -> GlPoint2d {
+        let mut delta = GlPoint2d::from(target) - pos;
         // ベクトルに対する加算量を計算
         let r = delta.norm() / self.ctrl.handle_rate;
         if r != 0.0 {
@@ -282,7 +286,9 @@ pub struct ParticleGpgpuShader {
     u_point: ParticleGpgpuPointUniform,
     u_velocity: ParticleGpgpuVelocityUniform,
     u_index: ParticleGpgpuIndexUniform,
+    point_vao: Vao,
     point_vbo: VertexVbo,
+    index_vao: Vao,
     index_vbo: VertexVbo,
     fbos: [TextureFBO; 2],
     fbo_prev_index: usize,
@@ -364,11 +370,11 @@ void main(){
 "#;
 
     // 画面全体を覆うポリゴンの頂点情報
-    const TEXTURE_VERTEX: [GlPoint3D; 4] = [
-        GlPoint3D::new(-1.0, 1.0, 0.0),
-        GlPoint3D::new(-1.0, -1.0, 0.0),
-        GlPoint3D::new(1.0, 1.0, 0.0),
-        GlPoint3D::new(1.0, -1.0, 0.0),
+    const TEXTURE_VERTEX: [GlPoint3d; 4] = [
+        GlPoint3d::new(-1.0, 1.0, 0.0),
+        GlPoint3d::new(-1.0, -1.0, 0.0),
+        GlPoint3d::new(1.0, 1.0, 0.0),
+        GlPoint3d::new(1.0, -1.0, 0.0),
     ];
 
     pub fn new(gl: &gl, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
@@ -391,7 +397,11 @@ void main(){
         u_index.init(gl, &res);
 
         // 必要な頂点データを作成
+        let point_vao = Vao::new(gl)?;
         let point_vbo = Self::make_texture_vertex(gl, 0)?;
+        point_vao.unbind(gl);
+
+        let index_vao = Vao::new(gl)?;
         let index_vbo = Self::make_index_vertex(gl, 0)?;
 
         // 位置と速度の情報は2つのバッファを使って交互に更新する
@@ -399,6 +409,7 @@ void main(){
             TextureFBO::new_float_vec4(gl, res)?,
             TextureFBO::new_float_vec4(gl, res)?,
         ];
+        index_vao.unbind(gl);
 
         let s = Self {
             res,
@@ -408,7 +419,9 @@ void main(){
             u_point,
             u_velocity,
             u_index,
+            point_vao,
             point_vbo,
+            index_vao,
             index_vbo,
             fbos,
             fbo_prev_index: 0,
@@ -426,16 +439,16 @@ void main(){
     // データそのものは問題なくあるはずなのだけど、適切なテクスチャ位置を参照できてないのだと思われる
     fn make_texture_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
         let data = vec![
-            GlPoint2D::new(0.1, 0.1),
-            GlPoint2D::new(0.1, -0.1),
-            GlPoint2D::new(-0.1, 0.1),
-            GlPoint2D::new(-0.1, -0.1),
+            GlPoint2d::new(1.0, 1.0),
+            GlPoint2d::new(1.0, -1.0),
+            GlPoint2d::new(-1.0, 1.0),
+            GlPoint2d::new(-1.0, -1.0),
         ];
-        Ok(VertexVbo::new(gl, &data, location)?)
+        VertexVbo::new(gl, &data, location)
     }
 
     fn make_index_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
-        Ok(VertexVbo::new(gl, &Self::TEXTURE_VERTEX, location)?)
+        VertexVbo::new(gl, &Self::TEXTURE_VERTEX, location)
     }
 
     fn next_fbo_index(&self) -> usize {
@@ -451,7 +464,7 @@ void main(){
         gl.clear_color(0.0, 0.0, 0.0, 0.0);
         gl.clear(gl::COLOR_BUFFER_BIT);
         self.index.use_program(gl);
-        self.index_vbo.bind(gl);
+        self.index_vao.bind(gl);
         gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
         TextureFBO::unbind(gl);
     }
@@ -465,7 +478,7 @@ void main(){
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.clear(gl::COLOR_BUFFER_BIT);
         self.index.use_program(gl);
-        self.index_vbo.bind(gl);
+        self.index_vao.bind(gl);
         gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
     }
 
@@ -482,6 +495,7 @@ void main(){
 
         // 描画uniformを更新
         self.point.use_program(gl);
+        self.point_vao.bind(gl);
         self.u_point.set_ambient(gl, self.state.ambient);
         // self.u_point.set_point_size(gl, self.state.size);
     }
@@ -492,6 +506,7 @@ void main(){
         let fbos = [&self.fbos[self.fbo_prev_index], &self.fbos[next]];
         // ブレンドは無効化
         gl.disable(gl::BLEND);
+        self.index_vao.bind(gl);
 
         // 次のFBOに位置と速度を書き込む
         fbos[1].bind(gl);
@@ -503,7 +518,6 @@ void main(){
         gl.active_texture(gl::TEXTURE0);
         // 前のFBOの状態をテクスチャの仕組みで取得
         gl.bind_texture(gl::TEXTURE_2D, Some(&fbos[0].texture));
-        self.index_vbo.bind(gl);
         gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
         TextureFBO::unbind(gl);
 
@@ -517,12 +531,11 @@ void main(){
         gl.bind_texture(gl::TEXTURE_2D, Some(&fbos[1].texture));
 
         // Debug: パラメータをそのまま描画
-        self.index_vbo.bind(gl);
         gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
 
         // ポイントで描画
         self.point.use_program(gl);
-        self.point_vbo.bind(gl);
+        self.point_vao.bind(gl);
         gl.draw_arrays(gl::POINTS, 0, self.point_vbo.count());
 
         gl.flush();
@@ -728,7 +741,7 @@ impl TextureFBO {
         // フレームバッファにテクスチャ用の領域を確保
         let texture = gl
             .create_texture()
-            .ok_or(Error::gl("Failed to create texture".into()))?;
+            .ok_or(JsError::new("Failed to create texture"))?;
         gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
         gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
             gl::TEXTURE_2D,
@@ -741,7 +754,7 @@ impl TextureFBO {
             type_,
             None,
         )
-        .map_err(|e| Error::gl(format!("Failed to tex_image_2d: {:?}", e)))?;
+        .map_err(|e| JsError::new(&format!("Failed to tex_image_2d: {:?}", e)))?;
 
         gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
@@ -750,7 +763,7 @@ impl TextureFBO {
 
         let fbo = gl
             .create_framebuffer()
-            .ok_or(Error::gl("Failed to create framebuffer".into()))?;
+            .ok_or(JsError::new("Failed to create framebuffer"))?;
         gl.bind_framebuffer(gl::FRAMEBUFFER, Some(&fbo));
 
         // フレームバッファにテクスチャをアタッチ
@@ -764,7 +777,7 @@ impl TextureFBO {
 
         // フレームバッファの状態を確認
         if gl.check_framebuffer_status(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE {
-            return Err(Error::gl(format!(
+            return Err(JsError::new(&format!(
                 "Framebuffer is not complete. code={}",
                 gl.get_error()
             )));

@@ -203,21 +203,21 @@ pub struct CubeBounds {
     x: (f32, f32),
     y: (f32, f32),
     z: (f32, f32),
+    gain: f32,
 }
 
 impl CubeBounds {
     fn keep_within(&self, b: &mut Boid) {
         // 現時点では単純に移動方向を反転させるだけ
-        if b.pos.x < self.x.0 || b.pos.x > self.x.1 {
-            b.vel.x = -b.vel.x
+        if b.pos.x < self.x.0 {
+            b.vel.x += self.gain
+        } else if b.pos.x > self.x.1 {
+            b.vel.x -= self.gain
         }
-
-        if b.pos.y < self.y.0 || b.pos.y > self.y.1 {
-            b.vel.y = -b.vel.y
-        }
-
-        if b.pos.z < self.z.0 || b.pos.z > self.z.1 {
-            b.vel.z = -b.vel.z
+        if b.pos.y < self.y.0 {
+            b.vel.y += self.gain
+        } else if b.pos.y > self.y.1 {
+            b.vel.y -= self.gain
         }
     }
 }
@@ -228,6 +228,7 @@ impl Default for CubeBounds {
             x: (-1.0, 1.0),
             y: (-1.0, 1.0),
             z: (-1.0, 1.0),
+            gain: 0.0005,
         }
     }
 }

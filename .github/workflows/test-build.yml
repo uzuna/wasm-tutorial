@@ -1,0 +1,50 @@
+name: Test packages
+on:
+  pull_request:
+    types: ["opened", "synchronize"]
+jobs:
+  build-wasm-radar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: setup machine
+        run: |
+          sudo apt-get update && \
+          sudo apt-get install -y libc6
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack,cargo-generate
+      - name: Build the package
+        run: make -C boids build
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-wasm-boids-pkg
+          path: web-server/assets/boids/pkg
+          retention-days: 1
+  build-server-pkg:
+    needs: [build-wasm-radar]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-edit,cargo-deb
+      - name: Download the package
+        uses: actions/download-artifact@v4
+        with:
+          name: asset-wasm-boids-pkg
+          path: web-server/assets/boids/pkg
+      - name: Build the package
+        run: cargo deb -p web-server
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-web-server
+          path: target/debian/*.deb

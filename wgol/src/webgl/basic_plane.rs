@@ -1,8 +1,9 @@
 use nalgebra_glm::{TMat4, Vec3};
+use wasm_bindgen::JsError;
 use web_sys::{WebGlBuffer, WebGlUniformLocation, WebGlVertexArrayObject};
 
-use crate::error::{Error, Result};
-use webgl2::{gl, GlEnum, GlInt, GlPoint, GlPoint3D, GlPoint4D, Program};
+use crate::error::Result;
+use webgl2::{gl, GlEnum, GlInt, GlPoint, GlPoint3d, GlPoint4d, Program};
 
 pub struct Shader {
     program: Program,
@@ -45,7 +46,7 @@ void main() {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
         let mvp = gl
             .get_uniform_location(program.program(), "mvp")
-            .ok_or(Error::gl("Failed to get uniform location".into()))?;
+            .ok_or(JsError::new("Failed to get uniform location"))?;
         let data = ColorVertexData::rect();
         let vao = ColorVertexVao::new(gl, &data, Self::LOCATIONS)?;
 
@@ -146,24 +147,24 @@ impl Default for Camera {
 }
 
 pub struct ColorVertexData {
-    pub vertex: Vec<GlPoint3D>,
-    pub color: Vec<GlPoint4D>,
+    pub vertex: Vec<GlPoint3d>,
+    pub color: Vec<GlPoint4d>,
     pub index: Vec<u16>,
 }
 
 impl ColorVertexData {
-    const VERT_RECT: &'static [GlPoint3D] = &[
-        GlPoint3D::new(-1.0, -1.0, 0.0),
-        GlPoint3D::new(1.0, -1.0, 0.0),
-        GlPoint3D::new(-1.0, 1.0, 0.0),
-        GlPoint3D::new(1.0, 1.0, 0.0),
+    const VERT_RECT: &'static [GlPoint3d] = &[
+        GlPoint3d::new(-1.0, -1.0, 0.0),
+        GlPoint3d::new(1.0, -1.0, 0.0),
+        GlPoint3d::new(-1.0, 1.0, 0.0),
+        GlPoint3d::new(1.0, 1.0, 0.0),
     ];
 
-    const COLOR_COORD: &'static [GlPoint4D] = &[
-        GlPoint4D::new(1.0, 0.0, 0.0, 1.0),
-        GlPoint4D::new(0.0, 1.0, 0.0, 1.0),
-        GlPoint4D::new(0.0, 0.0, 1.0, 1.0),
-        GlPoint4D::new(1.0, 1.0, 1.0, 1.0),
+    const COLOR_COORD: &'static [GlPoint4d] = &[
+        GlPoint4d::new(1.0, 0.0, 0.0, 1.0),
+        GlPoint4d::new(0.0, 1.0, 0.0, 1.0),
+        GlPoint4d::new(0.0, 0.0, 1.0, 1.0),
+        GlPoint4d::new(1.0, 1.0, 1.0, 1.0),
     ];
 
     const INDEX: &'static [u16] = &[0, 1, 2, 2, 1, 3];
@@ -186,7 +187,7 @@ impl ColorVertexVao {
     pub fn new(gl: &gl, data: &ColorVertexData, locations: [u32; 2]) -> Result<Self> {
         let vao = gl
             .create_vertex_array()
-            .ok_or(Error::gl("Failed to create vertex array object".into()))?;
+            .ok_or(JsError::new("Failed to create vertex array object"))?;
         gl.bind_vertex_array(Some(&vao));
 
         let _vertex = Self::create_vertex_buffer(
@@ -194,10 +195,10 @@ impl ColorVertexVao {
             unsafe {
                 std::slice::from_raw_parts(
                     data.vertex.as_ptr() as *const f32,
-                    data.vertex.len() * GlPoint3D::size() as usize,
+                    data.vertex.len() * GlPoint3d::size() as usize,
                 )
             },
-            GlPoint3D::size(),
+            GlPoint3d::size(),
             locations[0],
             gl::ARRAY_BUFFER,
             gl::STATIC_DRAW,
@@ -207,10 +208,10 @@ impl ColorVertexVao {
             unsafe {
                 std::slice::from_raw_parts(
                     data.color.as_ptr() as *const f32,
-                    data.color.len() * GlPoint4D::size() as usize,
+                    data.color.len() * GlPoint4d::size() as usize,
                 )
             },
-            GlPoint4D::size(),
+            GlPoint4d::size(),
             locations[1],
             gl::ARRAY_BUFFER,
             gl::STATIC_DRAW,
@@ -233,7 +234,7 @@ impl ColorVertexVao {
     ) -> Result<WebGlBuffer> {
         let buffer = gl
             .create_buffer()
-            .ok_or(Error::gl("Failed to create buffer object".into()))?;
+            .ok_or(JsError::new("Failed to create buffer object"))?;
         gl.bind_buffer(target, Some(&buffer));
         unsafe {
             let view = js_sys::Float32Array::view(data);
@@ -249,7 +250,7 @@ impl ColorVertexVao {
     fn create_index_buffer(gl: &gl, data: &[u16]) -> Result<WebGlBuffer> {
         let ibo = gl
             .create_buffer()
-            .ok_or(Error::gl("Failed to create buffer".into()))?;
+            .ok_or(JsError::new("Failed to create buffer"))?;
         gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(&ibo));
         unsafe {
             let view = js_sys::Uint16Array::view(data);

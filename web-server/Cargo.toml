@@ -8,10 +8,20 @@ rust-version.workspace = true
 
 [dependencies]
 axum = { version = "0.7", features = ["json", "query", "ws"] }
+ciborium.workspace = true
 futures-util = "0.3.30"
-serde = { version = "1", features = ["derive"] }
+rand = "0.8.5"
+serde.workspace = true
 tokio = { version = "1.0", features = ["full"] }
 tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5.0", features = ["fs", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[package.metadata.deb]
+copyright = "Copyright (c) 2024, FUJINAKA Fumiya"
+extended-description = ""
+revision = ""
+assets = [
+  ["assets/**/*", "usr/share/web-server-wasm-tutorial/static/", "644"],
+]

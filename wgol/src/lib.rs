@@ -15,6 +15,8 @@ use wasm_bindgen::prelude::*;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
 use webgl::interaction::ParticleControl;
 
+use crate::error::Result;
+
 const GRID_COLOR: &str = "#CCCCCC";
 
 #[macro_export]
@@ -29,6 +31,10 @@ macro_rules! error {
     ( $( $t:tt )* ) => {
         web_sys::console::error_1(&format!( $( $t )* ).into());
     }
+}
+
+pub fn jserror(e: JsError) {
+    web_sys::console::error_1(&JsValue::from(e));
 }
 
 /// ライフゲームのビルダー
@@ -335,7 +341,7 @@ impl<'a> Drop for Timer<'a> {
 /// 構造体を戻すような使い方をすると、ライフタイムが不明でevent callbackの設定が難しい
 /// 実行プロセス全体を関数に閉じ込めたほうが取り回ししやすい
 #[wasm_bindgen]
-pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
+pub fn golstart(gb: GolBuilder) -> Result<()> {
     // JS側の指示はchannel経由で受け取る
     let (sender, mut recv_p, mut recv_c) = Sender::new();
 
@@ -409,25 +415,24 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
     // アニメーション開始と再生継続と停止のためのコールバック
     let p_closure = p.clone();
     let closure_clone = closure.clone();
-    *closure_clone.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<i32, JsValue>>::new(
-        move |_time| {
-            uni.borrow_mut().tick();
-            drawer.draw_cells(&context, &uni.borrow());
-            drawer.draw_grid(&context);
-            fps.render();
-            let res = request_animation_frame(closure.borrow().as_ref().unwrap());
-            match res {
-                Ok(handle) => {
-                    *p_closure.borrow_mut() = Some(handle);
-                    Ok(handle)
-                }
-                Err(e) => Err(e),
+    *closure_clone.borrow_mut() = Some(Closure::<
+        dyn FnMut(f64) -> std::result::Result<i32, JsValue>,
+    >::new(move |_time| {
+        uni.borrow_mut().tick();
+        drawer.draw_cells(&context, &uni.borrow());
+        drawer.draw_grid(&context);
+        fps.render();
+        let res = request_animation_frame(closure.borrow().as_ref().unwrap());
+        match res {
+            Ok(handle) => {
+                *p_closure.borrow_mut() = Some(handle);
+                Ok(handle)
             }
-        },
-    ));
-    *p.borrow_mut() = Some(request_animation_frame(
-        closure_clone.borrow().as_ref().unwrap(),
-    )?);
+            Err(e) => Err(e),
+        }
+    }));
+    *p.borrow_mut() =
+        Some(request_animation_frame(closure_clone.borrow().as_ref().unwrap()).unwrap());
 
     play_button_start(play_btn, sender);
     Ok(())
@@ -435,14 +440,15 @@ pub fn golstart(gb: GolBuilder) -> Result<(), JsValue> {
 
 // 次のアニメーションフレームをリクエストする
 fn request_animation_frame(
-    closure: &Closure<dyn FnMut(f64) -> Result<i32, JsValue>>,
-) -> Result<i32, JsValue> {
+    closure: &Closure<dyn FnMut(f64) -> std::result::Result<i32, JsValue>>,
+) -> std::result::Result<i32, JsValue> {
     let window = web_sys::window().unwrap();
+    // JsValueが帰ってきておりJsErrorに変換できないのでunwrapしている
     window.request_animation_frame(closure.as_ref().unchecked_ref())
 }
 
 // 再生リクエストをキャンセル
-fn cancel_animation_frame(handle: i32) -> Result<(), JsValue> {
+fn cancel_animation_frame(handle: i32) -> std::result::Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     window.cancel_animation_frame(handle)
 }
@@ -578,15 +584,17 @@ impl Default for Drawer {
 }
 
 #[wasm_bindgen]
-pub fn webgl_start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
+pub fn webgl_start(canvas: HtmlCanvasElement) -> Result<()> {
     use crate::webgl::basic_plane::*;
     canvas.set_width(256);
     canvas.set_height(256);
 
     let gl = canvas
-        .get_context("webgl2")?
-        .ok_or("Failed to get WebGl2RenderingContext")?
-        .dyn_into::<gl>()?;
+        .get_context("webgl2")
+        .map_err(|_| JsError::new("failed to get webgl2 context"))?
+        .ok_or(JsError::new("Failed to get WebGl2RenderingContext"))?
+        .dyn_into::<gl>()
+        .map_err(|_| JsError::new("failed to cast to WebGl2RenderingContext"))?;
 
     let shader = Shader::new(&gl)?;
     let camera = Camera::default();
@@ -682,7 +690,7 @@ impl Fps {
 /// WASMのエントリポイント
 /// JSから関数を呼ばなくても実行される
 #[wasm_bindgen(start)]
-pub fn run() -> Result<(), JsValue> {
+pub fn run() -> Result<()> {
     log!("Hello, wasm-bindgen!");
 
     // 非同期ループ実験
@@ -715,20 +723,18 @@ pub fn run() -> Result<(), JsValue> {
                 log!("fetch_example: {:?}", val);
             }
             Err(e) => {
-                error!("fetch_example error: {:?}", e);
+                jserror(e);
             }
         };
         TimeoutFuture::new(4_000).await;
         token.cancel();
     });
 
-    start_websocket("ws://localhost:8080/api/ws/echo").unwrap();
+    start_websocket("ws://localhost:8080/api/ws/echo")?;
     Ok(())
 }
 
-async fn fetch_example<T: serde::de::DeserializeOwned>(
-    url: &str,
-) -> Result<T, crate::error::Error> {
+async fn fetch_example<T: serde::de::DeserializeOwned>(url: &str) -> Result<T> {
     // fetch apiをラップしているgoo-netを使ってリクエストを送る
     let res = Request::get(url).send().await?;
     Ok(res.json::<T>().await?)
@@ -740,7 +746,7 @@ struct Hello {
 }
 
 // websocketのタスクを開始する
-fn start_websocket(url: &str) -> Result<(), crate::error::Error> {
+fn start_websocket(url: &str) -> Result<()> {
     use futures::{SinkExt, StreamExt};
     let ws = WebSocket::open(url).map_err(gloo_net::Error::JsError)?;
 
@@ -768,15 +774,20 @@ fn start_websocket(url: &str) -> Result<(), crate::error::Error> {
 }
 
 #[wasm_bindgen]
-pub fn webgl_interaction(canvas: HtmlCanvasElement, ctrl: ParticleControl) -> Result<(), JsValue> {
+pub fn webgl_interaction(
+    canvas: HtmlCanvasElement,
+    ctrl: ParticleControl,
+) -> std::result::Result<(), JsValue> {
     use crate::webgl::interaction::*;
     canvas.set_width(512);
     canvas.set_height(512);
 
     let gl = canvas
-        .get_context("webgl2")?
-        .ok_or("Failed to get WebGl2RenderingContext")?
-        .dyn_into::<gl>()?;
+        .get_context("webgl2")
+        .map_err(|_| JsError::new("failed to get webgl2 context"))?
+        .ok_or(JsError::new("Failed to get WebGl2RenderingContext"))?
+        .dyn_into::<gl>()
+        .map_err(|_| JsError::new("failed to cast to WebGl2RenderingContext"))?;
     gl.clear_color(0.0, 0.0, 0.0, 1.0);
     gl.clear(gl::COLOR_BUFFER_BIT);
 
@@ -797,43 +808,45 @@ pub fn webgl_interaction(canvas: HtmlCanvasElement, ctrl: ParticleControl) -> Re
     let a_ctx_clone = a_ctx.clone();
     let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
     let mouse_down_flag = Rc::new(RefCell::new(false));
-    *closure.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<i32, JsValue>>::new(
-        move |timestamp_msec| {
-            let t = timestamp_msec as f32;
-            let color = hsva(t / 30., 1.0, 1.0, 0.5);
-            gl.clear(gl::COLOR_BUFFER_BIT);
-            shader.set_color(&gl, color);
+    *closure.borrow_mut() = Some(
+        Closure::<dyn FnMut(f64) -> std::result::Result<i32, JsValue>>::new(
+            move |timestamp_msec| {
+                let t = timestamp_msec as f32;
+                let color = hsva(t / 30., 1.0, 1.0, 0.5);
+                gl.clear(gl::COLOR_BUFFER_BIT);
+                shader.set_color(&gl, color);
 
-            let event = {
-                let mut event = None;
-                while let Ok(e) = recv.try_recv() {
-                    event = Some(e);
+                let event = {
+                    let mut event = None;
+                    while let Ok(e) = recv.try_recv() {
+                        event = Some(e);
+                    }
+                    event
+                };
+                match event {
+                    Some(MouseMessage::Move(pos)) => {
+                        *mouse_pos.borrow_mut() = pos;
+                        *mouse_down_flag.borrow_mut() = true;
+                    }
+                    Some(MouseMessage::Off) => {
+                        *mouse_down_flag.borrow_mut() = false;
+                    }
+                    None => {}
                 }
-                event
-            };
-            match event {
-                Some(MouseMessage::Move(pos)) => {
-                    *mouse_pos.borrow_mut() = pos;
-                    *mouse_down_flag.borrow_mut() = true;
-                }
-                Some(MouseMessage::Off) => {
-                    *mouse_down_flag.borrow_mut() = false;
-                }
-                None => {}
-            }
 
-            shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow());
-            shader.draw(&gl);
-            let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());
-            match res {
-                Ok(handle) => {
-                    *a_ctx_clone.borrow_mut() = Some(handle);
-                    Ok(handle)
+                shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow());
+                shader.draw(&gl);
+                let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());
+                match res {
+                    Ok(handle) => {
+                        *a_ctx_clone.borrow_mut() = Some(handle);
+                        Ok(handle)
+                    }
+                    Err(e) => Err(e),
                 }
-                Err(e) => Err(e),
-            }
-        },
-    ));
+            },
+        ),
+    );
     *a_ctx.borrow_mut() = Some(request_animation_frame(closure.borrow().as_ref().unwrap())?);
 
     Ok(())
@@ -929,37 +942,43 @@ impl MouseEventHandler {
 }
 
 #[wasm_bindgen]
-pub fn webgl_interaction_gpgpu(
-    canvas: HtmlCanvasElement,
-    ctrl: ParticleControl,
-) -> Result<(), JsValue> {
+pub fn webgl_interaction_gpgpu(canvas: HtmlCanvasElement, ctrl: ParticleControl) -> Result<()> {
     use crate::webgl::interaction::*;
     canvas.set_width(512);
     canvas.set_height(512);
     let target_res = Resolution::new(512, 512);
 
     let gl = canvas
-        .get_context("webgl2")?
-        .ok_or("Failed to get WebGl2RenderingContext")?
-        .dyn_into::<gl>()?;
+        .get_context("webgl2")
+        .map_err(|_| JsError::new("failed to get webgl2 context"))?
+        .ok_or(JsError::new("Failed to get WebGl2RenderingContext"))?
+        .dyn_into::<gl>()
+        .map_err(|_| JsError::new("failed to cast to WebGl2RenderingContext"))?;
     gl.clear_color(0.0, 0.0, 0.0, 1.0);
     gl.clear(gl::COLOR_BUFFER_BIT);
 
     log!("extensions: {:?}", gl.get_supported_extensions());
 
     let unit_count = gl
-        .get_parameter(gl::MAX_VERTEX_TEXTURE_IMAGE_UNITS)?
+        .get_parameter(gl::MAX_VERTEX_TEXTURE_IMAGE_UNITS)
+        .unwrap()
         .as_f64()
         .unwrap() as u32;
     if unit_count < 1 {
-        Err("MAX_VERTEX_TEXTURE_IMAGE_UNITS is less than 1")?;
+        Err(JsError::new(
+            "MAX_VERTEX_TEXTURE_IMAGE_UNITS is less than 1",
+        ))?;
     }
     log!("MAX_VERTEX_TEXTURE_IMAGE_UNITS: {:?}", unit_count);
 
     // 浮動小数点数テクスチャが利用可能かどうかチェック
     // WebGL2なら常に利用可能なはず
-    if gl.get_extension("EXT_color_buffer_float")?.is_none() {
-        Err("EXT_color_buffer_float is not supported")?;
+    if gl
+        .get_extension("EXT_color_buffer_float")
+        .unwrap()
+        .is_none()
+    {
+        Err(JsError::new("EXT_color_buffer_float is not supported"))?;
     }
 
     let mut shader = ParticleGpgpuShader::new(&gl, target_res, ctrl)?;
@@ -982,44 +1001,47 @@ pub fn webgl_interaction_gpgpu(
     let a_ctx_clone = a_ctx.clone();
     let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
     let mouse_down_flag = Rc::new(RefCell::new(false));
-    *closure.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<i32, JsValue>>::new(
-        move |timestamp_msec| {
-            let t = timestamp_msec as f32;
-            let color = hsva(t / 30., 1.0, 1.0, 0.5);
+    *closure.borrow_mut() = Some(
+        Closure::<dyn FnMut(f64) -> std::result::Result<i32, JsValue>>::new(
+            move |timestamp_msec| {
+                let t = timestamp_msec as f32;
+                let color = hsva(t / 30., 1.0, 1.0, 0.5);
 
-            let event = {
-                let mut event = None;
-                while let Ok(e) = recv.try_recv() {
-                    event = Some(e);
-                }
-                event
-            };
+                let event = {
+                    let mut event = None;
+                    while let Ok(e) = recv.try_recv() {
+                        event = Some(e);
+                    }
+                    event
+                };
 
-            match event {
-                Some(MouseMessage::Move(pos)) => {
-                    *mouse_pos.borrow_mut() = pos;
-                    *mouse_down_flag.borrow_mut() = true;
+                match event {
+                    Some(MouseMessage::Move(pos)) => {
+                        *mouse_pos.borrow_mut() = pos;
+                        *mouse_down_flag.borrow_mut() = true;
+                    }
+                    Some(MouseMessage::Off) => {
+                        *mouse_down_flag.borrow_mut() = false;
+                    }
+                    None => {}
                 }
-                Some(MouseMessage::Off) => {
-                    *mouse_down_flag.borrow_mut() = false;
-                }
-                None => {}
-            }
 
-            shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow(), color);
-            shader.draw(&gl, &target_res);
+                shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow(), color);
+                shader.draw(&gl, &target_res);
 
-            let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());
-            match res {
-                Ok(handle) => {
-                    *a_ctx_clone.borrow_mut() = Some(handle);
-                    Ok(handle)
+                let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());
+                match res {
+                    Ok(handle) => {
+                        *a_ctx_clone.borrow_mut() = Some(handle);
+                        Ok(handle)
+                    }
+                    Err(e) => Err(e),
                 }
-                Err(e) => Err(e),
-            }
-        },
-    ));
-    *a_ctx.borrow_mut() = Some(request_animation_frame(closure.borrow().as_ref().unwrap())?);
+            },
+        ),
+    );
+    *a_ctx.borrow_mut() =
+        Some(request_animation_frame(closure.borrow().as_ref().unwrap()).unwrap());
 
     Ok(())
 }

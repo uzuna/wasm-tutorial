@@ -1,22 +1,3 @@
-use wasm_bindgen::JsValue;
+use wasm_bindgen::JsError;
 
-pub type Result<T> = std::result::Result<T, Error>;
-
-/// AsssetControlクレートのエラー型
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("WegGL Error {msg}")]
-    Gl { msg: String },
-}
-
-impl Error {
-    pub fn gl(msg: String) -> Self {
-        Self::Gl { msg }
-    }
-}
-
-impl From<Error> for JsValue {
-    fn from(e: Error) -> Self {
-        JsValue::from_str(&format!("{:?}", e))
-    }
-}
+pub type Result<T> = std::result::Result<T, JsError>;

@@ -5,10 +5,11 @@ use webgl2::gl;
 
 use crate::{
     animation,
-    boids_shader::BoidShader,
+    boids_shader::BoidsShaderBuilder,
     camera::{Camera, ViewMatrix},
     info,
     utils::{merge_events, Mergeable},
+    ws::start_websocket,
 };
 
 const COLOR_BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
@@ -20,31 +21,54 @@ pub fn init() -> Result<(), JsValue> {
     Ok(())
 }
 
+#[wasm_bindgen(inspectable)]
+pub struct BoidsInitializeParam {
+    pub boid_num: u32,
+    pub boid_size: f32,
+    pub history_len: usize,
+    pub history_size: f32,
+    pub history_alpha: f32,
+}
+
 #[wasm_bindgen]
-pub fn start_boids(canvas: HtmlCanvasElement) -> Result<BoidController, JsValue> {
+impl BoidsInitializeParam {
+    pub fn init() -> Self {
+        Self {
+            boid_num: 100,
+            boid_size: 0.01,
+            history_len: 200,
+            history_size: 1.0,
+            history_alpha: 0.25,
+        }
+    }
+}
+
+#[wasm_bindgen]
+pub fn start_boids(
+    canvas: HtmlCanvasElement,
+    ip: BoidsInitializeParam,
+) -> Result<BoidController, JsValue> {
     info!("Starting boids");
     canvas.set_width(768);
     canvas.set_height(768);
 
-    let mut boids = crate::boids::Boids::new_circle(180, 0.5, 0.01);
+    let mut boids = crate::boids::Boids::new_circle(ip.boid_num, 0.5, 0.01);
+    let mut buillder = BoidsShaderBuilder::new();
 
     let gl = get_webgl2_context(&canvas)?;
     let camera = Camera::default();
-    let view = ViewMatrix::default();
+    let mut view = ViewMatrix::default();
 
-    let boid_size = 0.01;
-    let mut boids_shaders: Vec<BoidShader> = vec![];
-    for b in boids.boids.iter() {
-        let bi = BoidShader::new(&gl, b, boid_size)?;
-        bi.use_program(&gl);
-        bi.set_mvp(&gl, &camera, &view);
-        bi.set_ambient(&gl, [1.0, 0.0, 0.0, 1.0]);
-        bi.draw(&gl);
-        boids_shaders.push(bi);
-    }
+    buillder.boid_size = ip.boid_size;
+    buillder.history_size = ip.history_size;
+    buillder.history_len = ip.history_len;
+    buillder.history_color = [0.0, 0.5, 0.4, ip.history_alpha];
+
+    let mut boids_shader = buillder.build(&gl, &boids.boids, &camera, &view)?;
 
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let ctrl = BoidController::new(tx);
+    let (c_tx, mut c_rx) = mpsc::unbounded_channel();
+    let ctrl = BoidController::new(tx, c_tx);
 
     let a = animation::AnimationLoop::new(move |_| {
         if let Some(event) = merge_events(&mut rx) {
@@ -52,18 +76,32 @@ pub fn start_boids(canvas: HtmlCanvasElement) -> Result<BoidController, JsValue>
                 event.apply(b);
             }
         }
+        if let Some(event) = merge_events(&mut c_rx) {
+            view.eye.x = event.x;
+            view.eye.y = event.y;
+            view.eye.z = event.z;
+            boids_shader.camera.update_mvp(&gl, &camera, &view);
+        }
 
         gl_clear_color(&gl, COLOR_BLACK);
-        for (b, s) in boids.boids.iter().zip(boids_shaders.iter_mut()) {
+        for (b, s) in boids.boids.iter().zip(boids_shader.boids.iter_mut()) {
             s.use_program(&gl);
             s.update(&gl, b);
             s.draw(&gl);
+            let hist = s.history_mut();
+            hist.use_program(&gl);
+            hist.update(&gl, b);
+            hist.draw(&gl);
         }
         boids.update();
         Ok(())
     });
     a.start()?;
+    // 初期値送信
+    ctrl.init();
 
+    // start ws
+    start_websocket("ws://localhost:8080/api/ws/boid/gen_stream")?;
     Ok(ctrl)
 }
 
@@ -147,12 +185,12 @@ impl BoidParamSetter {
 impl Default for BoidParamSetter {
     fn default() -> Self {
         Self {
-            visual_range: Some(0.2),
-            center_factor: Some(0.005),
-            alignment_factor: Some(0.05),
-            avoid_distance: Some(0.05),
-            avoid_factor: Some(0.01),
-            speed_min: Some(0.005),
+            visual_range: Some(0.16),
+            center_factor: Some(0.0014),
+            alignment_factor: Some(0.0224),
+            avoid_distance: Some(0.045),
+            avoid_factor: Some(0.017),
+            speed_min: Some(0.0014),
             speed_max: Some(0.01),
         }
     }
@@ -163,19 +201,30 @@ impl Default for BoidParamSetter {
 pub struct BoidController {
     param_ch: mpsc::UnboundedSender<BoidParamSetter>,
     last: BoidParamSetter,
+    camera_ch: mpsc::UnboundedSender<CameraParamSetter>,
+    camera_last: CameraParamSetter,
 }
 
 impl BoidController {
-    pub fn new(tx: mpsc::UnboundedSender<BoidParamSetter>) -> Self {
+    pub fn new(
+        tx: mpsc::UnboundedSender<BoidParamSetter>,
+        c_tx: mpsc::UnboundedSender<CameraParamSetter>,
+    ) -> Self {
         Self {
             param_ch: tx,
             last: BoidParamSetter::default(),
+            camera_ch: c_tx,
+            camera_last: CameraParamSetter::DEFAULT,
         }
     }
 }
 
 #[wasm_bindgen]
 impl BoidController {
+    fn init(&self) {
+        self.param_ch.send(self.last).unwrap();
+    }
+
     pub fn param(&self) -> BoidParamSetter {
         self.last
     }
@@ -220,5 +269,52 @@ impl BoidController {
     pub fn set_speed_max(&mut self, speed_max: f32) {
         self.last.speed_max = Some(speed_max);
         self.param_ch.send(self.last).unwrap();
+    }
+
+    pub fn camera(&self) -> CameraParamSetter {
+        self.camera_last
+    }
+
+    pub fn set_camera_x(&mut self, x: f32) {
+        self.camera_last.x = x;
+        self.camera_ch.send(self.camera_last).unwrap();
+    }
+
+    pub fn set_camera_y(&mut self, y: f32) {
+        self.camera_last.y = y;
+        self.camera_ch.send(self.camera_last).unwrap();
+    }
+
+    pub fn set_camera_z(&mut self, z: f32) {
+        self.camera_last.z = z;
+        self.camera_ch.send(self.camera_last).unwrap();
+    }
+
+    pub fn reset_camera_position(&mut self) {
+        self.camera_ch.send(CameraParamSetter::DEFAULT).unwrap();
+    }
+}
+
+#[wasm_bindgen(inspectable)]
+#[derive(Debug, Clone, Copy)]
+pub struct CameraParamSetter {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl CameraParamSetter {
+    const DEFAULT: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 3.0,
+    };
+}
+
+impl Mergeable for CameraParamSetter {
+    fn merge(&mut self, other: Self) {
+        self.x = other.x;
+        self.y = other.y;
+        self.z = other.z;
     }
 }

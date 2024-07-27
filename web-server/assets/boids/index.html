@@ -15,6 +15,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      padding: 0;
+      margin: 0;
     }
 
     .slidecontainer {
@@ -67,8 +69,13 @@
     <h4>SpeedMinMax: <span id="speed_min_value"></span> -> <span id="speed_max_value"></span></h4>
     <input type="range" min="0" max="100" value="20" class="slider" id="speed_min">
     <input type="range" min="0" max="100" value="20" class="slider" id="speed_max">
+    <h4>Camera XYZ: <span id="camera_x_value"></span>,<span id="camera_y_value"></span>,<span
+        id="camera_z_value"></span><button id="camera_reset">reset</button></h4>
+    <input type="range" min="0" max="100" value="50" class="slider" id="camera_x">
+    <input type="range" min="0" max="100" value="50" class="slider" id="camera_y">
+    <input type="range" min="0" max="100" value="50" class="slider" id="camera_z">
   </div>
-  <script src="./bootstrap.js"></script>
+  <script type="module" src="./index.js"></script>
 </body>
 
 </html>

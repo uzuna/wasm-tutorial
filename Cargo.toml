@@ -15,12 +15,20 @@ repository = "https://github.com/uzuna/wasm-tutorial"
 rust-version = "1.79"
 
 [workspace.dependencies]
+ciborium = "0.2.2"
 console_error_panic_hook = "0.1.7"
+futures = "0.3.30"
+gloo-net = { version = "0.5", features = ["websocket"] }
 js-sys = "0.3"
 nalgebra-glm = "0.19.0"
+serde = { version = "1", features = ["derive"] }
 thiserror = "1.0.61"
 tokio = { version = "1.38.0", features = ["macros", "sync"] }
 wasm-bindgen = "0.2.84"
+wasm-bindgen-futures = "0.4.42"
 wasm-bindgen-test = "0.3.34"
 web-sys = "0.3"
 webgl2 = { path = "./webgl2" }
+
+[profile.release]
+strip = true
