@@ -1,6 +1,10 @@
 use wasm_bindgen::JsError;
 use web_sys::{js_sys, WebGlBuffer, WebGlUniformLocation};
-use webgl2::{gl, uniform_block_binding, uniform_location, vertex::VertexVbo, GlPoint3d, Program};
+use webgl2::{
+    gl, uniform_block_binding, uniform_location,
+    vertex::{Vao, VertexVbo},
+    GlPoint3d, Program,
+};
 
 use crate::{
     boids::Boid,
@@ -110,6 +114,7 @@ impl CameraUbo {
 pub struct BoidShader {
     program: Program,
     ambient: WebGlUniformLocation,
+    vao: Vao,
     vbo: VertexVbo,
     size: f32,
     history: BoidHistoryShader,
@@ -159,11 +164,14 @@ void main() {
         uniform_block_binding(gl, &program, "matrix", Self::MVP_UBI);
         gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
         let ambient = uniform_location!(gl, &program, "ambient")?;
+        let vao = Vao::new(gl)?;
         let vbo = VertexVbo::new(gl, &Self::rect(b, size), BoidShader::LOCATION_POSITION)?;
+        vao.unbind(gl);
         let history = BoidHistoryShader::new(gl, b, hist_len, camera)?;
         Ok(Self {
             program,
             ambient,
+            vao,
             vbo,
             size,
             history,
@@ -175,6 +183,7 @@ void main() {
     }
 
     pub fn update(&mut self, gl: &gl, b: &Boid) {
+        self.vao.bind(gl);
         self.vbo.update_vertex(gl, &Self::rect(b, self.size));
     }
 
@@ -189,7 +198,7 @@ void main() {
     }
 
     pub fn draw(&self, gl: &gl) {
-        self.vbo.bind(gl);
+        self.vao.bind(gl);
         gl.draw_arrays(gl::TRIANGLE_STRIP, 0, self.vbo.count());
     }
 
@@ -207,6 +216,7 @@ pub struct BoidHistoryShader {
     program: Program,
     ambient: WebGlUniformLocation,
     point_size: WebGlUniformLocation,
+    vao: Vao,
     vbo: VertexVbo,
 
     // 書き込む頂点位置の調整
@@ -252,15 +262,18 @@ void main() {
         let ambient = uniform_location!(gl, &program, "ambient")?;
         let point_size = uniform_location!(gl, &program, "pointSize")?;
 
+        let vao = Vao::new(gl)?;
         let vbo_len = hist_len.next_power_of_two();
         let pos = b.pos();
         let pos = GlPoint3d::new(pos.x, pos.y, pos.z);
         let v = vec![pos; vbo_len];
         let vbo = VertexVbo::new(gl, &v, BoidHistoryShader::LOCATION_POSITION)?;
+        vao.unbind(gl);
         Ok(Self {
             program,
             ambient,
             point_size,
+            vao,
             vbo,
             current_index: 0,
             vbo_len: vbo_len as i32,
@@ -277,6 +290,7 @@ void main() {
     }
 
     pub fn update(&mut self, gl: &gl, b: &Boid) {
+        self.vao.bind(gl);
         let next = self.index(self.current_index + 1);
         let pos = GlPoint3d::new(b.pos().x, b.pos().y, b.pos().z);
         self.vbo.update_vertex_sub(gl, &[pos], next);
@@ -298,7 +312,7 @@ void main() {
     }
 
     pub fn draw(&self, gl: &gl) {
-        self.vbo.bind(gl);
+        self.vao.bind(gl);
         gl.draw_arrays(gl::POINTS, 0, self.vbo.count());
     }
 }

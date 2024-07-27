@@ -81,6 +81,7 @@ impl std::ops::Sub for GlPoint2d {
         }
     }
 }
+
 impl std::ops::Mul<f32> for GlPoint2d {
     type Output = GlPoint2d;
     fn mul(self, rhs: f32) -> Self::Output {

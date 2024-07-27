@@ -4,6 +4,32 @@ use web_sys::WebGlBuffer;
 
 use crate::{error::Result, gl, GlEnum, GlInt, GlPoint};
 
+/// VAOを作成。VBOはVAOに紐づけて適宜bindingして使うのが望ましい
+pub fn create_vao(gl: &gl) -> Result<web_sys::WebGlVertexArrayObject> {
+    gl.create_vertex_array()
+        .ok_or(JsError::new("Failed to create vertex array object"))
+}
+
+pub struct Vao {
+    vao: web_sys::WebGlVertexArrayObject,
+}
+
+impl Vao {
+    pub fn new(gl: &gl) -> Result<Self> {
+        let vao = create_vao(gl)?;
+        gl.bind_vertex_array(Some(&vao));
+        Ok(Self { vao })
+    }
+
+    pub fn bind(&self, gl: &gl) {
+        gl.bind_vertex_array(Some(&self.vao));
+    }
+
+    pub fn unbind(&self, gl: &gl) {
+        gl.bind_vertex_array(None);
+    }
+}
+
 pub struct VertexVbo {
     vbo: WebGlBuffer,
     location: u32,
@@ -86,10 +112,6 @@ impl VertexVbo {
         }
         gl.enable_vertex_attrib_array(self.location);
         gl.vertex_attrib_pointer_with_i32(self.location, P::size(), gl::FLOAT, false, 0, 0);
-    }
-
-    pub fn bind(&self, gl: &gl) {
-        gl.bind_buffer(Self::TARGET, Some(&self.vbo));
     }
 
     pub fn count(&self) -> GlInt {
