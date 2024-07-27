@@ -40,7 +40,7 @@ impl BoidsShaderBuilder {
         camera: &Camera,
         view: &ViewMatrix,
     ) -> Result<BoidsShader> {
-        let camera_ubo = CameraUBO::new(gl, camera, view)?;
+        let camera_ubo = CameraUbo::new(gl, camera, view)?;
         let mut boids_shaders: Vec<BoidShader> = vec![];
         for b in boids {
             let bi = BoidShader::new(gl, b, self.boid_size, self.history_len, &camera_ubo)?;
@@ -63,20 +63,20 @@ impl BoidsShaderBuilder {
 
 pub struct BoidsShader {
     pub boids: Vec<BoidShader>,
-    pub camera: CameraUBO,
+    pub camera: CameraUbo,
 }
 
-pub struct CameraUBO {
+pub struct CameraUbo {
     ubo: WebGlBuffer,
 }
 
-impl CameraUBO {
+impl CameraUbo {
     fn new(gl: &gl, camera: &Camera, view: &ViewMatrix) -> Result<Self> {
         let ubo = gl
             .create_buffer()
             .ok_or(JsError::new("failed to create buffer"))?;
         let mvp = Self::gen_matrix(camera, view);
-        info!("CameraUBO: mvp: {:?}", mvp);
+        info!("CameraUbo: mvp: {:?}", mvp);
 
         gl.bind_buffer(gl::UNIFORM_BUFFER, Some(&ubo));
         unsafe {
@@ -154,7 +154,7 @@ void main() {
         ]
     }
 
-    pub fn new(gl: &gl, b: &Boid, size: f32, hist_len: usize, camera: &CameraUBO) -> Result<Self> {
+    pub fn new(gl: &gl, b: &Boid, size: f32, hist_len: usize, camera: &CameraUbo) -> Result<Self> {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
         uniform_block_binding!(gl, &program, "matrix", Self::MVP_UBI);
         gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
@@ -243,7 +243,7 @@ void main() {
     const LOCATION_POSITION: u32 = 0;
     const MVP_UBI: u32 = 0;
 
-    fn new(gl: &gl, b: &Boid, hist_len: usize, camera: &CameraUBO) -> Result<Self> {
+    fn new(gl: &gl, b: &Boid, hist_len: usize, camera: &CameraUbo) -> Result<Self> {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
 
         uniform_block_binding!(gl, &program, "matrix", Self::MVP_UBI);
