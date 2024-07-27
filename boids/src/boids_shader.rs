@@ -156,7 +156,7 @@ void main() {
 
     pub fn new(gl: &gl, b: &Boid, size: f32, hist_len: usize, camera: &CameraUbo) -> Result<Self> {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
-        uniform_block_binding!(gl, &program, "matrix", Self::MVP_UBI);
+        uniform_block_binding(gl, &program, "matrix", Self::MVP_UBI);
         gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
         let ambient = uniform_location!(gl, &program, "ambient")?;
         let vbo = VertexVbo::new(gl, &Self::rect(b, size), BoidShader::LOCATION_POSITION)?;
@@ -246,7 +246,7 @@ void main() {
     fn new(gl: &gl, b: &Boid, hist_len: usize, camera: &CameraUbo) -> Result<Self> {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
 
-        uniform_block_binding!(gl, &program, "matrix", Self::MVP_UBI);
+        uniform_block_binding(gl, &program, "matrix", Self::MVP_UBI);
         gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
 
         let ambient = uniform_location!(gl, &program, "ambient")?;
