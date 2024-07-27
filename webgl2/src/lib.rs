@@ -228,18 +228,18 @@ impl ShaderType {
 
 /// 頂点シェーダーをコンパイルする
 pub fn compile_vertex(gl: &gl, vertex: &str) -> Result<WebGlShader> {
-    let s = unsafe { compile_shader(gl, vertex, ShaderType::Vertex)? };
+    let s = compile_shader(gl, vertex, ShaderType::Vertex)?;
     Ok(s)
 }
 
 /// フラグメントシェーダーをコンパイルする
 pub fn compile_fragment(gl: &gl, fragment: &str) -> Result<WebGlShader> {
-    let s = unsafe { compile_shader(gl, fragment, ShaderType::Fragment)? };
+    let s = compile_shader(gl, fragment, ShaderType::Fragment)?;
     Ok(s)
 }
 
 // Shaderのコンパイルする
-unsafe fn compile_shader(gl: &gl, shader_script: &str, type_: ShaderType) -> Result<WebGlShader> {
+fn compile_shader(gl: &gl, shader_script: &str, type_: ShaderType) -> Result<WebGlShader> {
     let shader = gl
         .create_shader(type_.to_glenum())
         .ok_or(JsError::new("Failed to create shader object"))?;
