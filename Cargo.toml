@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "boids",
+    "plot",
     "web-server",
     "webgl2",
     "wgol",
