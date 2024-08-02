@@ -1,4 +1,5 @@
 use wasm_bindgen::JsError;
+use wasm_utils::{error::*, info};
 use web_sys::{js_sys, WebGlBuffer, WebGlUniformLocation};
 use webgl2::{
     gl, uniform_block_binding, uniform_location,
@@ -9,8 +10,6 @@ use webgl2::{
 use crate::{
     boids::Boid,
     camera::{Camera, ViewMatrix},
-    error::*,
-    info,
 };
 
 pub struct BoidsShaderBuilder {

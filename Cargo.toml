@@ -17,6 +17,7 @@ ciborium = "0.2.2"
 console_error_panic_hook = "0.1.7"
 futures = "0.3.30"
 gloo-net = { version = "0.5", features = ["websocket"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
 nalgebra-glm = "0.19.0"
 serde = { version = "1", features = ["derive"] }
@@ -27,6 +28,7 @@ wasm-bindgen-futures = "0.4.42"
 wasm-bindgen-test = "0.3.34"
 web-sys = "0.3"
 webgl2 = { path = "./wasm/webgl2" }
+wasm-utils = { path = "./wasm/utils" }
 
 [profile.release]
 strip = true

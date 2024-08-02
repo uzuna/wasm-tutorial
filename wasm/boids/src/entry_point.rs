@@ -1,13 +1,12 @@
 use tokio::sync::mpsc;
 use wasm_bindgen::prelude::*;
+use wasm_utils::info;
 use web_sys::HtmlCanvasElement;
 use webgl2::gl;
 
 use crate::{
-    animation,
     boids_shader::BoidsShaderBuilder,
     camera::{Camera, ViewMatrix},
-    info,
     utils::{merge_events, Mergeable},
     ws::start_websocket,
 };
@@ -17,7 +16,7 @@ const COLOR_BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 #[wasm_bindgen(start)]
 pub fn init() -> Result<(), JsValue> {
     info!("execute init");
-    crate::utils::set_panic_hook();
+    wasm_utils::panic::set_panic_hook();
     Ok(())
 }
 
@@ -70,7 +69,7 @@ pub fn start_boids(
     let (c_tx, mut c_rx) = mpsc::unbounded_channel();
     let ctrl = BoidController::new(tx, c_tx);
 
-    let a = animation::AnimationLoop::new(move |_| {
+    let a = wasm_utils::animation::AnimationLoop::new(move |_| {
         if let Some(event) = merge_events(&mut rx) {
             for b in boids.boids.iter_mut() {
                 event.apply(b);
@@ -96,7 +95,8 @@ pub fn start_boids(
         boids.update();
         Ok(())
     });
-    a.start()?;
+    a.start();
+    a.forget();
     // 初期値送信
     ctrl.init();
 

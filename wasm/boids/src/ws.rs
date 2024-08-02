@@ -1,8 +1,7 @@
 use gloo_net::websocket::futures::WebSocket;
 use gloo_net::websocket::Message;
 
-use crate::error::*;
-use crate::info;
+use wasm_utils::{error::*, info};
 
 #[derive(Debug, serde::Deserialize)]
 struct CreateBoidRequest {

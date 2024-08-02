@@ -1,0 +1,27 @@
+[package]
+name = "wasm-utils"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+console_error_panic_hook = { workspace = true, optional = true }
+gloo-timers.workspace = true
+wasm-bindgen.workspace = true
+
+[dependencies.web-sys]
+workspace = true
+features = [
+    "console",
+    "HtmlCanvasElement",
+    "Window",
+]
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true
+
