@@ -80,8 +80,8 @@ struct ParticleUniform {
 
 impl ParticleUniform {
     pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let size = uniform_location!(gl, program, "pointSize")?;
-        let color = uniform_location!(gl, program, "pointColor")?;
+        let size = uniform_location(gl, program, "pointSize")?;
+        let color = uniform_location(gl, program, "pointColor")?;
         Ok(Self { size, color })
     }
 
@@ -590,9 +590,9 @@ struct ParticleGpgpuPointUniform {
 
 impl ParticleGpgpuPointUniform {
     pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let point_size = uniform_location!(gl, program, "pointSize")?;
-        let u_texture = uniform_location!(gl, program, "u_texture")?;
-        let ambient = uniform_location!(gl, program, "ambient")?;
+        let point_size = uniform_location(gl, program, "pointSize")?;
+        let u_texture = uniform_location(gl, program, "u_texture")?;
+        let ambient = uniform_location(gl, program, "ambient")?;
         Ok(Self {
             // resolution,
             point_size,
@@ -631,13 +631,13 @@ struct ParticleGpgpuVelocityUniform {
 
 impl ParticleGpgpuVelocityUniform {
     pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let resolution = uniform_location!(gl, program, "resolution")?;
-        let u_texture = uniform_location!(gl, program, "u_texture")?;
-        let target = uniform_location!(gl, program, "target")?;
-        let vector_update = uniform_location!(gl, program, "vectorUpdate")?;
-        let velocity = uniform_location!(gl, program, "velocity")?;
-        let speed = uniform_location!(gl, program, "speed")?;
-        let handle_rate = uniform_location!(gl, program, "handleRate")?;
+        let resolution = uniform_location(gl, program, "resolution")?;
+        let u_texture = uniform_location(gl, program, "u_texture")?;
+        let target = uniform_location(gl, program, "target")?;
+        let vector_update = uniform_location(gl, program, "vectorUpdate")?;
+        let velocity = uniform_location(gl, program, "velocity")?;
+        let speed = uniform_location(gl, program, "speed")?;
+        let handle_rate = uniform_location(gl, program, "handleRate")?;
         Ok(Self {
             resolution,
             u_texture,
@@ -693,7 +693,7 @@ struct ParticleGpgpuIndexUniform {
 
 impl ParticleGpgpuIndexUniform {
     pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let resolution = uniform_location!(gl, program, "resolution")?;
+        let resolution = uniform_location(gl, program, "resolution")?;
         Ok(Self { resolution })
     }
 

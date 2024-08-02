@@ -1,4 +1,4 @@
-use nalgebra::Matrix2;
+use nalgebra::Matrix3;
 use wasm_utils::error::*;
 use web_sys::WebGlUniformLocation;
 use webgl2::{
@@ -23,6 +23,26 @@ impl Default for PlotParams {
     }
 }
 
+struct PlotState {
+    len: usize,
+    current_index: usize,
+}
+
+impl PlotState {
+    fn new(len: usize) -> Self {
+        Self {
+            len,
+            current_index: 0,
+        }
+    }
+
+    fn next(&mut self) -> usize {
+        let i = self.current_index;
+        self.current_index = (self.current_index + 1) % self.len;
+        i
+    }
+}
+
 /// 時系列データをプロットするシェーダ
 pub struct PlotShader {
     program: Program,
@@ -31,6 +51,8 @@ pub struct PlotShader {
     vertex: VertexVbo,
     color: VertexVbo,
     point_size: VertexVbo,
+
+    state: PlotState,
 }
 
 impl PlotShader {
@@ -40,12 +62,12 @@ layout(location = 0) in vec2 position;
 layout(location = 1) in vec4 color;
 layout(location = 2) in float point_size;
 
-uniform mat2 window_mat;
+uniform mat3 window_mat;
 
 out vec4 out_color;
 
 void main() {
-    gl_Position = vec4(window_mat * position, 0.0, 1.0);
+    gl_Position = vec4((window_mat * vec3(position, 1.0)).xy, 0.0, 1.0);
     out_color = color;
     gl_PointSize = point_size;
 }
@@ -87,6 +109,7 @@ void main() {
             vertex,
             color,
             point_size,
+            state: PlotState::new(param.point_count),
         };
         s.init(gl);
         Ok(s)
@@ -94,13 +117,18 @@ void main() {
 
     fn init(&self, gl: &gl) {
         self.program.use_program(gl);
-        self.set_window_mat(gl, Matrix2::identity());
+        self.set_window_mat(gl, Matrix3::identity());
     }
 
-    pub fn set_window_mat(&self, gl: &gl, mat: Matrix2<f32>) {
-        let ma: [[f32; 2]; 2] = mat.into();
+    pub fn set_window_mat(&self, gl: &gl, mat: Matrix3<f32>) {
+        let ma: [[f32; 3]; 3] = mat.into();
         let mm = ma.iter().flat_map(|a| *a).collect::<Vec<_>>();
-        gl.uniform_matrix2fv_with_f32_array(Some(&self.window_mat), false, &mm);
+        gl.uniform_matrix3fv_with_f32_array(Some(&self.window_mat), false, &mm);
+    }
+
+    pub fn add_data(&mut self, gl: &gl, p: GlPoint2d) {
+        let i = self.state.next();
+        self.vertex.update_vertex_sub(gl, &[p], i as i32);
     }
 
     pub fn draw(&self, gl: &gl) {
