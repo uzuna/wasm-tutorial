@@ -1,23 +1,23 @@
 use bytemuck::{Pod, Zeroable};
 use wasm_bindgen::JsError;
 pub use web_sys::WebGl2RenderingContext as gl;
-use web_sys::{WebGlProgram, WebGlShader};
+use web_sys::{WebGlProgram, WebGlShader, WebGlUniformLocation};
 
 pub mod error;
 #[cfg(feature = "vertex")]
 pub mod vertex;
 
+#[cfg(feature = "context")]
+pub mod context;
+
 use error::Result;
 
-#[macro_export]
-macro_rules! uniform_location {
-    ($gl:expr, $program:expr, $name:expr) => {
-        $gl.get_uniform_location($program.program(), $name)
-            .ok_or(wasm_bindgen::JsError::new(&format!(
-                "Failed to get uniform location {}",
-                $name
-            )))
-    };
+pub fn uniform_location(gl: &gl, program: &Program, name: &str) -> Result<WebGlUniformLocation> {
+    gl.get_uniform_location(program.program(), name)
+        .ok_or(JsError::new(&format!(
+            "Failed to get uniform location {}",
+            name
+        )))
 }
 
 pub fn uniform_block_binding(gl: &gl, program: &Program, name: &str, index: u32) {
@@ -42,6 +42,28 @@ pub trait GlPoint {
     /// 頂点情報の型。精度はf32で十分
     fn type_() -> GlEnum {
         gl::FLOAT
+    }
+}
+
+/// OpenGLに渡す2次元の点の情報。主に平面座標に使う
+///
+/// 連続する2つの`f32`のデータとして見えなければならないのでCの構造体として定義する  
+#[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
+#[repr(C)]
+pub struct GlPoint1d {
+    pub x: f32,
+}
+
+impl GlPoint1d {
+    #[inline]
+    pub const fn new(x: f32) -> Self {
+        Self { x }
+    }
+}
+
+impl GlPoint for GlPoint1d {
+    fn size() -> GlInt {
+        1
     }
 }
 

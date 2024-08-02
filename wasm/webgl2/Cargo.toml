@@ -8,6 +8,7 @@ rust-version.workspace = true
 
 [features]
 vertex = ["web-sys/WebGlBuffer", "web-sys/WebGlUniformLocation"]
+context = ["web-sys/HtmlCanvasElement"]
 
 [dependencies]
 bytemuck = { version = "1.16.1", features = ["derive"] }

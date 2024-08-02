@@ -162,7 +162,7 @@ void main() {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
         uniform_block_binding(gl, &program, "matrix", Self::MVP_UBI);
         gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
-        let ambient = uniform_location!(gl, &program, "ambient")?;
+        let ambient = uniform_location(gl, &program, "ambient")?;
         let vao = Vao::new(gl)?;
         let vbo = VertexVbo::new(gl, &Self::rect(b, size), BoidShader::LOCATION_POSITION)?;
         vao.unbind(gl);
@@ -258,8 +258,8 @@ void main() {
         uniform_block_binding(gl, &program, "matrix", Self::MVP_UBI);
         gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
 
-        let ambient = uniform_location!(gl, &program, "ambient")?;
-        let point_size = uniform_location!(gl, &program, "pointSize")?;
+        let ambient = uniform_location(gl, &program, "ambient")?;
+        let point_size = uniform_location(gl, &program, "pointSize")?;
 
         let vao = Vao::new(gl)?;
         let vbo_len = hist_len.next_power_of_two();
