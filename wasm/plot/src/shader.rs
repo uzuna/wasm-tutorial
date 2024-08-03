@@ -16,20 +16,26 @@ pub struct PlotParams {
     pub point_count: usize,
     /// plotのX軸の表示範囲
     pub time_window: Duration,
+    pub y_range: (f32, f32),
 }
 
 impl PlotParams {
     pub const DEFAULT_COLOR: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
     pub const DEFAULT_POINT_SIZE: f32 = 4.0;
 
-    pub fn new(time_window: Duration, point_per_seconds: u32) -> Self {
+    pub fn new(time_window: Duration, point_per_seconds: u32, y_range: (f32, f32)) -> Self {
         let point_count = (time_window.as_secs() as u32 * point_per_seconds) as usize;
         Self {
             color: Self::DEFAULT_COLOR,
             point_size: Self::DEFAULT_POINT_SIZE,
             point_count,
             time_window,
+            y_range,
         }
+    }
+
+    pub fn point_per_seconds(&self) -> f32 {
+        (self.point_count as f32) / self.time_window.as_secs() as f32
     }
 }
 
@@ -40,6 +46,7 @@ impl Default for PlotParams {
             point_size: Self::DEFAULT_POINT_SIZE,
             point_count: 100,
             time_window: Duration::from_secs(10),
+            y_range: (-1.0, 1.0),
         }
     }
 }

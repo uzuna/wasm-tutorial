@@ -3,57 +3,123 @@ use std::time::Duration;
 use rand::Rng;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use wasm_bindgen::prelude::*;
+use wasm_utils::error::*;
 use web_sys::HtmlCanvasElement;
+use webgl2::gl;
 
-use crate::{plot::Plot, shader::PlotParams};
+use crate::{
+    plot::{Chart, ViewPort},
+    shader::PlotParams,
+};
 
 #[wasm_bindgen(start)]
-pub fn init() -> Result<(), JsValue> {
+pub fn init() -> Result<()> {
     wasm_utils::panic::set_panic_hook();
     Ok(())
 }
 
 #[wasm_bindgen]
-pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
+pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     canvas.set_width(1024);
     canvas.set_height(768);
 
     let gl = webgl2::context::get_webgl2_context(&canvas, webgl2::context::COLOR_BLACK)?;
 
-    // 1プロットグラフのパラメータ
-    let prop = PlotParams::new(Duration::from_secs(10), 30);
-    let mut p = Plot::new(&gl, prop)?;
-    p.set_y_range((-10.0, 10.0));
+    // 1Chart単位を手で組む
+    let mut chart = Chart::new(&gl, ViewPort::new(0, 768 - 128, 1024, 128))?;
+    let s1 = chart.add_series(
+        &gl,
+        PlotParams::new(Duration::from_secs(10), 30, (-10.0, 10.0)),
+        "Random Walk 1",
+    )?;
 
-    let mut prop = PlotParams::new(Duration::from_secs(10), 10);
+    let mut prop = PlotParams::new(Duration::from_secs(10), 10, (-5.0, 5.0));
     prop.color = [0.0, 1.0, 0.0, 1.0];
-    let mut p2 = Plot::new(&gl, prop)?;
-    p2.set_y_range((-5.0, 5.0));
-    let mut rx = walker(RandomWalk::new(), Duration::from_millis(33));
-    let mut rx2 = walker(RandomWalk::new(), Duration::from_millis(100));
+    let s2 = chart.add_series(&gl, prop, "Random Walk 2")?;
+
+    let mut dcm1 = DataChannelMap::new();
+    dcm1.add(walker(RandomWalk::new(), Duration::from_millis(34)), s1);
+    dcm1.add(walker(RandomWalk::new(), Duration::from_millis(100)), s2);
+
+    let mut prop = PlotParams::new(Duration::from_secs(10), 100, (-5.0, 5.0));
+    prop.point_size = 3.0;
+    let (mut c2, mut dcm2) = random_walk_chart(
+        &gl,
+        ViewPort::new(0, 768 - 256, 1024, 128),
+        prop.clone(),
+        16,
+    )?;
+    let (mut c3, mut dcm3) = random_walk_chart(
+        &gl,
+        ViewPort::new(0, 768 - 384, 1024, 128),
+        prop.clone(),
+        16,
+    )?;
 
     let mut a = wasm_utils::animation::AnimationLoop::new(move |time| {
         // データを受信。shaderと組にする
-        while let Ok(x) = rx.try_recv() {
-            p.add_data(&gl, x.0, x.1);
-        }
-        // データを受信。shaderと組にする
-        while let Ok(x) = rx2.try_recv() {
-            p2.add_data(&gl, x.0, x.1);
-        }
-        let current_time = time as f32 / 1000.0;
-        p.update_window(&gl, current_time);
-        p2.update_window(&gl, current_time);
+        dcm1.update(&gl, &mut chart);
+        dcm2.update(&gl, &mut c2);
+        dcm3.update(&gl, &mut c3);
 
+        let current_time = time as f32 / 1000.0;
         webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
-        p.draw(&gl);
-        p2.draw(&gl);
+        chart.draw(&gl, current_time);
+        c2.draw(&gl, current_time);
+        c3.draw(&gl, current_time);
         Ok(())
     });
     a.start();
     a.forget();
 
     Ok(())
+}
+
+// 大量のデータを描画するテスト
+fn random_walk_chart(
+    gl: &gl,
+    viewport: ViewPort,
+    base_prop: PlotParams,
+    series_count: u32,
+) -> Result<(Chart, DataChannelMap)> {
+    let mut chart = Chart::new(gl, viewport)?;
+    for i in 0..series_count {
+        let mut prop = base_prop.clone();
+        let rgb = hsv_to_rgb(i as f64 * 360.0 / series_count as f64, 1.0, 1.0);
+        prop.color = [rgb.0, rgb.1, rgb.2, 0.5];
+        chart.add_series(gl, prop, &format!("Random Walk {}", i))?;
+    }
+
+    let mut dcm = DataChannelMap::new();
+    let pps = base_prop.point_per_seconds();
+    let pps_duration = Duration::from_secs_f32(1.0 / pps);
+    for i in 0..series_count {
+        dcm.add(walker(RandomWalk::new(), pps_duration), i as usize);
+    }
+    Ok((chart, dcm))
+}
+
+// データチャンネルから受信してチャートのデータを更新するための関係性を保持する構造体
+struct DataChannelMap {
+    v: Vec<(UnboundedReceiver<(f32, f32)>, usize)>,
+}
+
+impl DataChannelMap {
+    fn new() -> Self {
+        Self { v: Vec::new() }
+    }
+
+    fn add(&mut self, rx: UnboundedReceiver<(f32, f32)>, index: usize) {
+        self.v.push((rx, index));
+    }
+
+    fn update(&mut self, gl: &gl, chart: &mut Chart) {
+        for (rx, index) in &mut self.v {
+            while let Ok((time, value)) = rx.try_recv() {
+                chart.add_data(gl, *index, time, value);
+            }
+        }
+    }
 }
 
 struct RandomWalk {
@@ -98,4 +164,51 @@ fn walker(mut w: RandomWalk, interval: Duration) -> UnboundedReceiver<(f32, f32)
     });
 
     rx
+}
+
+// reference from https://github.com/jayber/hsv
+pub fn hsv_to_rgb(hue: f64, saturation: f64, value: f64) -> (f32, f32, f32) {
+    fn is_between(value: f64, min: f64, max: f64) -> bool {
+        min <= value && value < max
+    }
+
+    check_bounds(hue, saturation, value);
+
+    let c = value * saturation;
+    let h = hue / 60.0;
+    let x = c * (1.0 - ((h % 2.0) - 1.0).abs());
+    let m = value - c;
+
+    let (r, g, b): (f64, f64, f64) = if is_between(h, 0.0, 1.0) {
+        (c, x, 0.0)
+    } else if is_between(h, 1.0, 2.0) {
+        (x, c, 0.0)
+    } else if is_between(h, 2.0, 3.0) {
+        (0.0, c, x)
+    } else if is_between(h, 3.0, 4.0) {
+        (0.0, x, c)
+    } else if is_between(h, 4.0, 5.0) {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+
+    ((r + m) as f32, (g + m) as f32, (b + m) as f32)
+}
+
+fn check_bounds(hue: f64, saturation: f64, value: f64) {
+    fn panic_bad_params(name: &str, from_value: &str, to_value: &str, supplied: f64) -> ! {
+        panic!(
+            "param {} must be between {} and {} inclusive; was: {}",
+            name, from_value, to_value, supplied
+        )
+    }
+
+    if !(0.0..=360.0).contains(&hue) {
+        panic_bad_params("hue", "0.0", "360.0", hue)
+    } else if !(0.0..=1.0).contains(&saturation) {
+        panic_bad_params("saturation", "0.0", "1.0", saturation)
+    } else if !(0.0..=1.0).contains(&value) {
+        panic_bad_params("value", "0.0", "1.0", value)
+    }
 }
