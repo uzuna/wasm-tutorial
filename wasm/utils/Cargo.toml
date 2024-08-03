@@ -18,6 +18,7 @@ wasm-bindgen.workspace = true
 workspace = true
 features = [
     "console",
+    "HtmlButtonElement",
     "HtmlCanvasElement",
     "Document",
     "DocumentTimeline",

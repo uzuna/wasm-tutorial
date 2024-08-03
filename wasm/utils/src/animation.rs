@@ -93,4 +93,77 @@ impl AnimationLoop {
     pub fn forget(&self) {
         std::mem::forget(self.closure_ctx.clone());
     }
+
+    fn is_started(&self) -> bool {
+        self.animation_ctx.borrow_mut().is_some()
+    }
+}
+
+/// AnimationLoopに再生、停止のインタラクションを追加
+pub struct PlayStopButton {
+    element: web_sys::HtmlButtonElement,
+    play: bool,
+    animation_loop: AnimationLoop,
+}
+
+impl PlayStopButton {
+    pub fn new(element: web_sys::HtmlButtonElement, animation_loop: AnimationLoop) -> Self {
+        let s = Self {
+            element,
+            play: animation_loop.is_started(),
+            animation_loop,
+        };
+        s.set_text();
+        s
+    }
+
+    fn set_text(&self) {
+        self.element
+            .set_text_content(Some(if self.play { "Stop" } else { "Play" }));
+    }
+
+    pub fn play(&mut self) {
+        self.play = true;
+        self.animation_loop.start();
+        self.set_text();
+    }
+
+    pub fn stop(&mut self) -> Result<()> {
+        self.play = false;
+        self.set_text();
+        self.animation_loop.cancel()
+    }
+
+    pub fn toggle(&mut self) -> Result<()> {
+        if self.play {
+            self.stop()?;
+        } else {
+            self.play();
+        };
+        Ok(())
+    }
+
+    pub fn start(self) -> PlayAnimaionContext {
+        let ctx = Rc::new(RefCell::new(self));
+        let ctx_clone = ctx.clone();
+        let closure = Closure::wrap(Box::new(move || {
+            let mut this = ctx_clone.borrow_mut();
+            if this.play {
+                let _ = this.stop();
+            } else {
+                this.play();
+            }
+        }) as Box<dyn FnMut()>);
+        ctx.borrow_mut()
+            .element
+            .add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())
+            .unwrap();
+        PlayAnimaionContext { ctx, closure }
+    }
+}
+
+#[wasm_bindgen]
+pub struct PlayAnimaionContext {
+    ctx: Rc<RefCell<PlayStopButton>>,
+    closure: Closure<dyn FnMut()>,
 }

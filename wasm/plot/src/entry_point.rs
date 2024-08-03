@@ -3,8 +3,11 @@ use std::time::Duration;
 use rand::Rng;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use wasm_bindgen::prelude::*;
-use wasm_utils::error::*;
-use web_sys::HtmlCanvasElement;
+use wasm_utils::{
+    animation::{PlayAnimaionContext, PlayStopButton},
+    error::*,
+};
+use web_sys::{HtmlButtonElement, HtmlCanvasElement};
 use webgl2::gl;
 
 use crate::{
@@ -19,7 +22,10 @@ pub fn init() -> Result<()> {
 }
 
 #[wasm_bindgen]
-pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
+pub fn start(
+    canvas: HtmlCanvasElement,
+    play_pause_btn: HtmlButtonElement,
+) -> std::result::Result<PlayAnimaionContext, JsValue> {
     canvas.set_width(1024);
     canvas.set_height(768);
 
@@ -56,7 +62,7 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         16,
     )?;
 
-    let mut a = wasm_utils::animation::AnimationLoop::new(move |time| {
+    let a = wasm_utils::animation::AnimationLoop::new(move |time| {
         // データを受信。shaderと組にする
         dcm1.update(&gl, &mut chart);
         dcm2.update(&gl, &mut c2);
@@ -69,10 +75,11 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         c3.draw(&gl, current_time);
         Ok(())
     });
-    a.start();
-    a.forget();
 
-    Ok(())
+    // TODO: 止めるべきはAnimationLoopのインスタンスではなく、データ更新部分では?
+    let btn = PlayStopButton::new(play_pause_btn, a);
+
+    Ok(btn.start())
 }
 
 // 大量のデータを描画するテスト
