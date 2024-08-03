@@ -13,8 +13,14 @@ pub fn get_webgl2_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> Result
         .dyn_into::<gl>()
         .map_err(|_| JsError::new("Failed to cast to WebGl2RenderingContext"))?;
 
+    // 手前にあるものだけを描画して負荷を下げる
     gl.enable(gl::DEPTH_TEST);
+    // テクスチャの表面だけを描画する
     gl.enable(gl::CULL_FACE);
+    // アルファブレンドを有効にする
+    gl.enable(gl::BLEND);
+    // アルファブレンドは、srcのアルファを使ってdstの値を割り引いてブレンドする
+    gl.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
     gl_clear_color(&gl, color);
     gl.clear_depth(1.0);

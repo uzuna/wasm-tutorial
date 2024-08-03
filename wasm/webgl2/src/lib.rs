@@ -170,9 +170,21 @@ impl GlPoint4d {
         Self { x, y, z, w }
     }
 }
+
 impl GlPoint for GlPoint4d {
     fn size() -> GlInt {
         4
+    }
+}
+
+impl From<[f32; 4]> for GlPoint4d {
+    fn from(v: [f32; 4]) -> Self {
+        Self {
+            x: v[0],
+            y: v[1],
+            z: v[2],
+            w: v[3],
+        }
     }
 }
 

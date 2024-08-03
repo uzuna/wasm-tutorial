@@ -4,7 +4,7 @@ use web_sys::WebGlUniformLocation;
 use webgl2::{
     gl, uniform_location,
     vertex::{Vao, VertexVbo},
-    GlPoint1d, GlPoint2d, Program,
+    GlPoint1d, GlPoint2d, GlPoint4d, Program,
 };
 
 pub struct PlotParams {
@@ -52,6 +52,8 @@ pub struct PlotShader {
     color: VertexVbo,
     point_size: VertexVbo,
 
+    default_color: GlPoint4d,
+
     state: PlotState,
 }
 
@@ -94,7 +96,7 @@ void main() {
         let vertex_data = vec![GlPoint2d::new(0.0, 0.0); param.point_count];
         let vertex = VertexVbo::new(gl, &vertex_data, Self::LOCATION_POSITION)?;
 
-        let color_data = vec![GlPoint2d::new(param.color[0], param.color[1]); param.point_count];
+        let color_data = vec![GlPoint4d::new(0.0, 0.0, 0.0, 0.0); param.point_count];
         let color = VertexVbo::new(gl, &color_data, Self::LOCATION_COLOR)?;
 
         let point_size_data = vec![GlPoint1d::new(param.point_size); param.point_count];
@@ -109,6 +111,7 @@ void main() {
             vertex,
             color,
             point_size,
+            default_color: GlPoint4d::from(param.color),
             state: PlotState::new(param.point_count),
         };
         s.init(gl);
@@ -129,6 +132,8 @@ void main() {
     pub fn add_data(&mut self, gl: &gl, p: GlPoint2d) {
         let i = self.state.next();
         self.vertex.update_vertex_sub(gl, &[p], i as i32);
+        self.color
+            .update_vertex_sub(gl, &[self.default_color], i as i32)
     }
 
     pub fn draw(&self, gl: &gl) {

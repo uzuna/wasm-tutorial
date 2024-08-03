@@ -9,8 +9,8 @@ rust-version.workspace = true
 [dependencies]
 axum = { version = "0.7", features = ["json", "query", "ws"] }
 ciborium.workspace = true
-futures-util = "0.3.30"
-rand = "0.8.5"
+futures-util.workspace = true
+rand.workspace = true
 serde.workspace = true
 tokio = { version = "1.0", features = ["full"] }
 tower = { version = "0.4", features = ["util"] }

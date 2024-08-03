@@ -16,20 +16,23 @@ rust-version = "1.79"
 ciborium = "0.2.2"
 console_error_panic_hook = "0.1.7"
 futures = "0.3.30"
+futures-util = "0.3.30"
+getrandom = { version = "0.2", features = ["js"] }
 gloo-net = { version = "0.5", features = ["websocket"] }
 gloo-timers = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
-nalgebra = "0.19.0"
+nalgebra = "0.33.0"
 nalgebra-glm = "0.19.0"
+rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
 thiserror = "1.0.61"
 tokio = { version = "1.38.0", features = ["macros", "sync"] }
 wasm-bindgen = "0.2.84"
 wasm-bindgen-futures = "0.4.42"
 wasm-bindgen-test = "0.3.34"
+wasm-utils = { path = "./wasm/utils" }
 web-sys = "0.3"
 webgl2 = { path = "./wasm/webgl2" }
-wasm-utils = { path = "./wasm/utils" }
 
 [profile.release]
 strip = true
