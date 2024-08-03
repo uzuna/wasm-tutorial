@@ -34,6 +34,8 @@ fn cancel_animation_frame(handle: i32) {
 pub struct AnimationLoop {
     animation_ctx: Rc<RefCell<Option<i32>>>,
     closure_ctx: Rc<Closure<dyn FnMut(f64) -> Result<i32>>>,
+    document_timeline: f64,
+    performance_start: f64,
 }
 
 impl AnimationLoop {
@@ -57,10 +59,24 @@ impl AnimationLoop {
         Self {
             animation_ctx: a_ctx,
             closure_ctx: closure,
+            document_timeline: 0.0,
+            performance_start: 0.0,
         }
     }
 
-    pub fn start(&self) {
+    pub fn start(&mut self) {
+        self.document_timeline = web_sys::window()
+            .expect("Failed to get window")
+            .document()
+            .expect("Failed to get performance")
+            .timeline()
+            .current_time()
+            .expect("Failed to get current time");
+        self.performance_start = web_sys::window()
+            .expect("Failed to get window")
+            .performance()
+            .expect("Failed to get performance")
+            .now();
         *self.animation_ctx.borrow_mut() = Some(request_animation_frame(self.closure_ctx.borrow()));
     }
 

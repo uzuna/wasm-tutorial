@@ -19,6 +19,9 @@ workspace = true
 features = [
     "console",
     "HtmlCanvasElement",
+    "Document",
+    "DocumentTimeline",
+    "Performance",
     "Window",
 ]
 

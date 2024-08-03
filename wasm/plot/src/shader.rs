@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use nalgebra::Matrix3;
 use wasm_utils::error::*;
 use web_sys::WebGlUniformLocation;
@@ -7,18 +9,37 @@ use webgl2::{
     GlPoint1d, GlPoint2d, GlPoint4d, Program,
 };
 
+#[derive(Clone)]
 pub struct PlotParams {
     pub color: [f32; 4],
     pub point_size: f32,
     pub point_count: usize,
+    /// plotのX軸の表示範囲
+    pub time_window: Duration,
+}
+
+impl PlotParams {
+    pub const DEFAULT_COLOR: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+    pub const DEFAULT_POINT_SIZE: f32 = 4.0;
+
+    pub fn new(time_window: Duration, point_per_seconds: u32) -> Self {
+        let point_count = (time_window.as_secs() as u32 * point_per_seconds) as usize;
+        Self {
+            color: Self::DEFAULT_COLOR,
+            point_size: Self::DEFAULT_POINT_SIZE,
+            point_count,
+            time_window,
+        }
+    }
 }
 
 impl Default for PlotParams {
     fn default() -> Self {
         Self {
-            color: [1.0, 0.0, 0.0, 1.0],
-            point_size: 2.0,
+            color: Self::DEFAULT_COLOR,
+            point_size: Self::DEFAULT_POINT_SIZE,
             point_count: 100,
+            time_window: Duration::from_secs(10),
         }
     }
 }
@@ -44,7 +65,7 @@ impl PlotState {
 }
 
 /// 時系列データをプロットするシェーダ
-pub struct PlotShader {
+pub struct DotShader {
     program: Program,
     window_mat: WebGlUniformLocation,
     vao: Vao,
@@ -57,7 +78,7 @@ pub struct PlotShader {
     state: PlotState,
 }
 
-impl PlotShader {
+impl DotShader {
     // x方向は時間情報なので、表示範囲の指定にwindow_matを使う
     const VERT: &'static str = r#"#version 300 es
 layout(location = 0) in vec2 position;
@@ -123,6 +144,10 @@ void main() {
         self.set_window_mat(gl, Matrix3::identity());
     }
 
+    pub fn use_program(&self, gl: &gl) {
+        self.program.use_program(gl);
+    }
+
     pub fn set_window_mat(&self, gl: &gl, mat: Matrix3<f32>) {
         let ma: [[f32; 3]; 3] = mat.into();
         let mm = ma.iter().flat_map(|a| *a).collect::<Vec<_>>();
@@ -134,6 +159,10 @@ void main() {
         self.vertex.update_vertex_sub(gl, &[p], i as i32);
         self.color
             .update_vertex_sub(gl, &[self.default_color], i as i32)
+    }
+
+    pub fn set_color(&mut self, color: [f32; 4]) {
+        self.default_color = GlPoint4d::from(color);
     }
 
     pub fn draw(&self, gl: &gl) {

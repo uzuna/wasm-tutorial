@@ -69,7 +69,7 @@ pub fn start_boids(
     let (c_tx, mut c_rx) = mpsc::unbounded_channel();
     let ctrl = BoidController::new(tx, c_tx);
 
-    let a = wasm_utils::animation::AnimationLoop::new(move |_| {
+    let mut a = wasm_utils::animation::AnimationLoop::new(move |_| {
         if let Some(event) = merge_events(&mut rx) {
             for b in boids.boids.iter_mut() {
                 event.apply(b);
