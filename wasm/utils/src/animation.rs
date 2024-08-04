@@ -1,7 +1,9 @@
 use std::{
     borrow::Borrow,
     cell::RefCell,
+    ops::Deref,
     rc::{Rc, Weak},
+    sync::atomic::AtomicBool,
 };
 
 use wasm_bindgen::prelude::*;
@@ -104,14 +106,24 @@ pub struct PlayStopButton {
     element: web_sys::HtmlButtonElement,
     play: bool,
     animation_loop: AnimationLoop,
+    playing: Rc<RefCell<AtomicBool>>,
 }
 
 impl PlayStopButton {
-    pub fn new(element: web_sys::HtmlButtonElement, animation_loop: AnimationLoop) -> Self {
+    pub fn new(
+        element: web_sys::HtmlButtonElement,
+        animation_loop: AnimationLoop,
+        playing: Rc<RefCell<AtomicBool>>,
+    ) -> Self {
+        let play = animation_loop.is_started();
+        playing
+            .borrow_mut()
+            .store(play, std::sync::atomic::Ordering::Relaxed);
         let s = Self {
             element,
-            play: animation_loop.is_started(),
+            play,
             animation_loop,
+            playing,
         };
         s.set_text();
         s
@@ -124,12 +136,18 @@ impl PlayStopButton {
 
     pub fn play(&mut self) {
         self.play = true;
+        self.playing
+            .borrow_mut()
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         self.animation_loop.start();
         self.set_text();
     }
 
     pub fn stop(&mut self) -> Result<()> {
         self.play = false;
+        self.playing
+            .borrow_mut()
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         self.set_text();
         self.animation_loop.cancel()
     }
@@ -160,10 +178,22 @@ impl PlayStopButton {
             .unwrap();
         PlayAnimaionContext { ctx, closure }
     }
+
+    fn forget(&self) {
+        self.animation_loop.forget();
+    }
 }
 
 #[wasm_bindgen]
 pub struct PlayAnimaionContext {
     ctx: Rc<RefCell<PlayStopButton>>,
     closure: Closure<dyn FnMut()>,
+}
+
+impl PlayAnimaionContext {
+    pub fn forget(self) {
+        let Self { ctx, closure } = self;
+        std::mem::forget(closure);
+        ctx.borrow_mut().forget();
+    }
 }

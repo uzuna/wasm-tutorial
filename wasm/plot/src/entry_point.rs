@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{cell::RefCell, rc::Rc, sync::atomic::AtomicBool, time::Duration};
 
 use rand::Rng;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
@@ -25,11 +25,12 @@ pub fn init() -> Result<()> {
 pub fn start(
     canvas: HtmlCanvasElement,
     play_pause_btn: HtmlButtonElement,
-) -> std::result::Result<PlayAnimaionContext, JsValue> {
+) -> std::result::Result<(), JsValue> {
     canvas.set_width(1024);
     canvas.set_height(768);
 
     let gl = webgl2::context::get_webgl2_context(&canvas, webgl2::context::COLOR_BLACK)?;
+    let playing = Rc::new(RefCell::new(AtomicBool::new(false)));
 
     // 1Chart単位を手で組む
     let mut chart = Chart::new(&gl, ViewPort::new(0, 768 - 128, 1024, 128))?;
@@ -44,8 +45,22 @@ pub fn start(
     let s2 = chart.add_series(&gl, prop, "Random Walk 2")?;
 
     let mut dcm1 = DataChannelMap::new();
-    dcm1.add(walker(RandomWalk::new(), Duration::from_millis(34)), s1);
-    dcm1.add(walker(RandomWalk::new(), Duration::from_millis(100)), s2);
+    dcm1.add(
+        walker(
+            RandomWalk::new(),
+            Duration::from_millis(34),
+            playing.clone(),
+        ),
+        s1,
+    );
+    dcm1.add(
+        walker(
+            RandomWalk::new(),
+            Duration::from_millis(100),
+            playing.clone(),
+        ),
+        s2,
+    );
 
     let mut prop = PlotParams::new(Duration::from_secs(10), 100, (-5.0, 5.0));
     prop.point_size = 3.0;
@@ -54,12 +69,14 @@ pub fn start(
         ViewPort::new(0, 768 - 256, 1024, 128),
         prop.clone(),
         16,
+        playing.clone(),
     )?;
     let (mut c3, mut dcm3) = random_walk_chart(
         &gl,
         ViewPort::new(0, 768 - 384, 1024, 128),
         prop.clone(),
         16,
+        playing.clone(),
     )?;
 
     let a = wasm_utils::animation::AnimationLoop::new(move |time| {
@@ -77,9 +94,12 @@ pub fn start(
     });
 
     // TODO: 止めるべきはAnimationLoopのインスタンスではなく、データ更新部分では?
-    let btn = PlayStopButton::new(play_pause_btn, a);
+    let btn = PlayStopButton::new(play_pause_btn, a, playing);
 
-    Ok(btn.start())
+    let ctx = btn.start();
+    // JSに戻したらGCで回収されたためforgetする
+    ctx.forget();
+    Ok(())
 }
 
 // 大量のデータを描画するテスト
@@ -88,6 +108,7 @@ fn random_walk_chart(
     viewport: ViewPort,
     base_prop: PlotParams,
     series_count: u32,
+    playing: Rc<RefCell<AtomicBool>>,
 ) -> Result<(Chart, DataChannelMap)> {
     let mut chart = Chart::new(gl, viewport)?;
     for i in 0..series_count {
@@ -101,7 +122,10 @@ fn random_walk_chart(
     let pps = base_prop.point_per_seconds();
     let pps_duration = Duration::from_secs_f32(1.0 / pps);
     for i in 0..series_count {
-        dcm.add(walker(RandomWalk::new(), pps_duration), i as usize);
+        dcm.add(
+            walker(RandomWalk::new(), pps_duration, playing.clone()),
+            i as usize,
+        );
     }
     Ok((chart, dcm))
 }
@@ -158,13 +182,22 @@ impl RandomWalk {
     }
 }
 
-fn walker(mut w: RandomWalk, interval: Duration) -> UnboundedReceiver<(f32, f32)> {
+fn walker(
+    mut w: RandomWalk,
+    interval: Duration,
+    playing: Rc<RefCell<AtomicBool>>,
+) -> UnboundedReceiver<(f32, f32)> {
     use futures_util::{future::ready, stream::StreamExt};
     let (tx, rx) = unbounded_channel();
     wasm_bindgen_futures::spawn_local(async move {
         gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
             .for_each(|_| {
-                tx.send(w.next()).unwrap();
+                if playing
+                    .borrow_mut()
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    let _ = tx.send(w.next());
+                }
                 ready(())
             })
             .await;
