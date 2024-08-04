@@ -1,7 +1,6 @@
 use std::{
     borrow::Borrow,
     cell::RefCell,
-    ops::Deref,
     rc::{Rc, Weak},
     sync::atomic::AtomicBool,
 };

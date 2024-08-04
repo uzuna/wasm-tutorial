@@ -1,14 +1,12 @@
 use std::{cell::RefCell, rc::Rc, sync::atomic::AtomicBool, time::Duration};
 
+use nalgebra::Vector2;
 use rand::Rng;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use wasm_bindgen::prelude::*;
-use wasm_utils::{
-    animation::{PlayAnimaionContext, PlayStopButton},
-    error::*,
-};
+use wasm_utils::{animation::PlayStopButton, error::*, info};
 use web_sys::{HtmlButtonElement, HtmlCanvasElement};
-use webgl2::gl;
+use webgl2::{font::TextShader, gl};
 
 use crate::{
     plot::{Chart, ViewPort},
@@ -79,6 +77,19 @@ pub fn start(
         playing.clone(),
     )?;
 
+    let font = webgl2::font_asset::load(&gl)?;
+    let text = font.create_text_vertex("Hello, WebGL Text");
+    info!("text: {:?}", text.uvs);
+    let ts = TextShader::new(&gl)?;
+
+    let mat = nalgebra::Matrix3::identity().append_nonuniform_scaling(&Vector2::new(0.002, 0.002));
+    let mat: [[f32; 3]; 3] = mat.into();
+    let mm = mat.iter().flat_map(|a| *a).collect::<Vec<_>>();
+    ts.set_mat(&gl, &mm);
+    let tv = ts.link_vertex(&gl, &text)?;
+    gl.viewport(0, 0, 1024, 768);
+    ts.draw(&gl, &tv);
+
     let a = wasm_utils::animation::AnimationLoop::new(move |time| {
         // データを受信。shaderと組にする
         dcm1.update(&gl, &mut chart);
@@ -87,6 +98,8 @@ pub fn start(
 
         let current_time = time as f32 / 1000.0;
         webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
+        gl.viewport(0, 0, 1024, 768);
+        ts.draw(&gl, &tv);
         chart.draw(&gl, current_time);
         c2.draw(&gl, current_time);
         c3.draw(&gl, current_time);

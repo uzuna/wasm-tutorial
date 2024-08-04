@@ -7,13 +7,17 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
-vertex = ["web-sys/WebGlBuffer", "web-sys/WebGlUniformLocation"]
+vertex = ["web-sys/WebGlBuffer"]
 context = ["web-sys/HtmlCanvasElement"]
+font = ["dep:fxhash", "dep:serde", "web-sys/WebGlTexture", "vertex"]
+font-asset = ["font", "dep:serde_json"]
 
 [dependencies]
 bytemuck = { version = "1.16.1", features = ["derive"] }
+fxhash = { workspace = true, optional = true }
 js-sys.workspace = true
-thiserror.workspace = true
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 wasm-bindgen.workspace = true
 
 [dependencies.web-sys]
@@ -22,11 +26,13 @@ features = [
     "WebGl2RenderingContext",
     "WebGlProgram",
     "WebGlShader",
+    "WebGlUniformLocation",
     "WebGlVertexArrayObject",
 ]
 
 [dev-dependencies]
 wasm-bindgen-test.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies.web-sys]
 workspace = true

@@ -10,6 +10,12 @@ pub mod vertex;
 #[cfg(feature = "context")]
 pub mod context;
 
+#[cfg(feature = "font")]
+pub mod font;
+
+#[cfg(feature = "font-asset")]
+pub mod font_asset;
+
 use error::Result;
 
 pub fn uniform_location(gl: &gl, program: &Program, name: &str) -> Result<WebGlUniformLocation> {

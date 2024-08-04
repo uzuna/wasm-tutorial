@@ -1,3 +1,3 @@
 .PHONY: test
 test:
-	wasm-pack test --firefox --headless
+	wasm-pack test --firefox --headless --features font

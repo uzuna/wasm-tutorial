@@ -9,10 +9,7 @@ use std::assert_eq;
 use wasm_bindgen::{prelude::*, JsError};
 use wasm_bindgen_test::*;
 use web_sys::WebGlUniformLocation;
-use webgl2::{
-    error::{Error, Result},
-    gl, Program,
-};
+use webgl2::{error::Result, gl, Program};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
