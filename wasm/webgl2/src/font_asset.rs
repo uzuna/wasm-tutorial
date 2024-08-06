@@ -8,7 +8,10 @@ use crate::{
     gl,
 };
 
-const FONT_IMAGE: &[u8] = include_bytes!("../testdata/Ubuntu_Mono_64px.bmp");
+// フォント画像と位置情報のJSONを埋め込む
+// bmpだと400KB程度だが、DSS圧縮で60KB程度になることが期待される
+// 輝度情報だけなら100KB程度
+const FONT_IMAGE: &[u8] = include_bytes!("../testdata/Ubuntu_Mono_64px.lum");
 const FONT_JSON: &str = include_str!("../testdata/Ubuntu_Mono_64px.json");
 
 pub fn load(gl: &gl) -> Result<Font> {
@@ -22,7 +25,7 @@ pub fn load(gl: &gl) -> Result<Font> {
     gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
     gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
 
-    gl.pixel_storei(gl::UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
+    gl.pixel_storei(gl::UNPACK_ALIGNMENT, 1);
     let level = 0;
     let width = detail.width() as i32;
     let height = detail.height() as i32;
@@ -38,14 +41,15 @@ pub fn load(gl: &gl) -> Result<Font> {
     //     border,
     //     FONT_DXT1,
     // );
+    // 輝度情報のみなのでLUMINANCEを使う
     gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
         gl::TEXTURE_2D,
         level,
-        gl::RGBA as i32,
+        gl::LUMINANCE as i32,
         width,
         height,
         border,
-        gl::RGBA,
+        gl::LUMINANCE,
         gl::UNSIGNED_BYTE,
         Some(FONT_IMAGE),
     )
