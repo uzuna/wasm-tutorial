@@ -17,7 +17,7 @@ pub struct Chart {
 }
 
 impl Chart {
-    pub fn new(gl: &gl, viewport: ViewPort) -> Result<Self> {
+    pub fn new(viewport: ViewPort) -> Result<Self> {
         Ok(Self {
             viewport,
             series: Vec::new(),

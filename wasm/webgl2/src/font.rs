@@ -42,17 +42,16 @@ in vec2 tex_coord;
 out vec4 outColor;
 
 void main() {
-    // // 白黒情報を抽出
-    // vec4 tex_color = texture(u_texture, tex_coord);
+    // 白黒情報を抽出
+    vec4 tex_color = texture(u_texture, tex_coord);
 
-    // // 単純表示ではなくなにか処理を掛けているけどわからない
-    // float scale = 1.0 / fwidth(tex_color.r);
-    // float signedDistance = (tex_color.r - 0.5) * scale;
+    // 単純表示ではなくなにか処理を掛けているけどわからない
+    float scale = 1.0 / fwidth(tex_color.r);
+    float signedDistance = (tex_color.r - 0.5) * scale;
 
-    // float color = clamp(signedDistance + 0.5, 0.0, 1.0);
-    // float alpha = clamp(signedDistance + 0.5 + scale * 0.125, 0.0, 1.0);
-    // outColor = vec4(color, color, color, 1) * (alpha + 1.0);
-    outColor = texture(u_texture, tex_coord) + vec4(0.0, 1.0, 0.0, 1.0);
+    float color = clamp(signedDistance + 0.5, 0.0, 1.0);
+    float alpha = clamp(signedDistance + scale * 0.125, 0.0, 1.0);
+    outColor = vec4(color, color, color, alpha);
 }
 "#;
     const LOCATION_POSITION: u32 = 0;
@@ -112,8 +111,15 @@ pub struct TextVertex2d {
     pub uvs: Vec<GlPoint2d>,
     // テキストの標準サイズ
     pub text_pt: f32,
-    // 文字列長
+    // 文字列長の最大値と現在値
     pub capacity: usize,
+    pub len: usize,
+}
+
+impl TextVertex2d {
+    pub fn update_uv(&self, gl: &gl, vbo: &TextVbo) {
+        vbo.uv.update_vertex(gl, &self.uvs);
+    }
 }
 
 /// テキスト描画用のVBO
@@ -131,11 +137,16 @@ pub struct Font {
 }
 
 impl Font {
+    const CHAR_VERTEX_COUNT: usize = 6;
     pub fn new(texture: WebGlTexture, detail: FontTextureDetail) -> Self {
         Self {
             texture: Rc::new(texture),
             detail,
         }
+    }
+
+    pub fn texture(&self) -> &WebGlTexture {
+        self.texture.as_ref()
     }
 
     /// 文字列情報から頂点情報を作成する
@@ -157,48 +168,41 @@ impl Font {
         // 現在の文字の配置位置。中央揃えを想定
         let mut pos_x = -total_advance / 2.;
         // テキストの高さ(改行なしを想定)
-        let pos_y = self.detail.size as f32;
+        let pos_y = self.detail.size as f32 / 2.;
 
-        // p0 --- p1
-        // | \     |
-        // |   \   |
-        // |     \ |
-        // p2 --- p3
+        // (x0,y1) --- (x1,y1)
+        // |         /  |
+        // |     /      |
+        // |  /         |
+        // (x0,y0) --- (x1,y0)
         for c in text.chars() {
             if let Some(ch) = self.detail.characters.get(&c) {
                 // 4つの頂点を作る
                 let x0 = pos_x - ch.origin_x as f32;
-                let y0 = pos_y - ch.origin_y as f32;
+                let y0 = pos_y + ch.origin_y as f32 - ch.height as f32;
                 let x1 = x0 + ch.width as f32;
-                let y1 = y0;
-                let x2 = x0;
-                let y2 = y0 + ch.height as f32;
-                let x3 = x1;
-                let y3 = y2;
+                let y1 = y0 + ch.height as f32;
 
+                positions.push(GlPoint2d::new(x0, y1));
                 positions.push(GlPoint2d::new(x0, y0));
                 positions.push(GlPoint2d::new(x1, y1));
-                positions.push(GlPoint2d::new(x3, y3));
+                positions.push(GlPoint2d::new(x1, y1));
                 positions.push(GlPoint2d::new(x0, y0));
-                positions.push(GlPoint2d::new(x3, y3));
-                positions.push(GlPoint2d::new(x2, y2));
+                positions.push(GlPoint2d::new(x1, y0));
 
                 // UV座標。位置は元の画像の大きさから0-1.0空間にマップされている
+                // 左下が0,0で右上が1,1で、画像のpxとはy軸が逆
                 let u0 = ch.x as f32 / self.detail.width as f32;
-                let v0 = ch.y as f32 / self.detail.height as f32;
+                let v1 = ch.y as f32 / self.detail.height as f32;
                 let u1 = (ch.x + ch.width) as f32 / self.detail.width as f32;
-                let v1 = v0;
-                let u2 = u0;
-                let v2 = (ch.y + ch.height) as f32 / self.detail.height as f32;
-                let u3 = u1;
-                let v3 = v2;
+                let v0 = (ch.y + ch.height) as f32 / self.detail.height as f32;
 
+                uvs.push(GlPoint2d::new(u0, v1));
                 uvs.push(GlPoint2d::new(u0, v0));
                 uvs.push(GlPoint2d::new(u1, v1));
-                uvs.push(GlPoint2d::new(u3, v3));
+                uvs.push(GlPoint2d::new(u1, v1));
                 uvs.push(GlPoint2d::new(u0, v0));
-                uvs.push(GlPoint2d::new(u3, v3));
-                uvs.push(GlPoint2d::new(u2, v2));
+                uvs.push(GlPoint2d::new(u1, v0));
 
                 // 頂点位置を進める
                 pos_x += ch.advance as f32;
@@ -210,12 +214,32 @@ impl Font {
             uvs,
             text_pt: self.detail.size as f32,
             capacity: text.len(),
+            len: text.len(),
         }
     }
 
-    // TODO: Update Charactor
-    // 文字位置や数はそのままに、文字列を更新する
-    // UVだけを更新するのが基本。確保した文字列帳が足りない場合は拡張する
+    fn set_uv(&self, uvs: &mut [GlPoint2d], ch: &Character) {
+        let u0 = ch.x as f32 / self.detail.width as f32;
+        let v1 = ch.y as f32 / self.detail.height as f32;
+        let u1 = (ch.x + ch.width) as f32 / self.detail.width as f32;
+        let v0 = (ch.y + ch.height) as f32 / self.detail.height as f32;
+
+        uvs[0] = GlPoint2d::new(u0, v1);
+        uvs[1] = GlPoint2d::new(u0, v0);
+        uvs[2] = GlPoint2d::new(u1, v1);
+        uvs[3] = GlPoint2d::new(u1, v1);
+        uvs[4] = GlPoint2d::new(u0, v0);
+        uvs[5] = GlPoint2d::new(u1, v0);
+    }
+
+    pub fn update_text(&self, v: &mut TextVertex2d, text: &str) {
+        for (i, c) in text.chars().enumerate() {
+            let uv_index = i * Self::CHAR_VERTEX_COUNT;
+            if let Some(ch) = self.detail.characters.get(&c) {
+                self.set_uv(&mut v.uvs[uv_index..uv_index + Self::CHAR_VERTEX_COUNT], ch);
+            }
+        }
+    }
 }
 
 /// reference from: https://evanw.github.io/font-texture-generator/
@@ -234,6 +258,15 @@ pub struct FontTextureDetail {
     height: u32,
     // 各文字の情報
     characters: fxhash::FxHashMap<char, Character>,
+}
+
+impl FontTextureDetail {
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+    pub fn height(&self) -> u32 {
+        self.height
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

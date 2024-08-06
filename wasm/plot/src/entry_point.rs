@@ -4,7 +4,7 @@ use nalgebra::Vector2;
 use rand::Rng;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use wasm_bindgen::prelude::*;
-use wasm_utils::{animation::PlayStopButton, error::*, info};
+use wasm_utils::{animation::PlayStopButton, error::*};
 use web_sys::{HtmlButtonElement, HtmlCanvasElement};
 use webgl2::{font::TextShader, gl};
 
@@ -27,11 +27,12 @@ pub fn start(
     canvas.set_width(1024);
     canvas.set_height(768);
 
+    let aspect = 1024.0 / 768.0;
     let gl = webgl2::context::get_webgl2_context(&canvas, webgl2::context::COLOR_BLACK)?;
     let playing = Rc::new(RefCell::new(AtomicBool::new(false)));
 
     // 1Chart単位を手で組む
-    let mut chart = Chart::new(&gl, ViewPort::new(0, 768 - 128, 1024, 128))?;
+    let mut chart = Chart::new(ViewPort::new(0, 768 - 128, 1024, 128))?;
     let s1 = chart.add_series(
         &gl,
         PlotParams::new(Duration::from_secs(10), 30, (-10.0, 10.0)),
@@ -78,11 +79,11 @@ pub fn start(
     )?;
 
     let font = webgl2::font_asset::load(&gl)?;
-    let text = font.create_text_vertex("Hello, WebGL Text");
-    info!("text: {:?}", text.uvs);
+    let mut text = font.create_text_vertex("Hello,0000000000");
     let ts = TextShader::new(&gl)?;
 
-    let mat = nalgebra::Matrix3::identity().append_nonuniform_scaling(&Vector2::new(0.002, 0.002));
+    let mat = nalgebra::Matrix3::identity()
+        .append_nonuniform_scaling(&Vector2::new(0.002, 0.002 * aspect));
     let mat: [[f32; 3]; 3] = mat.into();
     let mm = mat.iter().flat_map(|a| *a).collect::<Vec<_>>();
     ts.set_mat(&gl, &mm);
@@ -98,11 +99,14 @@ pub fn start(
 
         let current_time = time as f32 / 1000.0;
         webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
-        gl.viewport(0, 0, 1024, 768);
-        ts.draw(&gl, &tv);
         chart.draw(&gl, current_time);
         c2.draw(&gl, current_time);
         c3.draw(&gl, current_time);
+        // TODO 文字がプロットの下にレンダリングされる理由を特定する
+        gl.viewport(0, 0, 1024, 768);
+        font.update_text(&mut text, &format!("Hello,{}", time as u32));
+        text.update_uv(&gl, &tv);
+        ts.draw(&gl, &tv);
         Ok(())
     });
 
@@ -123,7 +127,7 @@ fn random_walk_chart(
     series_count: u32,
     playing: Rc<RefCell<AtomicBool>>,
 ) -> Result<(Chart, DataChannelMap)> {
-    let mut chart = Chart::new(gl, viewport)?;
+    let mut chart = Chart::new(viewport)?;
     for i in 0..series_count {
         let mut prop = base_prop.clone();
         let rgb = hsv_to_rgb(i as f64 * 360.0 / series_count as f64, 1.0, 1.0);

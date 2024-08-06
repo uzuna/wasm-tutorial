@@ -178,3 +178,92 @@ void main() {
         self.vao.unbind(gl);
     }
 }
+/// 平面を描くデバッグ用シェーダー
+pub struct PlaneShader {
+    program: Program,
+    window_mat: WebGlUniformLocation,
+    vao: Vao,
+}
+
+impl PlaneShader {
+    // x方向は時間情報なので、表示範囲の指定にwindow_matを使う
+    const VERT: &'static str = r#"#version 300 es
+layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 coord;
+
+uniform mat3 window_mat;
+
+out vec2 tex_coord;
+
+void main() {
+    gl_Position = vec4((window_mat * vec3(position, 1.0)).xy, 0.0, 1.0);
+    // gl_Position = vec4(position, 0.0, 1.0);
+    tex_coord = coord;
+}
+"#;
+
+    const FRAG: &'static str = r#"#version 300 es
+precision mediump float;
+uniform sampler2D u_texture;
+in vec2 tex_coord;
+
+out vec4 fragmentColor;
+
+void main() {
+    fragmentColor = texture(u_texture, tex_coord);
+}
+"#;
+
+    const LOCATION_POSITION: u32 = 0;
+    const LOCATION_COORD: u32 = 1;
+
+    const RECT: [GlPoint2d; 6] = [
+        GlPoint2d::new(-1.0, 1.0),
+        GlPoint2d::new(-1.0, -1.0),
+        GlPoint2d::new(1.0, 1.0),
+        GlPoint2d::new(1.0, 1.0),
+        GlPoint2d::new(-1.0, -1.0),
+        GlPoint2d::new(1.0, -1.0),
+    ];
+
+    const RECT_COORD: [GlPoint2d; 6] = [
+        GlPoint2d::new(0.0, 0.0),
+        GlPoint2d::new(0.0, 1.0),
+        GlPoint2d::new(1.0, 0.0),
+        GlPoint2d::new(1.0, 0.0),
+        GlPoint2d::new(0.0, 1.0),
+        GlPoint2d::new(1.0, 1.0),
+    ];
+
+    pub fn new(gl: &gl) -> Result<Self> {
+        let program = Program::new(gl, Self::VERT, Self::FRAG)?;
+
+        let vao = Vao::new(gl)?;
+        let _vertex = VertexVbo::new(gl, &Self::RECT, Self::LOCATION_POSITION)?;
+        let _coord = VertexVbo::new(gl, &Self::RECT_COORD, Self::LOCATION_COORD)?;
+        vao.unbind(gl);
+
+        let window_mat = uniform_location(gl, &program, "window_mat")?;
+        Ok(Self {
+            program,
+            window_mat,
+            vao,
+        })
+    }
+
+    pub fn set_mat(&self, gl: &gl, mat: Matrix3<f32>) {
+        self.program.use_program(gl);
+        let ma: [[f32; 3]; 3] = mat.into();
+        let mm = ma.iter().flat_map(|a| *a).collect::<Vec<_>>();
+        gl.uniform_matrix3fv_with_f32_array(Some(&self.window_mat), false, &mm);
+    }
+
+    pub fn draw(&self, gl: &gl, texture: &web_sys::WebGlTexture) {
+        self.program.use_program(gl);
+        gl.active_texture(gl::TEXTURE0);
+        gl.bind_texture(gl::TEXTURE_2D, Some(texture));
+        self.vao.bind(gl);
+        gl.draw_arrays(gl::TRIANGLES, 0, 6);
+        self.vao.unbind(gl);
+    }
+}

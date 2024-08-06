@@ -20,7 +20,7 @@ pub fn get_webgl2_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> Result
     // アルファブレンドを有効にする
     gl.enable(gl::BLEND);
     // アルファブレンドは、srcのアルファを使ってdstの値を割り引いてブレンドする
-    gl.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+    gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ONE);
 
     gl_clear_color(&gl, color);
     gl.clear_depth(1.0);

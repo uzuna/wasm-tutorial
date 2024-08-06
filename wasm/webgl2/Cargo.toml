@@ -10,7 +10,7 @@ rust-version.workspace = true
 vertex = ["web-sys/WebGlBuffer"]
 context = ["web-sys/HtmlCanvasElement"]
 font = ["dep:fxhash", "dep:serde", "web-sys/WebGlTexture", "vertex"]
-font-asset = ["font", "dep:serde_json"]
+font-asset = ["font", "dep:serde_json", "web-sys/WebglCompressedTextureS3tc"]
 
 [dependencies]
 bytemuck = { version = "1.16.1", features = ["derive"] }
