@@ -4,10 +4,26 @@ use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as gl};
 
 pub const COLOR_BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebGL2ContextOption {
+    premultiplied_alpha: bool,
+    alpha: bool,
+}
+
+impl WebGL2ContextOption {
+    const DEFAULT: Self = Self {
+        premultiplied_alpha: false,
+        alpha: false,
+    };
+}
+
 pub fn get_webgl2_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> Result<gl> {
     use wasm_bindgen::JsCast;
+    let options = serde_wasm_bindgen::to_value(&WebGL2ContextOption::DEFAULT)?;
+
     let gl = canvas
-        .get_context("webgl2")
+        .get_context_with_context_options("webgl2", &options)
         .map_err(|_| JsError::new("Failed to get_context(webgl2)"))?
         .ok_or(JsError::new("Failed to get WebGl2RenderingContext Object"))?
         .dyn_into::<gl>()

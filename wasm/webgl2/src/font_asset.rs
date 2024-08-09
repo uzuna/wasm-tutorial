@@ -1,6 +1,7 @@
 //! フォントデータの埋め込み
 
 use wasm_bindgen::JsError;
+use web_sys::WebGlTexture;
 
 use crate::{
     error::*,
@@ -56,4 +57,27 @@ pub fn load(gl: &gl) -> Result<Font> {
     .expect("Failed to set texture image");
 
     Ok(Font::new(texture, detail))
+}
+
+/// 1x1pxの色のテクスチャを作成する
+pub fn color_texture(gl: &gl, color: [u8; 4]) -> WebGlTexture {
+    let texture = gl.create_texture().expect("Failed to create texture");
+    gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+    gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
+        gl::TEXTURE_2D,
+        0,
+        gl::RGBA as i32,
+        1,
+        1,
+        0,
+        gl::RGBA,
+        gl::UNSIGNED_BYTE,
+        Some(&color),
+    )
+    .expect("Failed to set texture image");
+    texture
 }

@@ -6,11 +6,11 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use wasm_bindgen::prelude::*;
 use wasm_utils::{animation::PlayStopButton, error::*};
 use web_sys::{HtmlButtonElement, HtmlCanvasElement};
-use webgl2::{font::TextShader, gl};
+use webgl2::{font::TextShader, font_asset::color_texture, gl};
 
 use crate::{
     plot::{Chart, ViewPort},
-    shader::PlotParams,
+    shader::{PlaneShader, PlotParams},
 };
 
 #[wasm_bindgen(start)]
