@@ -7,7 +7,7 @@ use web_sys::{HtmlCanvasElement, WebGlProgram, WebGlShader, WebGlUniformLocation
 pub fn get_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> wasm_utils::error::Result<gl> {
     use wasm_bindgen::JsCast;
     let gl = canvas
-        .get_context("webgl")
+        .get_context("experimental-webgl")
         .map_err(|_| JsError::new("Failed to get_context(webgl)"))?
         .ok_or(JsError::new("Failed to get WebGlRenderingContext Object"))?
         .dyn_into::<gl>()
@@ -15,12 +15,10 @@ pub fn get_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> wasm_utils::e
 
     // 手前にあるものだけを描画して負荷を下げる
     gl.enable(gl::DEPTH_TEST);
-    // テクスチャの表面だけを描画する
-    gl.enable(gl::CULL_FACE);
     // アルファブレンドを有効にする
     gl.enable(gl::BLEND);
     // アルファブレンドは、srcのアルファを使ってdstの値を割り引いてブレンドする
-    gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ONE);
+    // gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ONE);
 
     gl.clear_color(color[0], color[1], color[2], color[3]);
     gl.clear_depth(1.0);
@@ -241,6 +239,10 @@ impl Program {
 
     pub fn program(&self) -> &WebGlProgram {
         &self.program
+    }
+
+    pub fn into_program(self) -> WebGlProgram {
+        self.program
     }
 
     pub fn delete(&self, gl: &gl) {

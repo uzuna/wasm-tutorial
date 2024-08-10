@@ -19,13 +19,13 @@ pub struct SimpleShader {
 }
 
 impl SimpleShader {
-    const VERT: &'static str = r#"attribute vec2 position;
+    pub const VERT: &'static str = r#"attribute vec2 position;
 void main(void){
 	gl_Position = vec4(position.xy, 0.0, 1.0);
 }
 "#;
 
-    const FRAG: &'static str = r#"precision mediump float;
+    pub const FRAG: &'static str = r#"precision mediump float;
 
 uniform vec4 u_color;
 
@@ -34,11 +34,11 @@ void main(void){
 }
 "#;
 
-    pub fn new(gl: Rc<gl>) -> Result<Self> {
+    pub fn new(gl: Rc<gl>, data: &[f32]) -> Result<Self> {
         let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
         program.use_program(&gl);
         let color = uniform_location(&gl, &program, "u_color")?;
-        let position = gl.get_attrib_location(&program.program(), "position") as u32;
+        let position = gl.get_attrib_location(program.program(), "position") as u32;
         info!(
             "get_attrib_location = {}, error: {}",
             position,
@@ -50,16 +50,12 @@ void main(void){
         VertexObject::buffer_data(
             &gl,
             gl::ARRAY_BUFFER,
-            &[
-                -1.0, -1.0, 
-                -1.0, 1.0, 
-                1.0, -1.0, 
-                1.0, 1.0],
+            data,
             gl::STATIC_DRAW,
         );
 
         info!("buffer_data {}", gl.get_error());
-        
+
         gl.enable_vertex_attrib_array(position);
         info!("enable_vertex_attrib_array {}", gl.get_error());
 
@@ -91,7 +87,7 @@ void main(void){
 
     pub fn draw(&self) {
         self.use_program();
-        self.gl.draw_arrays(gl::TRIANGLES, 0, 4);
+        self.gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
         info!("draw_arrays {}", self.gl.get_error());
     }
 }
@@ -204,7 +200,7 @@ impl PlaneUniforms {
 
     pub fn set_mvp(&self, mat: nalgebra::Matrix4<f32>) {
         self.gl
-            .uniform_matrix4fv_with_f32_array(Some(&self.mvp_matrix), false, &mat.as_slice());
+            .uniform_matrix4fv_with_f32_array(Some(&self.mvp_matrix), false, mat.as_slice());
     }
 
     pub fn set_vertex_alpha(&self, vertex_alpha: f32) {
@@ -248,9 +244,9 @@ impl PlaneAttribute {
 
     fn set_attribute_inner<P: GlPoint>(&self, gl: &gl, attr: u32, buf: &WebGlBuffer) {
         // バッファをバインド -> Attirbute有効化 -> Attributeにバインドしているバッファ内容を登録
-        gl.bind_buffer(gl::ARRAY_BUFFER, Some(&buf));
+        gl.bind_buffer(gl::ARRAY_BUFFER, Some(buf));
         gl.enable_vertex_attrib_array(attr);
-        gl.vertex_attrib_pointer_with_i32(attr, P::size() as i32, gl::FLOAT, false, 0, 0);
+        gl.vertex_attrib_pointer_with_i32(attr, P::size(), gl::FLOAT, false, 0, 0);
         info!("set_attribute_inner {}", gl.get_error());
     }
 }
@@ -335,7 +331,7 @@ impl VertexObject {
         self.index_count = Self::RECT_INDEX.len() as i32;
     }
 
-    fn buffer_data(gl: &gl, target: u32, data: &[f32], usage: u32) {
+    pub fn buffer_data(gl: &gl, target: u32, data: &[f32], usage: u32) {
         unsafe {
             let view = js_sys::Float32Array::view(data);
             gl.buffer_data_with_array_buffer_view(target, &view, usage);
