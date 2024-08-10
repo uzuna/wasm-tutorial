@@ -24,11 +24,13 @@ js-sys.workspace = true
 workspace = true
 features = [
     "HtmlCanvasElement",
-    "WebGlUniformLocation",
-    "WebGlRenderingContext",
-    "WebGlShader",
-    "WebGlProgram",
+    "WebGl2RenderingContext",
     "WebGlBuffer",
+    "WebGlProgram",
+    "WebGlShader",
+    "WebGlTexture",
+    "WebGlUniformLocation",
+    "WebGlVertexArrayObject",
 ]
 
 [dev-dependencies]

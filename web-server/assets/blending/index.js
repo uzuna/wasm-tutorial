@@ -1,4 +1,4 @@
-import init, { start, draw_rs, clear_canvas_rs, set_uniform_color_rs, bind_buffer_rs,create_vbo_rs, get_attr_location_rs,setup_depth_test_rs,create_program_rs, get_context_rs } from "./pkg/blending.js";
+import init, { start, draw_rs, clear_canvas_rs, set_uniform_color_rs, bind_buffer_rs,create_vbo_rs, get_attr_location_rs,setup_depth_test_rs,create_program_rs, get_context_rs, start_webgl2_gradiation } from "./pkg/blending.js";
 
 // bundlerを伴わない場合はinitが必要
 // https://rustwasm.github.io/docs/wasm-bindgen/examples/without-a-bundler.html
@@ -7,73 +7,171 @@ await init();
 const canvas_webgl = document.getElementById("webgl-canvas");
 const context = start(canvas_webgl);
 
+const context2 = start_webgl2_gradiation(document.getElementById("webgl2-canvas"));
+
 const use_rust = false;
 
 const c = document.getElementById("webgl-js");
 c.width = 500;
 c.height = 300;
 
+
 // webglコンテキストを取得
 
 if (use_rust) {
     var ctx = get_context_rs(c);
 } else {
-    var ctx = c.getContext('webgl') || c.getContext('experimental-webgl');
+    var ctx = c.getContext('webgl2')
     ctx.enable(ctx.BLEND);
     ctx.blendFunc(ctx.SRC_ALPHA, ctx.ONE_MINUS_SRC_ALPHA);
 }
 
-if (use_rust) {
-    var prg = create_program_rs(ctx);
-}else {
-    var v_shader = create_shader(ctx, 'vs');
-    var f_shader = create_shader(ctx, 'fs');
-    var prg = create_program(ctx, v_shader, f_shader);
-}
+simple_draw(ctx, use_rust);
 
 
-if (use_rust) {
-    var attr = get_attr_location_rs(ctx, prg, "position");
-}else {
-    var attr = get_attr_location(ctx, prg, "position");
-}
-
-
-// 深度テストを有効にする
-if (use_rust) {
-    setup_depth_test_rs(ctx);
+const c2 = document.getElementById("webgl2-js");
+c2.width = 500;
+c2.height = 300;
+if (false) {
+    var ctx2 = get_context_rs(c2);
 } else {
-    setup_depth_test(ctx);
+    var ctx2 = c2.getContext('webgl2')
+    ctx2.enable(ctx2.BLEND);
+    ctx2.blendFunc(ctx2.SRC_ALPHA, ctx2.ONE_MINUS_SRC_ALPHA);
 }
 
-// canvasを初期化
-if (use_rust) {
-    clear_canvas_rs(ctx);
-} else {
-    clear_canvas(ctx);
+texture_draw(ctx2, use_rust);
+
+function simple_draw(ctx, use_rust) {
+    if (use_rust) {
+        var prg = create_program_rs(ctx);
+    }else {
+        var v_shader = create_shader(ctx, 'vs_simple');
+        var f_shader = create_shader(ctx, 'fs_simple');
+        var prg = create_program(ctx, v_shader, f_shader);
+    }
+    
+    if (use_rust) {
+        var attr = get_attr_location_rs(ctx, prg, "position");
+    }else {
+        var attr = get_attr_location(ctx, prg, "position");
+    }
+    
+    
+    // 深度テストを有効にする
+    if (use_rust) {
+        setup_depth_test_rs(ctx);
+    } else {
+        setup_depth_test(ctx);
+    }
+    
+    // canvasを初期化
+    if (use_rust) {
+        clear_canvas_rs(ctx);
+    } else {
+        clear_canvas(ctx);
+    }
+    
+    
+    // 頂点の位置
+    var position_right = [
+        -1.0,  0.5,
+        0.5,  0.5,
+        -1.0, -1.0,
+        0.5, -1.0
+    ];
+    
+    var position_left = [
+        -0.5,  1.0,
+        1.0,  1.0,
+        -0.5, -0.5,
+        1.0, -0.5
+    ];
+    
+    draw_rect(ctx, prg, attr, position_right, [1.0, 0.0, 0.0, 0.5]);
+    draw_rect(ctx, prg, attr, position_left, [0.0, 1.0, 0.0, 0.5]);   
 }
 
+function texture_draw(gl, use_rust) {
+    if (use_rust) {
+        var prg = create_program_rs(gl);
+    }else {
+        var v_shader = create_shader(gl, 'vs_coord');
+        var f_shader = create_shader(gl, 'fs_coord');
+        var prg = create_program(gl, v_shader, f_shader);
+    }
+    clear_canvas(gl);
 
-// 頂点の位置
-var position_right = [
-    -1.0,  0.5,
-    0.5,  0.5,
-    -1.0, -1.0,
-    0.5, -1.0
-];
+    let mat = [
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0
+    ];
+    set_uniform_window_mat(gl, prg, mat);
+    
+    // VAO
+    var attr_locs = [
+        get_attr_location(gl, prg, "position"), 
+        get_attr_location(gl, prg, "coord")
+    ];
+    let attr_strs = [2, 2];
+    let vbos = [
+        [
+            -1.0,  0.5,
+            0.5,  0.5,
+            -1.0, -1.0,
+            0.5, -1.0
+        ],
+        [
+            0.0, 1.0,
+            1.0, 1.0,
+            0.0, 0.0,
+            1.0, 0.0
+        ]
+    ];
+    var vao = create_vao(gl, vbos, attr_locs, attr_strs);
 
-var position_left = [
-    -0.5,  1.0,
-    1.0,  1.0,
-    -0.5, -0.5,
-    1.0, -0.5
-];
+    let texture = color_texture(gl, [255, 0, 0, 128]);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.bindVertexArray(vao);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-draw_rect(ctx, position_right, [1.0, 0.0, 0.0, 0.5]);
-draw_rect(ctx, position_left, [0.0, 1.0, 0.0, 0.5]);
+    let texture2 = color_texture(gl, [0, 255, 0, 128]);
+    gl.bindTexture(gl.TEXTURE_2D, texture2);
+    let vbos2 = [
+        [
+            -0.5,  1.0,
+            1.0,  1.0,
+            -0.5, -0.5,
+            1.0, -0.5
+        ],
+        [
+            0.0, 1.0,
+            1.0, 1.0,
+            0.0, 0.0,
+            1.0, 0.0
+        ]
+    ];
+    var vao2 = create_vao(gl, vbos2, attr_locs, attr_strs);
+    gl.bindVertexArray(vao2);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
+}
 
-function draw_rect(ctx, position, color) {
+// return WebGL Texture
+function color_texture(gl, color) {
+    var tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(color));
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return tex;
+}
+
+function draw_rect(ctx, prg, attr, position, color) {
 
     // ここが非互換原因
     if (use_rust) {
@@ -135,6 +233,12 @@ function setup_depth_test(gl){
     gl.depthFunc(gl.LEQUAL);
 }
 
+function set_uniform_window_mat(gl, prg, mat){
+    let u = gl.getUniformLocation(prg, 'window_mat');
+    gl.uniformMatrix3fv(u, false, new Float32Array(mat));
+}
+
+
 function set_uniform_color(gl, prg, color){
     gl.uniform4fv(gl.getUniformLocation(prg, 'u_color'), color);
 }
@@ -157,6 +261,24 @@ function create_vbo(gl, data){
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     return vbo;
 }
+
+// return VAO
+function create_vao(gl, vbos, attr_locs, attr_strs){
+    var i;
+    var vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+
+    for(i in vbos) {
+        var vbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vbos[i]), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(attr_locs[i]);
+        gl.vertexAttribPointer(attr_locs[i], attr_strs[i], gl.FLOAT, false, 0, 0);
+    }
+    gl.bindVertexArray(null);
+    return vao;
+}
+
 
 // シェーダを生成する関数
 function create_shader(gl, id){

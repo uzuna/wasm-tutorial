@@ -5,8 +5,8 @@ use wasm_utils::{error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
 
 use crate::{
-    shader::{SimpleShader, VertexObject},
-    webgl::{gl, Program},
+    shader::{color_texture, SimpleShader, TextureShader, VertexObject},
+    webgl::{gl, GlPoint2d, Program},
 };
 
 #[wasm_bindgen(start)]
@@ -55,7 +55,57 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     // u.set_mvp(mvp);
     // s.draw(&v);
 
-    // info!("gl error {}", gl.get_error());
+    info!("gl error {}", gl.get_error());
+
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn start_webgl2_gradiation(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
+    canvas.set_width(500);
+    canvas.set_height(300);
+    // グラデーションシェーダー
+    let gl = crate::webgl::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
+    let gl = Rc::new(gl);
+
+    // アルファブレンドを有効にする
+    gl.enable(gl::BLEND);
+    gl.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+
+    // 深度テストを有効にする
+    gl.enable(gl::DEPTH_TEST);
+    gl.depth_func(gl::LEQUAL);
+
+    // 画面クリア
+    gl.clear_color(0.0, 0.0, 0.75, 1.0);
+    gl.clear_depth(1.0);
+    gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+
+    let rect_left = [
+        GlPoint2d::new(-1.0, 0.5),
+        GlPoint2d::new(0.5, 0.5),
+        GlPoint2d::new(-1.0, -1.0),
+        GlPoint2d::new(0.5, -1.0),
+    ];
+
+    let t = color_texture(&gl, [255, 0, 0, 128]);
+    let s = TextureShader::new(gl.clone())?;
+    let vao = s.create_vao(&rect_left)?;
+    gl.bind_texture(gl::TEXTURE_2D, Some(&t));
+    s.draw(&vao);
+
+    let rect_left = [
+        GlPoint2d::new(-0.5, 1.0),
+        GlPoint2d::new(1.0, 1.0),
+        GlPoint2d::new(-0.5, -0.5),
+        GlPoint2d::new(1.0, -0.5),
+    ];
+
+    let t = color_texture(&gl, [0, 255, 0, 128]);
+    let s = TextureShader::new(gl.clone())?;
+    let vao = s.create_vao(&rect_left)?;
+    gl.bind_texture(gl::TEXTURE_2D, Some(&t));
+    s.draw(&vao);
 
     Ok(())
 }

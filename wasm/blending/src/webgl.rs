@@ -1,13 +1,13 @@
 use bytemuck::{Pod, Zeroable};
 use wasm_bindgen::JsError;
 use wasm_utils::error::*;
-pub use web_sys::WebGlRenderingContext as gl;
+pub use web_sys::WebGl2RenderingContext as gl;
 use web_sys::{HtmlCanvasElement, WebGlProgram, WebGlShader, WebGlUniformLocation};
 
 pub fn get_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> wasm_utils::error::Result<gl> {
     use wasm_bindgen::JsCast;
     let gl = canvas
-        .get_context("experimental-webgl")
+        .get_context("webgl2")
         .map_err(|_| JsError::new("Failed to get_context(webgl)"))?
         .ok_or(JsError::new("Failed to get WebGlRenderingContext Object"))?
         .dyn_into::<gl>()
