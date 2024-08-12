@@ -1,4 +1,4 @@
-import init, { start, draw_rs, clear_canvas_rs, set_uniform_color_rs, bind_buffer_rs,create_vbo_rs, get_attr_location_rs,setup_depth_test_rs,create_program_rs, get_context_rs, start_webgl2_gradiation, GlBlendMode, create_blendmode_option } from "./pkg/blending.js";
+import init, { start, draw_rs, clear_canvas_rs, set_uniform_color_rs, bind_buffer_rs,create_vbo_rs, get_attr_location_rs,setup_depth_test_rs,create_program_rs, get_context_rs, start_webgl2_texture, create_blendmode_option } from "./pkg/blending.js";
 
 // bundlerを伴わない場合はinitが必要
 // https://rustwasm.github.io/docs/wasm-bindgen/examples/without-a-bundler.html
@@ -7,7 +7,7 @@ await init();
 const canvas_webgl = document.getElementById("webgl-canvas");
 const context = start(canvas_webgl);
 
-const context2 = start_webgl2_gradiation(document.getElementById("webgl2-canvas"));
+const context2 = start_webgl2_texture(document.getElementById("webgl2-canvas"));
 
 const use_rust = false;
 
@@ -315,4 +315,5 @@ create_blendmode_option(blend_select);
 blend_select.addEventListener("change", (e) => {
     console.log("blend select ", e.target.value);
     context.set_blend_mode(e.target.value);
+    context2.set_blend_mode(e.target.value);
 });

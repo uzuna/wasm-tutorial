@@ -215,22 +215,21 @@ impl VertexObject {
 pub struct TextureShader {
     gl: Rc<gl>,
     program: Program,
-    uniform: GradUniform,
+    uniform: TextureUniform,
 }
 
 impl TextureShader {
-    // x方向は時間情報なので、表示範囲の指定にwindow_matを使う
     const VERT: &'static str = r#"#version 300 es
 
 layout(location = 0) in vec2 position;
 layout(location = 1) in vec2 coord;
 
-uniform mat3 window_mat;
+uniform mat3 local_mat;
 
 out vec2 tex_coord;
 
 void main() {
-    gl_Position = vec4((window_mat * vec3(position, 1.0)).xy, 0.0, 1.0);
+    gl_Position = vec4((local_mat * vec3(position, 1.0)).xy, 0.0, 1.0);
     tex_coord = coord;
 }
 "#;
@@ -250,7 +249,7 @@ void main() {
     pub fn new(gl: Rc<gl>) -> Result<Self> {
         let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
         program.use_program(&gl);
-        let uniform = GradUniform::new(gl.clone(), &program)?;
+        let uniform = TextureUniform::new(gl.clone(), &program)?;
         uniform.init();
         Ok(Self {
             gl,
@@ -259,34 +258,38 @@ void main() {
         })
     }
 
-    pub fn uniform(&self) -> &GradUniform {
+    pub fn uniform(&self) -> &TextureUniform {
         &self.uniform
     }
 
-    pub fn create_vao(&self, vert: &[GlPoint2d; 4]) -> Result<GradVao> {
+    pub fn create_vao(&self, vert: &[GlPoint2d; 4]) -> Result<TextureVao> {
         let locs = ["position", "coord"]
             .map(|s| self.gl.get_attrib_location(self.program.program(), s) as u32);
-        GradVao::new(self.gl.clone(), vert, locs)
+        TextureVao::new(self.gl.clone(), vert, locs)
     }
 
-    pub fn draw(&self, vao: &GradVao) {
+    pub fn draw(&self, vao: &TextureVao) {
         self.program.use_program(&self.gl);
         self.gl.bind_vertex_array(Some(&vao.vao));
         self.gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
     }
 }
 
-pub struct GradUniform {
+pub struct TextureUniform {
     gl: Rc<gl>,
-    mat: WebGlUniformLocation,
+    local_mat: WebGlUniformLocation,
     texture: WebGlUniformLocation,
 }
 
-impl GradUniform {
+impl TextureUniform {
     pub fn new(gl: Rc<gl>, program: &Program) -> Result<Self> {
-        let mat = uniform_location(&gl, program, "window_mat")?;
+        let local_mat = uniform_location(&gl, program, "local_mat")?;
         let texture = uniform_location(&gl, program, "u_texture")?;
-        Ok(Self { gl, mat, texture })
+        Ok(Self {
+            gl,
+            local_mat,
+            texture,
+        })
     }
 
     pub fn init(&self) {
@@ -296,7 +299,7 @@ impl GradUniform {
 
     pub fn set_mat(&self, mat: nalgebra::Matrix3<f32>) {
         self.gl
-            .uniform_matrix3fv_with_f32_array(Some(&self.mat), false, mat.as_slice());
+            .uniform_matrix3fv_with_f32_array(Some(&self.local_mat), false, mat.as_slice());
     }
 
     pub fn set_texture(&self, texture: i32) {
@@ -304,14 +307,14 @@ impl GradUniform {
     }
 }
 
-pub struct GradVao {
+pub struct TextureVao {
     gl: Rc<gl>,
     vao: WebGlVertexArrayObject,
     vertex: WebGlBuffer,
     coord: WebGlBuffer,
 }
 
-impl GradVao {
+impl TextureVao {
     const VERT: [GlPoint2d; 4] = [
         GlPoint2d::new(-1.0, 1.0),
         GlPoint2d::new(1.0, 1.0),

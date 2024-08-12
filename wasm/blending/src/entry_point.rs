@@ -5,7 +5,7 @@ use wasm_bindgen::{convert::IntoWasmAbi, prelude::*};
 use wasm_utils::{animation::AnimationLoop, error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
 use webgl2::{
-    blend::BlendMode, context::gl_clear_color, gl, vertex::buffer_data_f32, GlPoint2d, Program,
+    blend::BlendMode, context::gl_clear_color, gl, vertex::buffer_data_f32, Program,
 };
 
 use crate::shader::{color_texture, SingleColorShaderGl1, TextureShader};
@@ -180,40 +180,65 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<GlContext, JsValu
 }
 
 #[wasm_bindgen]
-pub fn start_webgl2_gradiation(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
-    canvas.set_width(500);
-    canvas.set_height(300);
+pub fn start_webgl2_texture(canvas: HtmlCanvasElement) -> std::result::Result<GlContext, JsValue> {
+    let width = 500;
+    let height = 300;
+    canvas.set_width(width);
+    canvas.set_height(height);
+    let local_mat = LocalMat::new(width as f32 / height as f32);
 
     let gl = webgl2::context::get_context(&canvas, BG_COLOR)?;
     let gl = Rc::new(gl);
-
-    let rect_left = [
-        GlPoint2d::new(-1.0, 0.5),
-        GlPoint2d::new(0.5, 0.5),
-        GlPoint2d::new(-1.0, -1.0),
-        GlPoint2d::new(0.5, -1.0),
-    ];
-
-    let t = color_texture(&gl, [255, 0, 0, 128]);
     let s = TextureShader::new(gl.clone())?;
-    let vao = s.create_vao(&rect_left)?;
-    gl.bind_texture(gl::TEXTURE_2D, Some(&t));
+
+    let r = SingleColorShaderGl1::UNIT_RECT;
+    let vao = s.create_vao(&r)?;
+
+    let t_r = color_texture(&gl, [255, 0, 0, 128]);
+    let t_g = color_texture(&gl, [0, 255, 0, 128]);
+    let t_b = color_texture(&gl, [0, 0, 255, 255]);
+
+    let u = s.uniform();
+
+    u.set_mat(Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1.0, 0.1)));
+    gl.bind_texture(gl::TEXTURE_2D, Some(&t_b));
     s.draw(&vao);
 
-    let rect_left = [
-        GlPoint2d::new(-0.5, 1.0),
-        GlPoint2d::new(1.0, 1.0),
-        GlPoint2d::new(-0.5, -0.5),
-        GlPoint2d::new(1.0, -0.5),
-    ];
-
-    let t = color_texture(&gl, [0, 255, 0, 128]);
-    let s = TextureShader::new(gl.clone())?;
-    let vao = s.create_vao(&rect_left)?;
-    gl.bind_texture(gl::TEXTURE_2D, Some(&t));
+    u.set_mat(local_mat.with_translation(-0.5, -0.5));
+    gl.bind_texture(gl::TEXTURE_2D, Some(&t_r));
     s.draw(&vao);
 
-    Ok(())
+    u.set_mat(local_mat.with_translation(0.5, 0.5));
+    gl.bind_texture(gl::TEXTURE_2D, Some(&t_g));
+    s.draw(&vao);
+
+    let ctx = GlContext::new(gl.clone(), BlendMode::Alpha);
+    let ctx_clone = ctx.clone();
+
+    let mut a = AnimationLoop::new(move |_| {
+        let u = s.uniform();
+
+        // 背景色を描画。Canvasの影響を可視化するために青線をAlphaブレンドで描画
+        BlendMode::Alpha.enable(&gl);
+        gl_clear_color(&gl, BG_COLOR);
+        u.set_mat(Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1.0, 0.1)));
+        gl.bind_texture(gl::TEXTURE_2D, Some(&t_b));
+        s.draw(&vao);
+
+        ctx_clone.blend.borrow().enable(&gl);
+        u.set_mat(local_mat.with_translation(-0.5, -0.5));
+        gl.bind_texture(gl::TEXTURE_2D, Some(&t_r));
+        s.draw(&vao);
+
+        u.set_mat(local_mat.with_translation(0.5, 0.5));
+        gl.bind_texture(gl::TEXTURE_2D, Some(&t_g));
+        s.draw(&vao);
+        Ok(())
+    });
+    a.start();
+    a.forget();
+
+    Ok(ctx)
 }
 
 #[wasm_bindgen]

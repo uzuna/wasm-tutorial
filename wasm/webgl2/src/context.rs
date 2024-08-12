@@ -29,7 +29,7 @@ impl WebGL2ContextOption {
         premultiplied_alpha: false,
         // バックバッファがアルファを含む場合、Canvasの色がでてしまうため、アルファを無効にする
         // ONE_MINUS_DST_COLORなどDSTを使うブレンドをすると、アルファを無視して合成してしまうので注意
-        alpha: false,
+        alpha: true,
         antialias: true,
         depth: true,
         stencil: true,
