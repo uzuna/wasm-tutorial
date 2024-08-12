@@ -3,7 +3,9 @@ use wasm_bindgen::JsError;
 pub use web_sys::WebGl2RenderingContext as gl;
 use web_sys::{WebGlProgram, WebGlShader, WebGlUniformLocation};
 
+pub mod blend;
 pub mod error;
+
 #[cfg(feature = "vertex")]
 pub mod vertex;
 

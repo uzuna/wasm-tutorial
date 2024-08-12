@@ -25,6 +25,7 @@ webgl2 = { workspace = true, features = ["vertex", "context", "font-asset"] }
 workspace = true
 features = [
     "HtmlCanvasElement",
+    "HtmlSelectElement",
     "WebGl2RenderingContext",
     "WebGlBuffer",
     "WebGlProgram",

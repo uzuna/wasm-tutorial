@@ -1,10 +1,11 @@
-use crate::error::Result;
+use crate::{blend::BlendMode, error::Result};
 use wasm_bindgen::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as gl};
 
 pub const COLOR_BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
 /// refer: https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/getContext
+/// jsでの定義似合わせtえcamelCaseで定義
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WebGL2ContextOption {
@@ -24,11 +25,14 @@ struct WebGL2ContextOption {
 
 impl WebGL2ContextOption {
     const DEFAULT: Self = Self {
-        premultiplied_alpha: true,
-        alpha: true,
+        // alphaを保持してほしいのでfalse
+        premultiplied_alpha: false,
+        // バックバッファがアルファを含む場合、Canvasの色がでてしまうため、アルファを無効にする
+        // ONE_MINUS_DST_COLORなどDSTを使うブレンドをすると、アルファを無視して合成してしまうので注意
+        alpha: false,
         antialias: true,
         depth: true,
-        stencil: false,
+        stencil: true,
     };
 }
 
@@ -51,9 +55,7 @@ pub fn get_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> Result<gl> {
     // テクスチャの表面だけを描画する
     // gl.enable(gl::CULL_FACE);
     // アルファブレンドを有効にする
-    gl.enable(gl::BLEND);
-    // アルファブレンドは、srcのアルファを使ってdstの値を割り引いてブレンドする
-    gl.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+    BlendMode::Alpha.enable(&gl);
 
     gl_clear_color(&gl, color);
     gl.clear_depth(1.0);

@@ -1,19 +1,103 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
-use nalgebra::{ComplexField, Matrix3, Vector2};
-use wasm_bindgen::prelude::*;
+use nalgebra::{Matrix3, Vector2};
+use wasm_bindgen::{convert::IntoWasmAbi, prelude::*};
 use wasm_utils::{animation::AnimationLoop, error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
-use webgl2::{context::gl_clear_color, gl, vertex::buffer_data_f32, GlPoint2d, Program};
+use webgl2::{
+    blend::BlendMode, context::gl_clear_color, gl, vertex::buffer_data_f32, GlPoint2d, Program,
+};
 
 use crate::shader::{color_texture, SingleColorShaderGl1, TextureShader};
 
-const BG_COLOR: [f32; 4] = [0.0, 0.0, 0.75, 1.0];
+const BG_COLOR: [f32; 4] = [0.0, 0.2, 0.2, 1.0];
 
 #[wasm_bindgen(start)]
 pub fn init() -> Result<()> {
     wasm_utils::panic::set_panic_hook();
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+#[wasm_bindgen]
+pub enum GlBlendMode {
+    Alpha,
+    Add,
+    Sub,
+    Mul,
+    Screen,
+    Lighten,
+    Darken,
+}
+
+impl From<GlBlendMode> for BlendMode {
+    fn from(val: GlBlendMode) -> Self {
+        match val {
+            GlBlendMode::Alpha => BlendMode::Alpha,
+            GlBlendMode::Add => BlendMode::Add,
+            GlBlendMode::Sub => BlendMode::Sub,
+            GlBlendMode::Mul => BlendMode::Mul,
+            GlBlendMode::Screen => BlendMode::Screen,
+            GlBlendMode::Lighten => BlendMode::Lighten,
+            GlBlendMode::Darken => BlendMode::Darken,
+        }
+    }
+}
+
+impl GlBlendMode {
+    const VARIABLES: &'static [Self] = &[
+        GlBlendMode::Alpha,
+        GlBlendMode::Add,
+        GlBlendMode::Sub,
+        GlBlendMode::Mul,
+        GlBlendMode::Screen,
+        GlBlendMode::Lighten,
+        GlBlendMode::Darken,
+    ];
+}
+
+#[wasm_bindgen]
+pub fn create_blendmode_option(select_element: web_sys::HtmlSelectElement) -> Result<()> {
+    for mode in GlBlendMode::VARIABLES {
+        let option = web_sys::window()
+            .ok_or(JsError::new("Failed to get window"))?
+            .document()
+            .ok_or(JsError::new("Failed to get document"))?
+            .create_element("option")
+            .map_err(|_| JsError::new("Failed to create option element"))?;
+        option.set_text_content(Some(&format!("{:?}", mode)));
+        option
+            .set_attribute("value", &format!("{:?}", mode.into_abi()))
+            .map_err(|_| JsError::new("Failed to set value attribute to option element"))?;
+        select_element
+            .append_child(&option)
+            .map_err(|_| JsError::new("Failed to append option element"))?;
+    }
+
+    Ok(())
+}
+
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct GlContext {
+    gl: Rc<gl>,
+    blend: Rc<RefCell<BlendMode>>,
+}
+
+impl GlContext {
+    fn new(gl: Rc<gl>, blend: BlendMode) -> Self {
+        Self {
+            gl,
+            blend: Rc::new(RefCell::new(blend)),
+        }
+    }
+}
+
+#[wasm_bindgen]
+impl GlContext {
+    pub fn set_blend_mode(&self, mode: GlBlendMode) {
+        self.blend.replace(mode.into());
+    }
 }
 
 /// ローカル座標変換行列
@@ -36,7 +120,7 @@ impl LocalMat {
 }
 
 #[wasm_bindgen]
-pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
+pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<GlContext, JsValue> {
     let width = 500;
     let height = 300;
     canvas.set_width(width);
@@ -47,36 +131,52 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
 
     let gl = Rc::new(gl);
     let s = SingleColorShaderGl1::new(gl.clone())?;
-    let v1: WebGlBuffer = s.create_vbo(&SingleColorShaderGl1::UNIT_RECT)?;
     let u = s.uniform();
+
+    // 背景色を描画
+    BlendMode::Alpha.enable(&gl);
+    let v0 = s.create_vbo(&SingleColorShaderGl1::UNIT_RECT)?;
+    u.set_local_mat(Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1.0, 0.1)));
+    u.set_color([0.0, 0.0, 1.0, 1.0]);
+    s.draw(&v0);
+
     u.set_local_mat(local_mat.with_translation(-0.5, -0.5));
-
     u.set_color([1.0, 0.0, 0.0, 0.5]);
-    s.draw(&v1);
+    s.draw(&v0);
 
-    let v2 = s.create_vbo(&SingleColorShaderGl1::UNIT_RECT)?;
     u.set_local_mat(local_mat.with_translation(0.5, 0.5));
     u.set_color([0.0, 1.0, 0.0, 0.5]);
-    s.draw(&v2);
+    s.draw(&v0);
 
+    let ctx = GlContext::new(gl.clone(), BlendMode::Alpha);
+    let ctx_clone = ctx.clone();
     let mut a = AnimationLoop::new(move |t| {
         let t = t as f32 / 500.0;
         let x = t.sin() * 0.5;
         let y = t.cos() * 0.5;
-        gl_clear_color(&gl, BG_COLOR);
         let u = s.uniform();
+
+        // 背景色を描画。Canvasの影響を可視化するために青線をAlphaブレンドで描画
+        BlendMode::Alpha.enable(&gl);
+        gl_clear_color(&gl, BG_COLOR);
+        u.set_local_mat(Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1.0, 0.1)));
+        u.set_color([0.0, 0.0, 1.0, 1.0]);
+        s.draw(&v0);
+
+        // 指定のブレンドモードで、赤と緑の矩形を描画
+        ctx_clone.blend.borrow().enable(&gl);
         u.set_local_mat(local_mat.with_translation(x, y));
         u.set_color([1.0, 0.0, 0.0, x.abs() + 0.1]);
-        s.draw(&v1);
+        s.draw(&v0);
         u.set_local_mat(local_mat.with_translation(-x, -y));
         u.set_color([0.0, 1.0, 0.0, y.abs() + 0.1]);
-        s.draw(&v2);
+        s.draw(&v0);
         Ok(())
     });
     a.start();
     a.forget();
 
-    Ok(())
+    Ok(ctx)
 }
 
 #[wasm_bindgen]
