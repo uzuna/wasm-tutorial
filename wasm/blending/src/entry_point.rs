@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
-use nalgebra::{Matrix3, Vector2};
+use nalgebra::{ComplexField, Matrix3, Vector2};
 use wasm_bindgen::prelude::*;
-use wasm_utils::{error::*, info};
+use wasm_utils::{animation::AnimationLoop, error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
-use webgl2::{gl, vertex::buffer_data_f32, GlPoint2d, Program};
+use webgl2::{context::gl_clear_color, gl, vertex::buffer_data_f32, GlPoint2d, Program};
 
 use crate::shader::{color_texture, SingleColorShaderGl1, TextureShader};
 
@@ -58,6 +58,23 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     u.set_local_mat(local_mat.with_translation(0.5, 0.5));
     u.set_color([0.0, 1.0, 0.0, 0.5]);
     s.draw(&v2);
+
+    let mut a = AnimationLoop::new(move |t| {
+        let t = t as f32 / 500.0;
+        let x = t.sin() * 0.5;
+        let y = t.cos() * 0.5;
+        gl_clear_color(&gl, BG_COLOR);
+        let u = s.uniform();
+        u.set_local_mat(local_mat.with_translation(x, y));
+        u.set_color([1.0, 0.0, 0.0, x.abs() + 0.1]);
+        s.draw(&v1);
+        u.set_local_mat(local_mat.with_translation(-x, -y));
+        u.set_color([0.0, 1.0, 0.0, y.abs() + 0.1]);
+        s.draw(&v2);
+        Ok(())
+    });
+    a.start();
+    a.forget();
 
     Ok(())
 }
