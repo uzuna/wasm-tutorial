@@ -1,119 +1,12 @@
-use bytemuck::{NoUninit, Pod};
+use bytemuck::NoUninit;
 use wasm_bindgen::JsError;
-use web_sys::WebGlBuffer;
+use web_sys::{WebGlBuffer, WebGlProgram, WebGlVertexArrayObject};
 
-use crate::{error::Result, gl, GlEnum, GlInt, GlPoint};
+use crate::{error::Result, gl, GlInt, GlPoint};
 
-/// VAOを作成。VBOはVAOに紐づけて適宜bindingして使うのが望ましい
-pub fn create_vao(gl: &gl) -> Result<web_sys::WebGlVertexArrayObject> {
-    gl.create_vertex_array()
-        .ok_or(JsError::new("Failed to create vertex array object"))
-}
-
-pub struct Vao {
-    vao: web_sys::WebGlVertexArrayObject,
-}
-
-impl Vao {
-    pub fn new(gl: &gl) -> Result<Self> {
-        let vao = create_vao(gl)?;
-        gl.bind_vertex_array(Some(&vao));
-        Ok(Self { vao })
-    }
-
-    pub fn bind(&self, gl: &gl) {
-        gl.bind_vertex_array(Some(&self.vao));
-    }
-
-    pub fn unbind(&self, gl: &gl) {
-        gl.bind_vertex_array(None);
-    }
-}
-
-pub struct VertexVbo {
-    vbo: WebGlBuffer,
-    location: u32,
-    count: GlInt,
-}
-
-impl VertexVbo {
-    const TARGET: GlEnum = gl::ARRAY_BUFFER;
-
-    /// GlPointトレイトを実装した構造体のデータでVBOを作成
-    #[inline]
-    pub fn new<P: Pod + GlPoint>(gl: &gl, data: &[P], location: u32) -> Result<Self> {
-        let count = data.len() as GlInt;
-        let data = bytemuck::cast_slice(data);
-        Self::new_raw(gl, data, location, count, P::size())
-    }
-
-    /// f32にcast済みのデータでVBOを作成
-    pub fn new_raw(
-        gl: &gl,
-        data: &[f32],
-        location: u32,
-        count: GlInt,
-        sizeof: GlInt,
-    ) -> Result<Self> {
-        let vbo = Self::create_vertex_buffer(gl, data, location, gl::DYNAMIC_DRAW, sizeof)?;
-        Ok(Self {
-            vbo,
-            location,
-            count,
-        })
-    }
-
-    fn create_vertex_buffer(
-        gl: &gl,
-        data: &[f32],
-        location: u32,
-        usage: GlEnum,
-        sizeof: GlInt,
-    ) -> Result<WebGlBuffer> {
-        let buffer = gl
-            .create_buffer()
-            .ok_or(JsError::new("Failed to create buffer object"))?;
-        gl.bind_buffer(Self::TARGET, Some(&buffer));
-        buffer_data_f32(gl, Self::TARGET, data, usage);
-        gl.enable_vertex_attrib_array(location);
-        gl.vertex_attrib_pointer_with_i32(location, sizeof, gl::FLOAT, false, 0, 0);
-
-        Ok(buffer)
-    }
-
-    /// VBOの更新
-    pub fn update_vertex<P: Pod + GlPoint>(&self, gl: &gl, data: &[P]) {
-        let data = bytemuck::cast_slice(data);
-        gl.bind_buffer(Self::TARGET, Some(&self.vbo));
-        unsafe {
-            let view = js_sys::Float32Array::view(data);
-            gl.buffer_sub_data_with_i32_and_array_buffer_view(Self::TARGET, 0, &view);
-        }
-        gl.enable_vertex_attrib_array(self.location);
-        gl.vertex_attrib_pointer_with_i32(self.location, P::size(), gl::FLOAT, false, 0, 0);
-    }
-
-    /// VBOの一部を更新
-    pub fn update_vertex_sub<P: Pod + GlPoint>(&self, gl: &gl, data: &[P], offset: GlInt) {
-        let data = bytemuck::cast_slice(data);
-        gl.bind_buffer(Self::TARGET, Some(&self.vbo));
-        unsafe {
-            let view = js_sys::Float32Array::view(data);
-            gl.buffer_sub_data_with_i32_and_array_buffer_view_and_src_offset_and_length(
-                Self::TARGET,
-                offset * P::size() * std::mem::size_of::<f32>() as i32,
-                &view,
-                0,
-                P::size() as u32,
-            );
-        }
-        gl.enable_vertex_attrib_array(self.location);
-        gl.vertex_attrib_pointer_with_i32(self.location, P::size(), gl::FLOAT, false, 0, 0);
-    }
-
-    pub fn count(&self) -> GlInt {
-        self.count
-    }
+pub fn create_buffer(gl: &gl) -> Result<web_sys::WebGlBuffer> {
+    gl.create_buffer()
+        .ok_or(JsError::new("Failed to create_buffer"))
 }
 
 /// VBOにデータを書き込む
@@ -129,4 +22,92 @@ pub fn buffer_data_f32(gl: &gl, target: u32, data: &[f32], usage: u32) {
 pub fn buffer_data<P: GlPoint + NoUninit>(gl: &gl, target: u32, data: &[P], usage: u32) {
     let data = bytemuck::cast_slice(data);
     buffer_data_f32(gl, target, data, usage)
+}
+
+/// VBOの一部を更新
+pub fn buffer_subdata<P: GlPoint + NoUninit>(gl: &gl, target: u32, data: &[P], offset: GlInt) {
+    let data = bytemuck::cast_slice(data);
+    unsafe {
+        let view = js_sys::Float32Array::view(data);
+        gl.buffer_sub_data_with_i32_and_array_buffer_view_and_src_offset(
+            target,
+            offset * P::size() * std::mem::size_of::<f32>() as i32,
+            &view,
+            0,
+        );
+    }
+}
+
+pub trait VaoDefine: 'static + Sized + PartialEq {
+    // 頂点バッファのリスト
+    fn iter() -> std::slice::Iter<'static, Self>;
+    // 頂点バッファの名前
+    fn name(&self) -> &'static str;
+    // 頂点バッファの次元数
+    fn size_of(&self) -> i32;
+    // vboを配列に入れたときの位置を取得
+    fn index(&self) -> usize {
+        Self::iter().position(|x| x == self).unwrap()
+    }
+}
+
+pub struct Vao<T>
+where
+    T: VaoDefine,
+{
+    vao: WebGlVertexArrayObject,
+    vbos: Vec<WebGlBuffer>,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> Vao<T>
+where
+    T: VaoDefine,
+{
+    pub fn new(gl: &gl, prog: &WebGlProgram) -> Result<Self> {
+        let vao = gl
+            .create_vertex_array()
+            .ok_or(JsError::new("Failed to create vao"))?;
+        gl.bind_vertex_array(Some(&vao));
+        let mut vbos = vec![];
+        for v in T::iter() {
+            // Attributeの位置を取得
+            let loc = gl.get_attrib_location(prog, v.name()) as u32;
+            // VBOを作成して紐付け
+            let vbo = create_buffer(gl)?;
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vbo));
+            gl.enable_vertex_attrib_array(loc);
+            gl.vertex_attrib_pointer_with_i32(loc, v.size_of(), gl::FLOAT, false, 0, 0);
+            vbos.push(vbo);
+        }
+        gl.bind_vertex_array(None);
+        Ok(Self {
+            vao,
+            vbos,
+            _phantom: std::marker::PhantomData,
+        })
+    }
+
+    pub fn bind(&self, gl: &gl) {
+        gl.bind_vertex_array(Some(&self.vao));
+    }
+
+    pub fn unbind(&self, gl: &gl) {
+        gl.bind_vertex_array(None);
+    }
+
+    pub fn vbo(&self, vd: T) -> &WebGlBuffer {
+        &self.vbos[vd.index()]
+    }
+
+    // usage: gl::STATIC_DRAW, gl::DYNAMIC_DRAW, gl::STREAM_DRAW
+    pub fn buffer_data<P: GlPoint + NoUninit>(&self, gl: &gl, vd: T, data: &[P], usage: u32) {
+        gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.vbos[vd.index()]));
+        buffer_data(gl, gl::ARRAY_BUFFER, data, usage);
+    }
+
+    pub fn buffer_sub_data<P: GlPoint + NoUninit>(&self, gl: &gl, vd: T, data: &[P], offset: i32) {
+        gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.vbos[vd.index()]));
+        buffer_subdata(gl, gl::ARRAY_BUFFER, data, offset);
+    }
 }

@@ -1,21 +1,14 @@
 use std::rc::Rc;
 
-use bytemuck::NoUninit;
-use wasm_bindgen::JsError;
 use wasm_utils::{error::*, info};
 use web_sys::{
-    WebGlBuffer, WebGlProgram, WebGlTexture, WebGlUniformLocation, WebGlVertexArrayObject,
+    WebGlBuffer, WebGlTexture, WebGlUniformLocation,
 };
 use webgl2::{
     gl, uniform_location,
-    vertex::{buffer_data, buffer_data_f32, buffer_subdata},
+    vertex::{buffer_data, buffer_data_f32, create_buffer, Vao, VaoDefine},
     GlPoint, GlPoint2d, GlPoint3d, GlPoint4d, Program,
 };
-
-fn create_buffer(gl: &gl) -> Result<web_sys::WebGlBuffer> {
-    gl.create_buffer()
-        .ok_or(JsError::new("Failed to create_buffer"))
-}
 
 /// Webgl1.0のシングルカラーシェーダー
 pub struct SingleColorShaderGl1 {
@@ -266,15 +259,20 @@ void main() {
     }
 
     pub fn create_vao(&self, vert: &[GlPoint2d; 4]) -> Result<Vao<TextureVd>> {
-        let vao = Vao::new(self.gl.clone(), self.program.program())?;
-        vao.buffer_data(TextureVd::Position, vert, gl::STATIC_DRAW);
-        vao.buffer_data(TextureVd::Coord, &TextureVd::FRAG, gl::STATIC_DRAW);
+        let vao = Vao::new(&self.gl, self.program.program())?;
+        vao.buffer_data(&self.gl, TextureVd::Position, vert, gl::STATIC_DRAW);
+        vao.buffer_data(
+            &self.gl,
+            TextureVd::Coord,
+            &TextureVd::FRAG,
+            gl::STATIC_DRAW,
+        );
         Ok(vao)
     }
 
     pub fn draw(&self, vao: &Vao<TextureVd>) {
         self.program.use_program(&self.gl);
-        vao.bind();
+        vao.bind(&self.gl);
         self.gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
     }
 }

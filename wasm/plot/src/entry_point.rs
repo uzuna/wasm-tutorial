@@ -29,6 +29,7 @@ pub fn start(
 
     let aspect = 1024.0 / 768.0;
     let gl = webgl2::context::get_context(&canvas, webgl2::context::COLOR_BLACK)?;
+    let gl = Rc::new(gl);
     let playing = Rc::new(RefCell::new(AtomicBool::new(false)));
 
     // 1Chart単位を手で組む
@@ -80,14 +81,14 @@ pub fn start(
 
     let font = webgl2::font_asset::load(&gl)?;
     let mut text = font.create_text_vertex("Hello,0000000000");
-    let ts = TextShader::new(&gl)?;
+    let ts = TextShader::new(gl.clone())?;
 
     let mat = nalgebra::Matrix3::identity()
         .append_nonuniform_scaling(&Vector2::new(0.002, 0.002 * aspect));
     let mat: [[f32; 3]; 3] = mat.into();
     let mm = mat.iter().flat_map(|a| *a).collect::<Vec<_>>();
     ts.set_mat(&gl, &mm);
-    let tv = ts.link_vertex(&gl, &text)?;
+    let tv = ts.link_vertex(&text)?;
     gl.viewport(0, 0, 1024, 768);
     ts.draw(&gl, &tv);
 
