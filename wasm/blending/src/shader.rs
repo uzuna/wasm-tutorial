@@ -24,8 +24,10 @@ pub struct SingleColorShaderGl1 {
 
 impl SingleColorShaderGl1 {
     pub const VERT: &'static str = r#"attribute vec2 position;
+uniform mat3 local_mat;
+
 void main(void){
-	gl_Position = vec4(position.xy, 0.0, 1.0);
+	gl_Position = vec4((local_mat * vec3(position, 1.0)).xy, 0.0, 1.0);
 }
 "#;
 
@@ -37,6 +39,12 @@ void main(void){
     gl_FragColor = u_color;
 }
 "#;
+    pub const UNIT_RECT: [GlPoint2d; 4] = [
+        GlPoint2d::new(-1.0, 1.0),
+        GlPoint2d::new(1.0, 1.0),
+        GlPoint2d::new(-1.0, -1.0),
+        GlPoint2d::new(1.0, -1.0),
+    ];
 
     pub fn new(gl: Rc<gl>) -> Result<Self> {
         let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
@@ -62,8 +70,8 @@ void main(void){
         self.program.use_program(&self.gl);
     }
 
-    pub fn set_color(&self, color: [f32; 4]) {
-        self.uniform.set_color(color);
+    pub fn uniform(&self) -> &SingleColorUniform {
+        &self.uniform
     }
 
     pub fn create_vbo(&self, data: &[GlPoint2d; 4]) -> Result<WebGlBuffer> {
@@ -91,21 +99,35 @@ void main(void){
 
 pub struct SingleColorUniform {
     gl: Rc<gl>,
+    // 色の設定
     color: WebGlUniformLocation,
+    // ローカル座標変換行列。global座標系が必要なときにはuniformを追加する
+    local_mat: WebGlUniformLocation,
 }
 
 impl SingleColorUniform {
     pub fn new(gl: Rc<gl>, program: &Program) -> Result<Self> {
         let color = uniform_location(&gl, program, "u_color")?;
-        Ok(Self { gl, color })
+        let local_mat = uniform_location(&gl, program, "local_mat")?;
+        Ok(Self {
+            gl,
+            color,
+            local_mat,
+        })
     }
 
     pub fn init(&self) {
         self.set_color([0.0, 0.0, 0.0, 0.0]);
+        self.set_local_mat(nalgebra::Matrix3::identity());
     }
 
     pub fn set_color(&self, color: [f32; 4]) {
         self.gl.uniform4fv_with_f32_array(Some(&self.color), &color);
+    }
+
+    pub fn set_local_mat(&self, mat: nalgebra::Matrix3<f32>) {
+        self.gl
+            .uniform_matrix3fv_with_f32_array(Some(&self.local_mat), false, mat.as_slice());
     }
 }
 

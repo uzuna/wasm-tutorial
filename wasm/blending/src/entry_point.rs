@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use nalgebra::{Matrix3, Vector2};
 use wasm_bindgen::prelude::*;
 use wasm_utils::{error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
@@ -13,10 +14,32 @@ pub fn init() -> Result<()> {
     Ok(())
 }
 
+/// ローカル座標変換行列
+pub struct LocalMat {
+    // windowによる形状の変化はローカルの時点で考慮する
+    window_scaling: Vector2<f32>,
+}
+
+impl LocalMat {
+    fn new(aspect: f32) -> Self {
+        let window_scaling = Vector2::new(1.0 / aspect, 1.0);
+        Self { window_scaling }
+    }
+
+    fn with_translation(&self, x: f32, y: f32) -> Matrix3<f32> {
+        Matrix3::identity()
+            .append_translation(&Vector2::new(x, y))
+            .append_nonuniform_scaling(&self.window_scaling)
+    }
+}
+
 #[wasm_bindgen]
 pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
-    canvas.set_width(500);
-    canvas.set_height(300);
+    let width = 500;
+    let height = 300;
+    canvas.set_width(width);
+    canvas.set_height(height);
+    let local_mat = LocalMat::new(width as f32 / height as f32);
 
     let gl = webgl2::context::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
 
@@ -27,22 +50,16 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
 
     let gl = Rc::new(gl);
     let s = SingleColorShaderGl1::new(gl.clone())?;
-    let v1: WebGlBuffer = s.create_vbo(&[
-        GlPoint2d::new(-1.0, 0.5),
-        GlPoint2d::new(0.5, 0.5),
-        GlPoint2d::new(-1.0, -1.0),
-        GlPoint2d::new(0.5, -1.0),
-    ])?;
-    s.set_color([1.0, 0.0, 0.0, 0.5]);
+    let v1: WebGlBuffer = s.create_vbo(&SingleColorShaderGl1::UNIT_RECT)?;
+    let u = s.uniform();
+    u.set_local_mat(local_mat.with_translation(-0.5, -0.5));
+
+    u.set_color([1.0, 0.0, 0.0, 0.5]);
     s.draw(&v1);
 
-    let v2 = s.create_vbo(&[
-        GlPoint2d::new(-0.5, 1.0),
-        GlPoint2d::new(1.0, 1.0),
-        GlPoint2d::new(-0.5, -0.5),
-        GlPoint2d::new(1.0, -0.5),
-    ])?;
-    s.set_color([0.0, 1.0, 0.0, 0.5]);
+    let v2 = s.create_vbo(&SingleColorShaderGl1::UNIT_RECT)?;
+    u.set_local_mat(local_mat.with_translation(0.5, 0.5));
+    u.set_color([0.0, 1.0, 0.0, 0.5]);
     s.draw(&v2);
 
     Ok(())
