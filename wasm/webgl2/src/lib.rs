@@ -241,6 +241,10 @@ impl Program {
         &self.program
     }
 
+    pub fn into_program(self) -> WebGlProgram {
+        self.program
+    }
+
     pub fn delete(&self, gl: &gl) {
         gl.delete_program(Some(&self.program));
         gl.delete_shader(Some(&self.vertex));

@@ -3,11 +3,9 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_utils::{error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
+use webgl2::{gl, GlPoint2d, Program};
 
-use crate::{
-    shader::{color_texture, SimpleShader, TextureShader, VertexObject},
-    webgl::{gl, GlPoint2d, Program},
-};
+use crate::shader::{color_texture, SimpleShader, TextureShader, VertexObject};
 
 #[wasm_bindgen(start)]
 pub fn init() -> Result<()> {
@@ -20,7 +18,7 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     canvas.set_width(500);
     canvas.set_height(300);
 
-    let gl = crate::webgl::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
+    let gl = webgl2::context::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
 
     // 画面クリア
     gl.clear_color(0.0, 0.0, 0.75, 1.0);
@@ -38,17 +36,6 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     s.set_color([0.0, 1.0, 0.0, 0.5]);
     s.draw();
 
-    // let camera = Camera::default();
-    // let view = ViewMatrix::default();
-    // let mvp = camera.perspective().as_matrix() * view.look_at();
-    // let s = PlaneShader::new(gl.clone())?;
-    // let v = VertexObject::rect(gl.clone())?;
-    // let u = s.uniforms();
-    // u.set_mvp(mvp);
-    // s.draw(&v);
-
-    info!("gl error {}", gl.get_error());
-
     Ok(())
 }
 
@@ -60,14 +47,6 @@ pub fn start_webgl2_gradiation(canvas: HtmlCanvasElement) -> std::result::Result
     // let gl = crate::webgl::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
     let gl = webgl2::context::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
     let gl = Rc::new(gl);
-
-    // // アルファブレンドを有効にする
-    // gl.enable(gl::BLEND);
-    // gl.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-
-    // // 深度テストを有効にする
-    // gl.enable(gl::DEPTH_TEST);
-    // gl.depth_func(gl::LEQUAL);
 
     // 画面クリア
     gl.clear_color(0.0, 0.0, 0.75, 1.0);
