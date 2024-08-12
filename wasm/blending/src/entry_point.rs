@@ -3,9 +3,13 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_utils::{error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
-use webgl2::{gl, GlPoint2d, Program};
+use webgl2::{
+    gl,
+    vertex::buffer_data_f32,
+    GlPoint2d, Program,
+};
 
-use crate::shader::{color_texture, SimpleShader, TextureShader, VertexObject};
+use crate::shader::{color_texture, SingleColorShaderGl1, TextureShader};
 
 #[wasm_bindgen(start)]
 pub fn init() -> Result<()> {
@@ -26,13 +30,13 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
     let gl = Rc::new(gl);
-    let s: SimpleShader =
-        SimpleShader::new(gl.clone(), &[-1.0, 0.5, 0.5, 0.5, -1.0, -1.0, 0.5, -1.0])?;
+    let s: SingleColorShaderGl1 =
+        SingleColorShaderGl1::new(gl.clone(), &[-1.0, 0.5, 0.5, 0.5, -1.0, -1.0, 0.5, -1.0])?;
     s.set_color([1.0, 0.0, 0.0, 0.5]);
     s.draw();
 
-    let s: SimpleShader =
-        SimpleShader::new(gl.clone(), &[-0.5, 1.0, 1.0, 1.0, -0.5, -0.5, 1.0, -0.5])?;
+    let s: SingleColorShaderGl1 =
+        SingleColorShaderGl1::new(gl.clone(), &[-0.5, 1.0, 1.0, 1.0, -0.5, -0.5, 1.0, -0.5])?;
     s.set_color([0.0, 1.0, 0.0, 0.5]);
     s.draw();
 
@@ -95,7 +99,7 @@ pub fn get_context_rs(canvas: HtmlCanvasElement) -> Result<gl> {
 
 #[wasm_bindgen]
 pub fn create_program_rs(gl: gl) -> std::result::Result<WebGlProgram, JsValue> {
-    let p = Program::new(&gl, SimpleShader::VERT, SimpleShader::FRAG)?;
+    let p = Program::new(&gl, SingleColorShaderGl1::VERT, SingleColorShaderGl1::FRAG)?;
     p.use_program(&gl);
     Ok(p.into_program())
 }
@@ -110,7 +114,7 @@ pub fn create_vbo_rs(gl: gl, data: &[f32]) -> std::result::Result<WebGlBuffer, J
     let vbo = gl.create_buffer().ok_or("failed to create buffer")?;
     gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vbo));
     info!("bind_buffer {:?}", gl.get_error());
-    VertexObject::buffer_data(&gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
+    buffer_data_f32(&gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
     info!("buffer_data_with_array_buffer_view {:?}", gl.get_error());
     gl.bind_buffer(gl::ARRAY_BUFFER, None);
     Ok(vbo)

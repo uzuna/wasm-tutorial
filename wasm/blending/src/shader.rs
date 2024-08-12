@@ -1,17 +1,21 @@
 use std::rc::Rc;
 
-use webgl2::{gl, uniform_location, GlPoint, GlPoint2d, GlPoint3d, GlPoint4d, Program};
-use bytemuck::NoUninit;
 use wasm_bindgen::JsError;
 use wasm_utils::{error::*, info};
 use web_sys::{WebGlBuffer, WebGlTexture, WebGlUniformLocation, WebGlVertexArrayObject};
+use webgl2::{
+    gl, uniform_location,
+    vertex::{buffer_data, buffer_data_f32},
+    GlPoint, GlPoint2d, GlPoint3d, GlPoint4d, Program,
+};
 
 fn create_buffer(gl: &gl) -> Result<web_sys::WebGlBuffer> {
     gl.create_buffer()
         .ok_or(JsError::new("Failed to create_buffer"))
 }
 
-pub struct SimpleShader {
+/// Webgl1.0のシングルカラーシェーダー
+pub struct SingleColorShaderGl1 {
     gl: Rc<gl>,
     program: Program,
     color: WebGlUniformLocation,
@@ -19,7 +23,7 @@ pub struct SimpleShader {
     vbo: WebGlBuffer,
 }
 
-impl SimpleShader {
+impl SingleColorShaderGl1 {
     pub const VERT: &'static str = r#"attribute vec2 position;
 void main(void){
 	gl_Position = vec4(position.xy, 0.0, 1.0);
@@ -48,7 +52,7 @@ void main(void){
         let vbo = create_buffer(&gl)?;
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vbo));
         #[rustfmt::skip]
-        VertexObject::buffer_data(
+        buffer_data_f32(
             &gl,
             gl::ARRAY_BUFFER,
             data,
@@ -151,33 +155,26 @@ impl VertexObject {
         let gl = &self.gl;
         let data = bytemuck::cast_slice(&Self::RECT_VERTEX);
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.vertex));
-        Self::buffer_data(gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
+        buffer_data_f32(gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
         gl.bind_buffer(gl::ARRAY_BUFFER, None);
         info!("bind_buffer {}", gl.get_error());
 
         let data = bytemuck::cast_slice(&Self::RECT_COORD);
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.coord));
-        Self::buffer_data(gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
+        buffer_data_f32(gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
         gl.bind_buffer(gl::ARRAY_BUFFER, None);
 
         let data = bytemuck::cast_slice(&Self::RECT_COLOR);
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.color));
-        Self::buffer_data(gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
+        buffer_data_f32(gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
         gl.bind_buffer(gl::ARRAY_BUFFER, None);
 
         let data = bytemuck::cast_slice(&Self::RECT_INDEX);
         gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(&self.index));
-        Self::buffer_data(gl, gl::ELEMENT_ARRAY_BUFFER, data, gl::STATIC_DRAW);
+        buffer_data_f32(gl, gl::ELEMENT_ARRAY_BUFFER, data, gl::STATIC_DRAW);
         gl.bind_buffer(gl::ARRAY_BUFFER, None);
 
         self.index_count = Self::RECT_INDEX.len() as i32;
-    }
-
-    pub fn buffer_data(gl: &gl, target: u32, data: &[f32], usage: u32) {
-        unsafe {
-            let view = js_sys::Float32Array::view(data);
-            gl.buffer_data_with_array_buffer_view(target, &view, usage);
-        }
     }
 }
 
@@ -302,13 +299,13 @@ impl GradVao {
         gl.bind_vertex_array(Some(&vao));
         let vertex = create_buffer(&gl)?;
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vertex));
-        Self::buffer_data(&gl, gl::ARRAY_BUFFER, rect, gl::STATIC_DRAW);
+        buffer_data(&gl, gl::ARRAY_BUFFER, rect, gl::STATIC_DRAW);
         gl.enable_vertex_attrib_array(locs[0]);
         gl.vertex_attrib_pointer_with_i32(locs[0], GlPoint2d::size(), gl::FLOAT, false, 0, 0);
 
         let coord = create_buffer(&gl)?;
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&coord));
-        Self::buffer_data(&gl, gl::ARRAY_BUFFER, &Self::FRAG, gl::STATIC_DRAW);
+        buffer_data(&gl, gl::ARRAY_BUFFER, &Self::FRAG, gl::STATIC_DRAW);
         gl.enable_vertex_attrib_array(locs[1]);
         gl.vertex_attrib_pointer_with_i32(locs[1], GlPoint2d::size(), gl::FLOAT, false, 0, 0);
 
@@ -319,14 +316,6 @@ impl GradVao {
             vertex,
             coord,
         })
-    }
-
-    pub fn buffer_data<P: GlPoint + NoUninit>(gl: &gl, target: u32, data: &[P], usage: u32) {
-        let data = bytemuck::cast_slice(data);
-        unsafe {
-            let view = js_sys::Float32Array::view(data);
-            gl.buffer_data_with_array_buffer_view(target, &view, usage);
-        }
     }
 }
 
