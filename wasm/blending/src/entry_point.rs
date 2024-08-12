@@ -8,6 +8,8 @@ use webgl2::{gl, vertex::buffer_data_f32, GlPoint2d, Program};
 
 use crate::shader::{color_texture, SingleColorShaderGl1, TextureShader};
 
+const BG_COLOR: [f32; 4] = [0.0, 0.0, 0.75, 1.0];
+
 #[wasm_bindgen(start)]
 pub fn init() -> Result<()> {
     wasm_utils::panic::set_panic_hook();
@@ -41,12 +43,7 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     canvas.set_height(height);
     let local_mat = LocalMat::new(width as f32 / height as f32);
 
-    let gl = webgl2::context::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
-
-    // 画面クリア
-    gl.clear_color(0.0, 0.0, 0.75, 1.0);
-    gl.clear_depth(1.0);
-    gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+    let gl = webgl2::context::get_context(&canvas, BG_COLOR)?;
 
     let gl = Rc::new(gl);
     let s = SingleColorShaderGl1::new(gl.clone())?;
@@ -70,13 +67,8 @@ pub fn start_webgl2_gradiation(canvas: HtmlCanvasElement) -> std::result::Result
     canvas.set_width(500);
     canvas.set_height(300);
 
-    let gl = webgl2::context::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
+    let gl = webgl2::context::get_context(&canvas, BG_COLOR)?;
     let gl = Rc::new(gl);
-
-    // 画面クリア
-    gl.clear_color(0.0, 0.0, 0.75, 1.0);
-    gl.clear_depth(1.0);
-    gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
     let rect_left = [
         GlPoint2d::new(-1.0, 0.5),
