@@ -1,0 +1,29 @@
+[package]
+name = "boids"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ciborium.workspace = true
+futures.workspace = true
+gloo-net.workspace = true
+nalgebra.workspace = true
+serde.workspace = true
+tokio.workspace = true
+wasm-bindgen-futures.workspace = true
+wasm-bindgen.workspace = true
+wasm-utils = { workspace = true }
+web-sys.workspace = true
+webgl2 = { workspace = true, features = ["vertex"] }
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[profile.release]
+opt-level = "s"

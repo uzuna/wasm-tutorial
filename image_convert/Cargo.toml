@@ -1,0 +1,13 @@
+[package]
+name = "image_convert"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = "1.0.86"
+clap = { version = "4.5.13", features = ["derive"] }
+image = "0.25.2"
+image_dds = "0.6"

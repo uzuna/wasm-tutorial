@@ -1,0 +1,56 @@
+[package]
+name = "wasm-game-of-life"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+console_error_panic_hook = { workspace = true, optional = true }
+fixedbitset = "0.5.7"
+futures.workspace = true
+futures-util = "0.3.30"
+gloo-net.workspace = true
+gloo-timers = { version = "0.3.0", features = ["futures"] }
+js-sys.workspace = true
+nalgebra.workspace = true
+serde = { version = "1", features = ["derive"] }
+tokio.workspace = true
+tokio-util = "0.7.11"
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+wasm-utils = { workspace = true }
+webgl2 = { workspace = true, features = ["vertex"] }
+
+[dependencies.web-sys]
+workspace = true
+features = [
+    "CanvasRenderingContext2d",
+    "console",
+    "HtmlButtonElement",
+    "HtmlCanvasElement",
+    "MouseEvent",
+    "Performance",
+    "WebGl2RenderingContext",
+    "WebGlBuffer",
+    "WebGlFramebuffer",
+    "WebGlRenderbuffer",
+    "WebGlTexture",
+    "WebGlUniformLocation",
+    "WebGlVertexArrayObject",
+    "Window",
+]
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[profile.release]
+# Tell `rustc` to optimize for small code size.
+opt-level = "s"

@@ -1,0 +1,38 @@
+[package]
+name = "blending"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bytemuck = { version = "1.16.1", features = ["derive"] }
+nalgebra.workspace = true
+wasm-bindgen.workspace = true
+wasm-utils = { workspace = true }
+js-sys.workspace = true
+webgl2 = { workspace = true, features = ["vertex", "context", "font-asset"] }
+
+[dependencies.web-sys]
+workspace = true
+features = [
+    "HtmlCanvasElement",
+    "HtmlSelectElement",
+    "WebGl2RenderingContext",
+    "WebGlBuffer",
+    "WebGlProgram",
+    "WebGlShader",
+    "WebGlTexture",
+    "WebGlUniformLocation",
+    "WebGlVertexArrayObject",
+]
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[profile.release]
+opt-level = "s"

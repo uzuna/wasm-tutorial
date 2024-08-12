@@ -1,0 +1,47 @@
+[package]
+name = "webgl2"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+vertex = ["web-sys/WebGlBuffer"]
+context = ["web-sys/HtmlCanvasElement"]
+font = ["dep:fxhash", "dep:serde", "web-sys/WebGlTexture", "vertex"]
+font-asset = ["font", "dep:serde_json", "web-sys/WebglCompressedTextureS3tc"]
+
+[dependencies]
+bytemuck = { version = "1.16.1", features = ["derive"] }
+fxhash = { workspace = true, optional = true }
+js-sys.workspace = true
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+wasm-bindgen.workspace = true
+serde-wasm-bindgen = "0.6.5"
+
+[dependencies.web-sys]
+workspace = true
+features = [
+    "WebGl2RenderingContext",
+    "WebGlProgram",
+    "WebGlShader",
+    "WebGlUniformLocation",
+    "WebGlVertexArrayObject",
+]
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies.web-sys]
+workspace = true
+features = [
+    'Element',
+    'HtmlElement',
+    'Node',
+    "Document",
+    "HtmlCanvasElement",
+    "Window",
+]
