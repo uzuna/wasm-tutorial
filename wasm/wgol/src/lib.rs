@@ -833,7 +833,6 @@ pub fn webgl_interaction(
                     }
                     None => {}
                 }
-
                 shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow());
                 shader.draw(&gl);
                 let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());

@@ -3,16 +3,38 @@ use web_sys::{WebGlFramebuffer, WebGlTexture, WebGlUniformLocation};
 
 use webgl2::{
     gl, uniform_location,
-    vertex::{Vao, VertexVbo},
+    vertex::{Vao, VaoDefine},
     GlEnum, GlPoint2d, GlPoint3d, Program,
 };
 
 use crate::error::Result;
 
+#[derive(Debug, PartialEq)]
+pub enum ParticleVd {
+    Position,
+}
+
+impl VaoDefine for ParticleVd {
+    fn iter() -> std::slice::Iter<'static, Self> {
+        [ParticleVd::Position].iter()
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            ParticleVd::Position => "position",
+        }
+    }
+
+    fn size_of(&self) -> i32 {
+        2
+    }
+}
+
 pub struct ParticleShader {
     program: Program,
     particle: Particle,
-    vbo: VertexVbo,
+    vao: Vao<ParticleVd>,
+    vertex_len: i32,
     uniform: ParticleUniform,
 }
 
@@ -45,14 +67,23 @@ void main() {
     pub fn new(gl: &gl, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
         let program = Program::new(gl, Self::VERT, Self::FRAG)?;
         let particle = Particle::new(res, ctrl);
-        let vbo = VertexVbo::new(gl, &particle.position, 0)?;
+        let vao = Vao::new(gl, program.program())?;
+        vao.buffer_data(
+            gl,
+            ParticleVd::Position,
+            &particle.position,
+            gl::DYNAMIC_DRAW,
+        );
+        let vertex_len = particle.position.len() as i32;
+
         program.use_program(gl);
         let uniform = ParticleUniform::new(gl, &program)?;
         uniform.init(gl);
         Ok(Self {
             program,
             particle,
-            vbo,
+            vao,
+            vertex_len,
             uniform,
         })
     }
@@ -63,13 +94,15 @@ void main() {
 
     pub fn update(&mut self, gl: &gl, target: Point, vector_update: bool) {
         self.particle.update(target, vector_update);
-        self.vbo.update_vertex(gl, &self.particle.position);
+        self.vao
+            .buffer_sub_data(gl, ParticleVd::Position, &self.particle.position, 0);
         self.uniform.set_size(gl, self.particle.current_size);
     }
 
     pub fn draw(&self, gl: &gl) {
         self.program.use_program(gl);
-        gl.draw_arrays(gl::POINTS, 0, self.vbo.count());
+        self.vao.bind(gl);
+        gl.draw_arrays(gl::POINTS, 0, self.vertex_len);
     }
 }
 
@@ -278,6 +311,28 @@ impl Particle {
     }
 }
 
+#[derive(Debug, PartialEq)]
+
+pub enum IndexVd {
+    Position,
+}
+
+impl VaoDefine for IndexVd {
+    fn iter() -> std::slice::Iter<'static, Self> {
+        [IndexVd::Position].iter()
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            IndexVd::Position => "position",
+        }
+    }
+
+    fn size_of(&self) -> i32 {
+        3
+    }
+}
+
 pub struct ParticleGpgpuShader {
     res: Resolution,
     point: Program,
@@ -286,10 +341,9 @@ pub struct ParticleGpgpuShader {
     u_point: ParticleGpgpuPointUniform,
     u_velocity: ParticleGpgpuVelocityUniform,
     u_index: ParticleGpgpuIndexUniform,
-    point_vao: Vao,
-    point_vbo: VertexVbo,
-    index_vao: Vao,
-    index_vbo: VertexVbo,
+    point_vao: Vao<ParticleVd>,
+    point_vlen: i32,
+    index_vao: Vao<IndexVd>,
     fbos: [TextureFBO; 2],
     fbo_prev_index: usize,
     state: ParticleGpgpuState,
@@ -298,12 +352,12 @@ pub struct ParticleGpgpuShader {
 impl ParticleGpgpuShader {
     // 頂点の位置を保持するシェーダー。テクスチャにある頂点情報を取り出してそのまま出力
     const POINT_VERT: &'static str = r#"#version 300 es
-layout(location = 0) in vec2 pos;
+layout(location = 0) in vec2 position;
 uniform sampler2D u_texture;
 uniform float pointSize;
 
 void main(){
-    vec4 t = texture(u_texture, pos);
+    vec4 t = texture(u_texture, position);
     gl_Position = vec4(t.xy, 0.0, 1.0);
     gl_PointSize = pointSize;
 }
@@ -396,13 +450,19 @@ void main(){
         let u_index = ParticleGpgpuIndexUniform::new(gl, &index_map)?;
         u_index.init(gl, &res);
 
-        // 必要な頂点データを作成
-        let point_vao = Vao::new(gl)?;
-        let point_vbo = Self::make_texture_vertex(gl, 0)?;
-        point_vao.unbind(gl);
+        // 最終描画する頂点情報を作成
+        // この頂点はデータのサンプリングの位置を示すだけなので更新することはない
+        let point_vert = Self::point_vert(res.x, res.y);
+        let point_vao = Vao::new(gl, point.program())?;
+        point_vao.buffer_data(gl, ParticleVd::Position, &point_vert, gl::STATIC_DRAW);
 
-        let index_vao = Vao::new(gl)?;
-        let index_vbo = Self::make_index_vertex(gl, 0)?;
+        let index_vao = Vao::new(gl, index_map.program())?;
+        index_vao.buffer_data(
+            gl,
+            IndexVd::Position,
+            &Self::TEXTURE_VERTEX,
+            gl::STATIC_DRAW,
+        );
 
         // 位置と速度の情報は2つのバッファを使って交互に更新する
         let fbos = [
@@ -420,9 +480,8 @@ void main(){
             u_velocity,
             u_index,
             point_vao,
-            point_vbo,
+            point_vlen: point_vert.len() as i32,
             index_vao,
-            index_vbo,
             fbos,
             fbo_prev_index: 0,
             state,
@@ -432,23 +491,16 @@ void main(){
         Ok(s)
     }
 
-    // レンダリングする点と同じ数の頂点を持つVBOを作成
-    // ...を、本来はするのだけど、texture()参照が4象限分しか取り出せていない。
-    // 原因調査のために点を直接指定
-    // テクスチャデータを見る限りはRGのどちらもでているし、全面ノイズっぽくなっているので
-    // データそのものは問題なくあるはずなのだけど、適切なテクスチャ位置を参照できてないのだと思われる
-    fn make_texture_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
-        let data = vec![
-            GlPoint2d::new(1.0, 1.0),
-            GlPoint2d::new(1.0, -1.0),
-            GlPoint2d::new(-1.0, 1.0),
-            GlPoint2d::new(-1.0, -1.0),
-        ];
-        VertexVbo::new(gl, &data, location)
-    }
-
-    fn make_index_vertex(gl: &gl, location: u32) -> Result<VertexVbo> {
-        VertexVbo::new(gl, &Self::TEXTURE_VERTEX, location)
+    // 取り出すテクスチャ座標の位置
+    fn point_vert(x: u32, y: u32) -> Vec<GlPoint2d> {
+        let (ix, iy) = (1. / x as f32, 1. / y as f32);
+        let mut position = Vec::new();
+        for y in 0..y {
+            for x in 0..x {
+                position.push(GlPoint2d::new(x as f32 * ix, y as f32 * iy));
+            }
+        }
+        position
     }
 
     fn next_fbo_index(&self) -> usize {
@@ -497,7 +549,7 @@ void main(){
         self.point.use_program(gl);
         self.point_vao.bind(gl);
         self.u_point.set_ambient(gl, self.state.ambient);
-        // self.u_point.set_point_size(gl, self.state.size);
+        self.u_point.set_point_size(gl, self.state.size);
     }
 
     pub fn draw(&mut self, gl: &gl, target_res: &Resolution) {
@@ -531,12 +583,13 @@ void main(){
         gl.bind_texture(gl::TEXTURE_2D, Some(&fbos[1].texture));
 
         // Debug: パラメータをそのまま描画
-        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
+        // gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
 
         // ポイントで描画
         self.point.use_program(gl);
         self.point_vao.bind(gl);
-        gl.draw_arrays(gl::POINTS, 0, self.point_vbo.count());
+        gl.draw_arrays(gl::POINTS, 0, self.point_vlen);
+        self.point_vao.unbind(gl);
 
         gl.flush();
 

@@ -49,6 +49,9 @@ pub trait VaoDefine: 'static + Sized + PartialEq {
     fn index(&self) -> usize {
         Self::iter().position(|x| x == self).unwrap()
     }
+    fn has_index_buffer() -> bool {
+        false
+    }
 }
 
 pub struct Vao<T>
@@ -57,6 +60,7 @@ where
 {
     vao: WebGlVertexArrayObject,
     vbos: Vec<WebGlBuffer>,
+    index: Option<WebGlBuffer>,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -80,10 +84,18 @@ where
             gl.vertex_attrib_pointer_with_i32(loc, v.size_of(), gl::FLOAT, false, 0, 0);
             vbos.push(vbo);
         }
+        let index = if T::has_index_buffer() {
+            let index = create_buffer(gl)?;
+            gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(&index));
+            Some(index)
+        } else {
+            None
+        };
         gl.bind_vertex_array(None);
         Ok(Self {
             vao,
             vbos,
+            index,
             _phantom: std::marker::PhantomData,
         })
     }
@@ -109,5 +121,13 @@ where
     pub fn buffer_sub_data<P: GlPoint + NoUninit>(&self, gl: &gl, vd: T, data: &[P], offset: i32) {
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.vbos[vd.index()]));
         buffer_subdata(gl, gl::ARRAY_BUFFER, data, offset);
+    }
+
+    pub fn index_buffer_data(&self, gl: &gl, data: &[u16], usage: u32) {
+        gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, self.index.as_ref());
+        unsafe {
+            let view = js_sys::Uint16Array::view(data);
+            gl.buffer_data_with_array_buffer_view(gl::ELEMENT_ARRAY_BUFFER, &view, usage);
+        }
     }
 }

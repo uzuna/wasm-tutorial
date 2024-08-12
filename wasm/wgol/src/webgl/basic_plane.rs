@@ -3,7 +3,7 @@ use wasm_bindgen::JsError;
 use web_sys::{WebGlBuffer, WebGlUniformLocation, WebGlVertexArrayObject};
 
 use crate::error::Result;
-use webgl2::{gl, GlEnum, GlInt, GlPoint, GlPoint3d, GlPoint4d, Program};
+use webgl2::{gl, vertex::VaoDefine, GlEnum, GlInt, GlPoint, GlPoint3d, GlPoint4d, Program};
 
 pub struct Shader {
     program: Program,
@@ -143,6 +143,37 @@ impl Camera {
 impl Default for Camera {
     fn default() -> Self {
         Self::DEFAULT
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ColorVd {
+    Position,
+    Color,
+}
+
+impl VaoDefine for ColorVd {
+    fn iter() -> std::slice::Iter<'static, Self> {
+        [ColorVd::Position, ColorVd::Color].iter()
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            ColorVd::Position => "position",
+            ColorVd::Color => "color",
+        }
+    }
+
+    fn size_of(&self) -> i32 {
+        use webgl2::GlPoint;
+        match self {
+            ColorVd::Position => GlPoint3d::size(),
+            ColorVd::Color => GlPoint4d::size(),
+        }
+    }
+
+    fn has_index_buffer() -> bool {
+        true
     }
 }
 
