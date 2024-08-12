@@ -1,11 +1,14 @@
 use std::rc::Rc;
 
+use bytemuck::NoUninit;
 use wasm_bindgen::JsError;
 use wasm_utils::{error::*, info};
-use web_sys::{WebGlBuffer, WebGlTexture, WebGlUniformLocation, WebGlVertexArrayObject};
+use web_sys::{
+    WebGlBuffer, WebGlProgram, WebGlTexture, WebGlUniformLocation, WebGlVertexArrayObject,
+};
 use webgl2::{
     gl, uniform_location,
-    vertex::{buffer_data, buffer_data_f32},
+    vertex::{buffer_data, buffer_data_f32, buffer_subdata},
     GlPoint, GlPoint2d, GlPoint3d, GlPoint4d, Program,
 };
 
@@ -262,15 +265,16 @@ void main() {
         &self.uniform
     }
 
-    pub fn create_vao(&self, vert: &[GlPoint2d; 4]) -> Result<TextureVao> {
-        let locs = ["position", "coord"]
-            .map(|s| self.gl.get_attrib_location(self.program.program(), s) as u32);
-        TextureVao::new(self.gl.clone(), vert, locs)
+    pub fn create_vao(&self, vert: &[GlPoint2d; 4]) -> Result<Vao<TextureVd>> {
+        let vao = Vao::new(self.gl.clone(), self.program.program())?;
+        vao.buffer_data(TextureVd::Position, vert, gl::STATIC_DRAW);
+        vao.buffer_data(TextureVd::Coord, &TextureVd::FRAG, gl::STATIC_DRAW);
+        Ok(vao)
     }
 
-    pub fn draw(&self, vao: &TextureVao) {
+    pub fn draw(&self, vao: &Vao<TextureVd>) {
         self.program.use_program(&self.gl);
-        self.gl.bind_vertex_array(Some(&vao.vao));
+        vao.bind();
         self.gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
     }
 }
@@ -307,52 +311,39 @@ impl TextureUniform {
     }
 }
 
-pub struct TextureVao {
-    gl: Rc<gl>,
-    vao: WebGlVertexArrayObject,
-    vertex: WebGlBuffer,
-    coord: WebGlBuffer,
+#[derive(Debug, PartialEq)]
+#[repr(u32)]
+pub enum TextureVd {
+    Position,
+    Coord,
 }
 
-impl TextureVao {
-    const VERT: [GlPoint2d; 4] = [
-        GlPoint2d::new(-1.0, 1.0),
-        GlPoint2d::new(1.0, 1.0),
-        GlPoint2d::new(-1.0, -1.0),
-        GlPoint2d::new(1.0, -1.0),
-    ];
-
+impl TextureVd {
     const FRAG: [GlPoint2d; 4] = [
         GlPoint2d::new(0.0, 0.0),
         GlPoint2d::new(1.0, 0.0),
         GlPoint2d::new(0.0, 1.0),
         GlPoint2d::new(1.0, 1.0),
     ];
+}
 
-    fn new(gl: Rc<gl>, rect: &[GlPoint2d; 4], locs: [u32; 2]) -> Result<Self> {
-        let vao = gl
-            .create_vertex_array()
-            .ok_or(JsError::new("Failed to create vao"))?;
-        gl.bind_vertex_array(Some(&vao));
-        let vertex = create_buffer(&gl)?;
-        gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vertex));
-        buffer_data(&gl, gl::ARRAY_BUFFER, rect, gl::STATIC_DRAW);
-        gl.enable_vertex_attrib_array(locs[0]);
-        gl.vertex_attrib_pointer_with_i32(locs[0], GlPoint2d::size(), gl::FLOAT, false, 0, 0);
+impl VaoDefine for TextureVd {
+    fn name(&self) -> &'static str {
+        match self {
+            TextureVd::Position => "position",
+            TextureVd::Coord => "coord",
+        }
+    }
 
-        let coord = create_buffer(&gl)?;
-        gl.bind_buffer(gl::ARRAY_BUFFER, Some(&coord));
-        buffer_data(&gl, gl::ARRAY_BUFFER, &Self::FRAG, gl::STATIC_DRAW);
-        gl.enable_vertex_attrib_array(locs[1]);
-        gl.vertex_attrib_pointer_with_i32(locs[1], GlPoint2d::size(), gl::FLOAT, false, 0, 0);
+    fn iter() -> std::slice::Iter<'static, Self> {
+        static VD: [TextureVd; 2] = [TextureVd::Position, TextureVd::Coord];
+        VD.iter()
+    }
 
-        gl.bind_vertex_array(None);
-        Ok(Self {
-            gl,
-            vao,
-            vertex,
-            coord,
-        })
+    fn size_of(&self) -> i32 {
+        match self {
+            TextureVd::Position | TextureVd::Coord => GlPoint2d::size(),
+        }
     }
 }
 
