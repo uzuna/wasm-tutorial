@@ -20,7 +20,6 @@ pub struct SingleColorShaderGl1 {
     program: Program,
     uniform: SingleColorUniform,
     position: u32,
-    vbo: WebGlBuffer,
 }
 
 impl SingleColorShaderGl1 {
@@ -39,7 +38,7 @@ void main(void){
 }
 "#;
 
-    pub fn new(gl: Rc<gl>, data: &[f32]) -> Result<Self> {
+    pub fn new(gl: Rc<gl>) -> Result<Self> {
         let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
         program.use_program(&gl);
 
@@ -49,35 +48,12 @@ void main(void){
         uniform.set_color([1.0, 0.0, 0.0, 1.0]);
 
         let position = gl.get_attrib_location(program.program(), "position") as u32;
-        info!(
-            "get_attrib_location = {}, error: {}",
-            position,
-            gl.get_error()
-        );
-        let vbo = create_buffer(&gl)?;
-        gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vbo));
-        #[rustfmt::skip]
-        buffer_data_f32(
-            &gl,
-            gl::ARRAY_BUFFER,
-            data,
-            gl::STATIC_DRAW,
-        );
-
-        info!("buffer_data {}", gl.get_error());
-
-        gl.enable_vertex_attrib_array(position);
-        info!("enable_vertex_attrib_array {}", gl.get_error());
-
-        gl.vertex_attrib_pointer_with_i32(position, 2, gl::FLOAT, false, 0, 0);
-        info!("vertex_attrib_pointer_with_i32 {}", gl.get_error());
 
         let s = Self {
             gl,
             program,
             uniform,
             position,
-            vbo,
         };
         Ok(s)
     }
@@ -90,10 +66,26 @@ void main(void){
         self.uniform.set_color(color);
     }
 
-    pub fn draw(&self) {
+    pub fn create_vbo(&self, data: &[GlPoint2d; 4]) -> Result<WebGlBuffer> {
+        let vbo = create_buffer(&self.gl)?;
+        self.gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vbo));
+        buffer_data(&self.gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
+        self.gl.enable_vertex_attrib_array(self.position);
+        self.gl.vertex_attrib_pointer_with_i32(
+            self.position,
+            GlPoint2d::size(),
+            gl::FLOAT,
+            false,
+            0,
+            0,
+        );
+        Ok(vbo)
+    }
+
+    pub fn draw(&self, vbo: &WebGlBuffer) {
         self.use_program();
+        self.gl.bind_buffer(gl::ARRAY_BUFFER, Some(vbo));
         self.gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
-        info!("draw_arrays {}", self.gl.get_error());
     }
 }
 

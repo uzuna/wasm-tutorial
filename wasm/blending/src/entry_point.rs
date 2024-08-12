@@ -3,11 +3,7 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_utils::{error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
-use webgl2::{
-    gl,
-    vertex::buffer_data_f32,
-    GlPoint2d, Program,
-};
+use webgl2::{gl, vertex::buffer_data_f32, GlPoint2d, Program};
 
 use crate::shader::{color_texture, SingleColorShaderGl1, TextureShader};
 
@@ -30,15 +26,24 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
     let gl = Rc::new(gl);
-    let s: SingleColorShaderGl1 =
-        SingleColorShaderGl1::new(gl.clone(), &[-1.0, 0.5, 0.5, 0.5, -1.0, -1.0, 0.5, -1.0])?;
+    let s = SingleColorShaderGl1::new(gl.clone())?;
+    let v1: WebGlBuffer = s.create_vbo(&[
+        GlPoint2d::new(-1.0, 0.5),
+        GlPoint2d::new(0.5, 0.5),
+        GlPoint2d::new(-1.0, -1.0),
+        GlPoint2d::new(0.5, -1.0),
+    ])?;
     s.set_color([1.0, 0.0, 0.0, 0.5]);
-    s.draw();
+    s.draw(&v1);
 
-    let s: SingleColorShaderGl1 =
-        SingleColorShaderGl1::new(gl.clone(), &[-0.5, 1.0, 1.0, 1.0, -0.5, -0.5, 1.0, -0.5])?;
+    let v2 = s.create_vbo(&[
+        GlPoint2d::new(-0.5, 1.0),
+        GlPoint2d::new(1.0, 1.0),
+        GlPoint2d::new(-0.5, -0.5),
+        GlPoint2d::new(1.0, -0.5),
+    ])?;
     s.set_color([0.0, 1.0, 0.0, 0.5]);
-    s.draw();
+    s.draw(&v2);
 
     Ok(())
 }
@@ -47,8 +52,7 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
 pub fn start_webgl2_gradiation(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     canvas.set_width(500);
     canvas.set_height(300);
-    // グラデーションシェーダー
-    // let gl = crate::webgl::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
+
     let gl = webgl2::context::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
     let gl = Rc::new(gl);
 
