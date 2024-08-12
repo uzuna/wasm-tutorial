@@ -7,38 +7,38 @@ use image::DynamicImage;
 #[clap(rename_all = "kebab-case")]
 enum Format {
     // フォントなど明度のみを持つ画像
-    LUMINANCE,
+    Luminance,
     #[default]
-    BITMAP,
-    DXT1,
-    DXT3,
-    DXT5,
+    Bitmap,
+    Dxt1,
+    Dxt3,
+    Dxt5,
 }
 
 impl Format {
     fn output_extension(&self) -> &'static str {
         match self {
-            Format::LUMINANCE => "lum",
-            Format::BITMAP => "bmp",
-            Format::DXT1 => "dxt1",
-            Format::DXT3 => "dxt3",
-            Format::DXT5 => "dxt5",
+            Format::Luminance => "lum",
+            Format::Bitmap => "bmp",
+            Format::Dxt1 => "dxt1",
+            Format::Dxt3 => "dxt3",
+            Format::Dxt5 => "dxt5",
         }
     }
 
     fn encode(&self, img: &DynamicImage) -> anyhow::Result<Vec<u8>> {
         match self {
-            Format::LUMINANCE => {
+            Format::Luminance => {
                 let img = img.to_luma8();
                 Ok(img.into_raw().to_vec())
             }
-            Format::BITMAP => {
+            Format::Bitmap => {
                 let img = img.to_rgba8();
                 Ok(img.into_raw().to_vec())
             }
-            Format::DXT1 => self.encode_dds(img, image_dds::ImageFormat::BC1RgbaUnorm),
-            Format::DXT3 => self.encode_dds(img, image_dds::ImageFormat::BC2RgbaUnorm),
-            Format::DXT5 => self.encode_dds(img, image_dds::ImageFormat::BC3RgbaUnorm),
+            Format::Dxt1 => self.encode_dds(img, image_dds::ImageFormat::BC1RgbaUnorm),
+            Format::Dxt3 => self.encode_dds(img, image_dds::ImageFormat::BC2RgbaUnorm),
+            Format::Dxt5 => self.encode_dds(img, image_dds::ImageFormat::BC3RgbaUnorm),
         }
     }
 

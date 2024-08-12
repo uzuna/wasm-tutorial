@@ -219,6 +219,11 @@ impl CubeBounds {
         } else if b.pos.y > self.y.1 {
             b.vel.y -= self.gain
         }
+        if b.pos.z < self.z.0 {
+            b.vel.z += self.gain
+        } else if b.pos.z > self.z.1 {
+            b.vel.z -= self.gain
+        }
     }
 }
 

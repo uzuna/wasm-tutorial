@@ -4,9 +4,7 @@ use nalgebra::{Matrix3, Vector2};
 use wasm_bindgen::{convert::IntoWasmAbi, prelude::*};
 use wasm_utils::{animation::AnimationLoop, error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
-use webgl2::{
-    blend::BlendMode, context::gl_clear_color, gl, vertex::buffer_data_f32, Program,
-};
+use webgl2::{blend::BlendMode, context::gl_clear_color, gl, vertex::buffer_data_f32, Program};
 
 use crate::shader::{color_texture, SingleColorShaderGl1, TextureShader};
 
@@ -80,14 +78,12 @@ pub fn create_blendmode_option(select_element: web_sys::HtmlSelectElement) -> Re
 #[wasm_bindgen]
 #[derive(Clone)]
 pub struct GlContext {
-    gl: Rc<gl>,
     blend: Rc<RefCell<BlendMode>>,
 }
 
 impl GlContext {
-    fn new(gl: Rc<gl>, blend: BlendMode) -> Self {
+    fn new(blend: BlendMode) -> Self {
         Self {
-            gl,
             blend: Rc::new(RefCell::new(blend)),
         }
     }
@@ -148,7 +144,7 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<GlContext, JsValu
     u.set_color([0.0, 1.0, 0.0, 0.5]);
     s.draw(&v0);
 
-    let ctx = GlContext::new(gl.clone(), BlendMode::Alpha);
+    let ctx = GlContext::new(BlendMode::Alpha);
     let ctx_clone = ctx.clone();
     let mut a = AnimationLoop::new(move |t| {
         let t = t as f32 / 500.0;
@@ -212,7 +208,7 @@ pub fn start_webgl2_texture(canvas: HtmlCanvasElement) -> std::result::Result<Gl
     gl.bind_texture(gl::TEXTURE_2D, Some(&t_g));
     s.draw(&vao);
 
-    let ctx = GlContext::new(gl.clone(), BlendMode::Alpha);
+    let ctx = GlContext::new(BlendMode::Alpha);
     let ctx_clone = ctx.clone();
 
     let mut a = AnimationLoop::new(move |_| {

@@ -121,6 +121,7 @@ impl Camera {
         far: 100.0,
     };
 
+    #[allow(dead_code)]
     const fn new(aspect: f32, fovy: f32, near: f32, far: f32) -> Self {
         Self {
             aspect,

@@ -340,7 +340,7 @@ pub struct ParticleGpgpuShader {
     index: Program,
     u_point: ParticleGpgpuPointUniform,
     u_velocity: ParticleGpgpuVelocityUniform,
-    u_index: ParticleGpgpuIndexUniform,
+    _u_index: ParticleGpgpuIndexUniform,
     point_vao: Vao<ParticleVd>,
     point_vlen: i32,
     index_vao: Vao<IndexVd>,
@@ -440,7 +440,7 @@ void main(){
 
         point.use_program(gl);
         let u_point = ParticleGpgpuPointUniform::new(gl, &point)?;
-        u_point.init(gl, &res, &state);
+        u_point.init(gl, &state);
 
         velocity.use_program(gl);
         let u_velocity = ParticleGpgpuVelocityUniform::new(gl, &velocity)?;
@@ -478,7 +478,7 @@ void main(){
             index: index_map,
             u_point,
             u_velocity,
-            u_index,
+            _u_index: u_index,
             point_vao,
             point_vlen: point_vert.len() as i32,
             index_vao,
@@ -654,11 +654,11 @@ impl ParticleGpgpuPointUniform {
         })
     }
 
-    fn init(&self, gl: &gl, res: &Resolution, state: &ParticleGpgpuState) {
+    fn init(&self, gl: &gl, state: &ParticleGpgpuState) {
         self.set_ambient(gl, state.ambient);
         self.set_point_size(gl, 20.0)
     }
-
+    #[allow(dead_code)]
     pub fn set_texture_unit(&self, gl: &gl, texture_unit: i32) {
         gl.uniform1i(Some(&self.u_texture), texture_unit);
     }
@@ -711,6 +711,7 @@ impl ParticleGpgpuVelocityUniform {
         self.set_handle_rate(gl, state.ctrl.handle_rate);
     }
 
+    #[allow(dead_code)]
     pub fn set_texture_unit(&self, gl: &gl, texture_unit: i32) {
         gl.uniform1i(Some(&self.u_texture), texture_unit);
     }
@@ -765,21 +766,25 @@ struct TextureFBO {
 }
 impl TextureFBO {
     #[inline]
+    #[allow(dead_code)]
     fn new_rgba(gl: &gl, res: Resolution) -> Result<Self> {
         Self::new_inner(gl, res, gl::RGBA, gl::RGBA, gl::UNSIGNED_BYTE)
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn new_half_float(gl: &gl, res: Resolution) -> Result<Self> {
         Self::new_inner(gl, res, gl::R16F, gl::RED, gl::FLOAT)
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn new_float_vec2(gl: &gl, res: Resolution) -> Result<Self> {
         Self::new_inner(gl, res, gl::RG32F, gl::RG, gl::FLOAT)
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn new_float_vec4(gl: &gl, res: Resolution) -> Result<Self> {
         Self::new_inner(gl, res, gl::RGBA32F, gl::RGBA, gl::FLOAT)
     }
