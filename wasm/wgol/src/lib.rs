@@ -14,7 +14,10 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use wasm_bindgen::prelude::*;
 use wasm_utils::animation::AnimationLoop;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
-use webgl::interaction::ParticleControl;
+use webgl::{
+    camera::{Camera, ViewMatrix},
+    interaction::ParticleControl,
+};
 
 use crate::error::Result;
 
@@ -834,7 +837,7 @@ pub fn webgl_interaction(
     });
     a.start();
     a.forget();
-    
+
     Ok(())
 }
 

@@ -1,28 +1,28 @@
-use nalgebra_glm::Vec3;
+use crate::unit::Vec3f;
 
 /// 1つのボイドを表す構造体
 #[derive(Debug, Clone, Copy)]
 pub struct Boid {
-    pos: Vec3,
-    vel: Vec3,
+    pos: Vec3f,
+    vel: Vec3f,
     // ボイドの制御パラメータ。
     // 遺伝的アルゴリズムで最適化することを考えているので個別にもたせる
     param: BoidsParameter,
 }
 
 impl Boid {
-    pub fn new(pos: Vec3, vel: Vec3, param: BoidsParameter) -> Self {
+    pub fn new(pos: Vec3f, vel: Vec3f, param: BoidsParameter) -> Self {
         Self { pos, vel, param }
     }
 
-    pub fn pos(&self) -> Vec3 {
+    pub fn pos(&self) -> Vec3f {
         self.pos
     }
 
     pub fn zero() -> Self {
         Self {
-            pos: Vec3::zeros(),
-            vel: Vec3::zeros(),
+            pos: Vec3f::zeros(),
+            vel: Vec3f::zeros(),
             param: BoidsParameter::default(),
         }
     }
@@ -31,8 +31,8 @@ impl Boid {
         (self.pos - other.pos).norm()
     }
 
-    fn get_swarm_center_in_visual_range(&self, boids: &[Boid]) -> Vec3 {
-        let mut center = Vec3::zeros();
+    fn get_swarm_center_in_visual_range(&self, boids: &[Boid]) -> Vec3f {
+        let mut center = Vec3f::zeros();
         let mut count = 0;
         for boid in boids {
             if self.distance(boid) < self.param.visual_range {
@@ -48,8 +48,8 @@ impl Boid {
         center / count as f32
     }
 
-    fn get_avoidance(&self, boids: &[Boid]) -> Vec3 {
-        let mut avoid = Vec3::zeros();
+    fn get_avoidance(&self, boids: &[Boid]) -> Vec3f {
+        let mut avoid = Vec3f::zeros();
         for boid in boids {
             if self.distance(boid) < self.param.avoid_distance {
                 avoid += self.pos - boid.pos;
@@ -59,8 +59,8 @@ impl Boid {
         avoid
     }
 
-    fn get_alingment(&self, boids: &[Boid]) -> Vec3 {
-        let mut align = Vec3::zeros();
+    fn get_alingment(&self, boids: &[Boid]) -> Vec3f {
+        let mut align = Vec3f::zeros();
         let mut count = 0;
         for boid in boids {
             if self.distance(boid) < self.param.visual_range {
@@ -76,7 +76,7 @@ impl Boid {
         align / count as f32
     }
 
-    pub fn next_velocity(&self, boids: &[Boid]) -> Vec3 {
+    pub fn next_velocity(&self, boids: &[Boid]) -> Vec3f {
         let center = self.get_swarm_center_in_visual_range(boids);
         let avoid = self.get_avoidance(boids);
         let align = self.get_alingment(boids);
@@ -156,13 +156,13 @@ impl Default for BoidsParameter {
 #[derive(Debug)]
 pub struct Boids {
     pub boids: Vec<Boid>,
-    vel_cache: Vec<Vec3>,
+    vel_cache: Vec<Vec3f>,
     bounds: CubeBounds,
 }
 
 impl Boids {
     pub fn new(boids: Vec<Boid>) -> Self {
-        let vel_cache = vec![Vec3::zeros(); boids.len()];
+        let vel_cache = vec![Vec3f::zeros(); boids.len()];
         Self {
             boids,
             bounds: CubeBounds::default(),
@@ -174,8 +174,8 @@ impl Boids {
         let mut boids = Vec::with_capacity(num as usize);
         for i in 0..num {
             let angle = 2.0 * std::f32::consts::PI * i as f32 / num as f32;
-            let pos = Vec3::new(radius * angle.cos(), radius * angle.sin(), 0.0);
-            let vel = Vec3::new(velocity * angle.cos(), velocity * angle.sin(), 0.0);
+            let pos = Vec3f::new(radius * angle.cos(), radius * angle.sin(), 0.0);
+            let vel = Vec3f::new(velocity * angle.cos(), velocity * angle.sin(), 0.0);
             boids.push(Boid::new(pos, vel, BoidsParameter::default()));
         }
 

@@ -1,24 +1,25 @@
-use nalgebra_glm::{TMat4, Vec3};
+use crate::unit::{Mat4f, Point3f, Vec3f};
 
 pub struct ViewMatrix {
-    pub eye: Vec3,
-    pub center: Vec3,
-    pub up: Vec3,
+    pub eye: Point3f,
+    pub center: Point3f,
+    pub up: Vec3f,
 }
 
 impl ViewMatrix {
     pub const DEFAULT: Self = Self {
-        eye: Vec3::new(0.0, 0.0, 3.0),
-        center: Vec3::new(0.0, 0.0, 0.0),
-        up: Vec3::new(0.0, 1.0, 0.0),
+        eye: Point3f::new(0.0, 0.0, 3.0),
+        center: Point3f::new(0.0, 0.0, 0.0),
+        up: Vec3f::new(0.0, 1.0, 0.0),
     };
 
-    pub const fn new(eye: Vec3, center: Vec3, up: Vec3) -> Self {
+    #[allow(dead_code)]
+    pub const fn new(eye: Point3f, center: Point3f, up: Vec3f) -> Self {
         Self { eye, center, up }
     }
 
-    pub fn look_at(&self) -> TMat4<f32> {
-        nalgebra_glm::look_at(&self.eye, &self.center, &self.up)
+    pub fn look_at(&self) -> Mat4f {
+        Mat4f::look_at_rh(&self.eye, &self.center, &self.up)
     }
 }
 
@@ -43,17 +44,8 @@ impl Camera {
         far: 100.0,
     };
 
-    const fn new(aspect: f32, fovy: f32, near: f32, far: f32) -> Self {
-        Self {
-            aspect,
-            fovy,
-            near,
-            far,
-        }
-    }
-
-    pub fn perspective(&self) -> TMat4<f32> {
-        nalgebra_glm::perspective(
+    pub fn perspective(&self) -> nalgebra::Perspective3<f32> {
+        nalgebra::Perspective3::new(
             self.aspect,
             self.fovy * std::f32::consts::PI / 180.0,
             self.near,

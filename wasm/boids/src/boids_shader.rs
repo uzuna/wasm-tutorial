@@ -91,7 +91,7 @@ impl CameraUbo {
     }
 
     fn gen_matrix(camera: &Camera, view: &ViewMatrix) -> Vec<f32> {
-        let mvp = camera.perspective() * view.look_at();
+        let mvp = camera.perspective().as_matrix() * view.look_at();
         info!("perspective: {:?}", camera.perspective());
         info!("lookat: {:?}", view.look_at());
         let mvp_arrays: [[f32; 4]; 4] = mvp.into();
