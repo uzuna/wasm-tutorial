@@ -12,6 +12,7 @@ use js_sys::Math::random;
 use std::{cell::RefCell, fmt, rc::Rc};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use wasm_bindgen::prelude::*;
+use wasm_utils::animation::AnimationLoop;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, WebGl2RenderingContext as gl};
 use webgl::interaction::ParticleControl;
 
@@ -802,52 +803,38 @@ pub fn webgl_interaction(
     hander.start();
 
     // アニメーションループ
-    let closure = Rc::new(RefCell::new(None));
-    let closure_clone = closure.clone();
-    let a_ctx = Rc::new(RefCell::new(None));
-    let a_ctx_clone = a_ctx.clone();
     let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
     let mouse_down_flag = Rc::new(RefCell::new(false));
-    *closure.borrow_mut() = Some(
-        Closure::<dyn FnMut(f64) -> std::result::Result<i32, JsValue>>::new(
-            move |timestamp_msec| {
-                let t = timestamp_msec as f32;
-                let color = hsva(t / 30., 1.0, 1.0, 0.5);
-                gl.clear(gl::COLOR_BUFFER_BIT);
-                shader.set_color(&gl, color);
+    let mut a = AnimationLoop::new(move |timestamp_msec| {
+        let t = timestamp_msec as f32;
+        let color = hsva(t / 30., 1.0, 1.0, 0.5);
+        gl.clear(gl::COLOR_BUFFER_BIT);
+        shader.set_color(&gl, color);
 
-                let event = {
-                    let mut event = None;
-                    while let Ok(e) = recv.try_recv() {
-                        event = Some(e);
-                    }
-                    event
-                };
-                match event {
-                    Some(MouseMessage::Move(pos)) => {
-                        *mouse_pos.borrow_mut() = pos;
-                        *mouse_down_flag.borrow_mut() = true;
-                    }
-                    Some(MouseMessage::Off) => {
-                        *mouse_down_flag.borrow_mut() = false;
-                    }
-                    None => {}
-                }
-                shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow());
-                shader.draw(&gl);
-                let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());
-                match res {
-                    Ok(handle) => {
-                        *a_ctx_clone.borrow_mut() = Some(handle);
-                        Ok(handle)
-                    }
-                    Err(e) => Err(e),
-                }
-            },
-        ),
-    );
-    *a_ctx.borrow_mut() = Some(request_animation_frame(closure.borrow().as_ref().unwrap())?);
-
+        let event = {
+            let mut event = None;
+            while let Ok(e) = recv.try_recv() {
+                event = Some(e);
+            }
+            event
+        };
+        match event {
+            Some(MouseMessage::Move(pos)) => {
+                *mouse_pos.borrow_mut() = pos;
+                *mouse_down_flag.borrow_mut() = true;
+            }
+            Some(MouseMessage::Off) => {
+                *mouse_down_flag.borrow_mut() = false;
+            }
+            None => {}
+        }
+        shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow());
+        shader.draw(&gl);
+        Ok(())
+    });
+    a.start();
+    a.forget();
+    
     Ok(())
 }
 
@@ -994,53 +981,38 @@ pub fn webgl_interaction_gpgpu(canvas: HtmlCanvasElement, ctrl: ParticleControl)
     let (hander, mut recv) = MouseEventHandler::new(canvas_ctx.clone());
     hander.start();
 
-    let closure = Rc::new(RefCell::new(None));
-    let closure_clone = closure.clone();
-    let a_ctx = Rc::new(RefCell::new(None));
-    let a_ctx_clone = a_ctx.clone();
     let mouse_pos = Rc::new(RefCell::new(Point::new(0., 0.)));
     let mouse_down_flag = Rc::new(RefCell::new(false));
-    *closure.borrow_mut() = Some(
-        Closure::<dyn FnMut(f64) -> std::result::Result<i32, JsValue>>::new(
-            move |timestamp_msec| {
-                let t = timestamp_msec as f32;
-                let color = hsva(t / 30., 1.0, 1.0, 0.5);
+    let mut a = AnimationLoop::new(move |timestamp_msec| {
+        let t = timestamp_msec as f32;
+        let color = hsva(t / 30., 1.0, 1.0, 0.5);
 
-                let event = {
-                    let mut event = None;
-                    while let Ok(e) = recv.try_recv() {
-                        event = Some(e);
-                    }
-                    event
-                };
+        let event = {
+            let mut event = None;
+            while let Ok(e) = recv.try_recv() {
+                event = Some(e);
+            }
+            event
+        };
 
-                match event {
-                    Some(MouseMessage::Move(pos)) => {
-                        *mouse_pos.borrow_mut() = pos;
-                        *mouse_down_flag.borrow_mut() = true;
-                    }
-                    Some(MouseMessage::Off) => {
-                        *mouse_down_flag.borrow_mut() = false;
-                    }
-                    None => {}
-                }
+        match event {
+            Some(MouseMessage::Move(pos)) => {
+                *mouse_pos.borrow_mut() = pos;
+                *mouse_down_flag.borrow_mut() = true;
+            }
+            Some(MouseMessage::Off) => {
+                *mouse_down_flag.borrow_mut() = false;
+            }
+            None => {}
+        }
 
-                shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow(), color);
-                shader.draw(&gl, &target_res);
+        shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow(), color);
+        shader.draw(&gl, &target_res);
+        Ok(())
+    });
 
-                let res = request_animation_frame(closure_clone.borrow().as_ref().unwrap());
-                match res {
-                    Ok(handle) => {
-                        *a_ctx_clone.borrow_mut() = Some(handle);
-                        Ok(handle)
-                    }
-                    Err(e) => Err(e),
-                }
-            },
-        ),
-    );
-    *a_ctx.borrow_mut() =
-        Some(request_animation_frame(closure.borrow().as_ref().unwrap()).unwrap());
+    a.start();
+    a.forget();
 
     Ok(())
 }
