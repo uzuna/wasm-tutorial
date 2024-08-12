@@ -3,7 +3,7 @@ use wasm_utils::{error::*, info};
 use web_sys::{js_sys, WebGlBuffer, WebGlUniformLocation};
 use webgl2::{
     gl, uniform_block_binding, uniform_location,
-    vertex::{Vao, VertexVbo},
+    vertex::{Vao, VaoDefine},
     GlPoint3d, Program,
 };
 
@@ -110,11 +110,34 @@ impl CameraUbo {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum BoidVd {
+    Position,
+}
+
+impl VaoDefine for BoidVd {
+    fn iter() -> std::slice::Iter<'static, Self> {
+        [BoidVd::Position].iter()
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            BoidVd::Position => "position",
+        }
+    }
+
+    fn size_of(&self) -> i32 {
+        match self {
+            BoidVd::Position => 3,
+        }
+    }
+}
+
 pub struct BoidShader {
     program: Program,
     ambient: WebGlUniformLocation,
-    vao: Vao,
-    vbo: VertexVbo,
+    vao: Vao<BoidVd>,
+    vertex_len: i32,
     size: f32,
     history: BoidHistoryShader,
 }
@@ -143,7 +166,6 @@ void main() {
 }
 "#;
 
-    const LOCATION_POSITION: u32 = 0;
     const MVP_UBI: u32 = 0;
 
     // for TRIANGLE STRIP
@@ -163,15 +185,16 @@ void main() {
         uniform_block_binding(gl, &program, "matrix", Self::MVP_UBI);
         gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
         let ambient = uniform_location(gl, &program, "ambient")?;
-        let vao = Vao::new(gl)?;
-        let vbo = VertexVbo::new(gl, &Self::rect(b, size), BoidShader::LOCATION_POSITION)?;
-        vao.unbind(gl);
+        let vao = Vao::new(gl, program.program())?;
+        let vert = Self::rect(b, size);
+        vao.buffer_data(gl, BoidVd::Position, &vert, gl::DYNAMIC_DRAW);
+
         let history = BoidHistoryShader::new(gl, b, hist_len, camera)?;
         Ok(Self {
             program,
             ambient,
             vao,
-            vbo,
+            vertex_len: vert.len() as i32,
             size,
             history,
         })
@@ -182,8 +205,8 @@ void main() {
     }
 
     pub fn update(&mut self, gl: &gl, b: &Boid) {
-        self.vao.bind(gl);
-        self.vbo.update_vertex(gl, &Self::rect(b, self.size));
+        self.vao
+            .buffer_sub_data(gl, BoidVd::Position, &Self::rect(b, self.size), 0);
     }
 
     pub fn set_ambient(&self, gl: &gl, ambient: [f32; 4]) {
@@ -198,7 +221,7 @@ void main() {
 
     pub fn draw(&self, gl: &gl) {
         self.vao.bind(gl);
-        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, self.vbo.count());
+        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, self.vertex_len);
     }
 
     pub fn history(&self) -> &BoidHistoryShader {
@@ -215,8 +238,8 @@ pub struct BoidHistoryShader {
     program: Program,
     ambient: WebGlUniformLocation,
     point_size: WebGlUniformLocation,
-    vao: Vao,
-    vbo: VertexVbo,
+    vao: Vao<BoidVd>,
+    vertex_len: i32,
 
     // 書き込む頂点位置の調整
     current_index: i32,
@@ -249,7 +272,7 @@ void main() {
 }
 "#;
 
-    const LOCATION_POSITION: u32 = 0;
+    // uniform blockのn番目のindexを指定
     const MVP_UBI: u32 = 0;
 
     fn new(gl: &gl, b: &Boid, hist_len: usize, camera: &CameraUbo) -> Result<Self> {
@@ -261,19 +284,20 @@ void main() {
         let ambient = uniform_location(gl, &program, "ambient")?;
         let point_size = uniform_location(gl, &program, "pointSize")?;
 
-        let vao = Vao::new(gl)?;
+        let vao = Vao::new(gl, program.program())?;
+
         let vbo_len = hist_len.next_power_of_two();
         let pos = b.pos();
         let pos = GlPoint3d::new(pos.x, pos.y, pos.z);
         let v = vec![pos; vbo_len];
-        let vbo = VertexVbo::new(gl, &v, BoidHistoryShader::LOCATION_POSITION)?;
-        vao.unbind(gl);
+        vao.buffer_data(gl, BoidVd::Position, &v, gl::DYNAMIC_DRAW);
+
         Ok(Self {
             program,
             ambient,
             point_size,
             vao,
-            vbo,
+            vertex_len: v.len() as i32,
             current_index: 0,
             vbo_len: vbo_len as i32,
         })
@@ -289,10 +313,9 @@ void main() {
     }
 
     pub fn update(&mut self, gl: &gl, b: &Boid) {
-        self.vao.bind(gl);
         let next = self.index(self.current_index + 1);
         let pos = GlPoint3d::new(b.pos().x, b.pos().y, b.pos().z);
-        self.vbo.update_vertex_sub(gl, &[pos], next);
+        self.vao.buffer_sub_data(gl, BoidVd::Position, &[pos], next);
         self.current_index = next;
     }
 
@@ -312,6 +335,6 @@ void main() {
 
     pub fn draw(&self, gl: &gl) {
         self.vao.bind(gl);
-        gl.draw_arrays(gl::POINTS, 0, self.vbo.count());
+        gl.draw_arrays(gl::POINTS, 0, self.vertex_len);
     }
 }
