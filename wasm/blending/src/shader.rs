@@ -18,7 +18,7 @@ fn create_buffer(gl: &gl) -> Result<web_sys::WebGlBuffer> {
 pub struct SingleColorShaderGl1 {
     gl: Rc<gl>,
     program: Program,
-    color: WebGlUniformLocation,
+    uniform: SingleColorUniform,
     position: u32,
     vbo: WebGlBuffer,
 }
@@ -42,7 +42,12 @@ void main(void){
     pub fn new(gl: Rc<gl>, data: &[f32]) -> Result<Self> {
         let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
         program.use_program(&gl);
-        let color = uniform_location(&gl, &program, "u_color")?;
+
+        let uniform = SingleColorUniform::new(gl.clone(), &program)?;
+        uniform.init();
+        // 初期カラーは赤
+        uniform.set_color([1.0, 0.0, 0.0, 1.0]);
+
         let position = gl.get_attrib_location(program.program(), "position") as u32;
         info!(
             "get_attrib_location = {}, error: {}",
@@ -70,16 +75,11 @@ void main(void){
         let s = Self {
             gl,
             program,
-            color,
+            uniform,
             position,
             vbo,
         };
-        s.init();
         Ok(s)
-    }
-
-    pub fn init(&self) {
-        self.set_color([1.0, 0.0, 0.0, 1.0]);
     }
 
     pub fn use_program(&self) {
@@ -87,13 +87,33 @@ void main(void){
     }
 
     pub fn set_color(&self, color: [f32; 4]) {
-        self.gl.uniform4fv_with_f32_array(Some(&self.color), &color);
+        self.uniform.set_color(color);
     }
 
     pub fn draw(&self) {
         self.use_program();
         self.gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
         info!("draw_arrays {}", self.gl.get_error());
+    }
+}
+
+pub struct SingleColorUniform {
+    gl: Rc<gl>,
+    color: WebGlUniformLocation,
+}
+
+impl SingleColorUniform {
+    pub fn new(gl: Rc<gl>, program: &Program) -> Result<Self> {
+        let color = uniform_location(&gl, program, "u_color")?;
+        Ok(Self { gl, color })
+    }
+
+    pub fn init(&self) {
+        self.set_color([0.0, 0.0, 0.0, 0.0]);
+    }
+
+    pub fn set_color(&self, color: [f32; 4]) {
+        self.gl.uniform4fv_with_f32_array(Some(&self.color), &color);
     }
 }
 
