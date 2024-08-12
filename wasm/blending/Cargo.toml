@@ -19,6 +19,7 @@ wasm-bindgen-futures.workspace = true
 wasm-utils = { workspace = true }
 futures-util.workspace = true
 js-sys.workspace = true
+webgl2 = { workspace = true, features = ["vertex", "context", "font-asset"] }
 
 [dependencies.web-sys]
 workspace = true

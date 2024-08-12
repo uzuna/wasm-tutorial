@@ -4,21 +4,35 @@ use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as gl};
 
 pub const COLOR_BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
+/// refer: https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/getContext
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WebGL2ContextOption {
+    // 代表的なアルファブレンディング計算式は `scr_color * scr_alpha + dst_color * (1 - scr_alpha)` となる
+    // 計算コストの重い乗算が2回は出現してしまう。
+    // この計算回数を減らすために、事前にアルファ値を乗算してメモリに保持するのがこのオプション
     premultiplied_alpha: bool,
+    // 表示するcanvasタグに設定された背景色を透明にするかどうか
     alpha: bool,
+    // 画像のアンチエイリアスを有効にするかどうか
+    antialias: bool,
+    // 描画バッファに16bitの深度バッファが必要であることを示す
+    depth: bool,
+    // 描画バッファに8bitのステンシルバッファが必要であることを示す
+    stencil: bool,
 }
 
 impl WebGL2ContextOption {
     const DEFAULT: Self = Self {
-        premultiplied_alpha: false,
-        alpha: false,
+        premultiplied_alpha: true,
+        alpha: true,
+        antialias: true,
+        depth: true,
+        stencil: false,
     };
 }
 
-pub fn get_webgl2_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> Result<gl> {
+pub fn get_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> Result<gl> {
     use wasm_bindgen::JsCast;
     let options = serde_wasm_bindgen::to_value(&WebGL2ContextOption::DEFAULT)?;
 
@@ -31,12 +45,15 @@ pub fn get_webgl2_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> Result
 
     // 手前にあるものだけを描画して負荷を下げる
     gl.enable(gl::DEPTH_TEST);
+    // 震度バッファ評価方法。デフォルトのGL_LESSは入力値が"未満"の場合にパスするので、平面表示が先勝ちになる
+    // 後勝ちにするためには、入力値が"以下"の場合にパスするLEQUALを使う
+    gl.depth_func(gl::LEQUAL);
     // テクスチャの表面だけを描画する
-    gl.enable(gl::CULL_FACE);
+    // gl.enable(gl::CULL_FACE);
     // アルファブレンドを有効にする
     gl.enable(gl::BLEND);
     // アルファブレンドは、srcのアルファを使ってdstの値を割り引いてブレンドする
-    gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ONE);
+    gl.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
     gl_clear_color(&gl, color);
     gl.clear_depth(1.0);

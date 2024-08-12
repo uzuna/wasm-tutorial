@@ -28,7 +28,7 @@ pub fn start(
     canvas.set_height(768);
 
     let aspect = 1024.0 / 768.0;
-    let gl = webgl2::context::get_webgl2_context(&canvas, webgl2::context::COLOR_BLACK)?;
+    let gl = webgl2::context::get_context(&canvas, webgl2::context::COLOR_BLACK)?;
     let playing = Rc::new(RefCell::new(AtomicBool::new(false)));
 
     // 1Chart単位を手で組む

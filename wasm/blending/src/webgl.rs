@@ -13,12 +13,13 @@ pub fn get_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> wasm_utils::e
         .dyn_into::<gl>()
         .map_err(|_| JsError::new("Failed to cast to WebGlRenderingContext"))?;
 
-    // 手前にあるものだけを描画して負荷を下げる
-    gl.enable(gl::DEPTH_TEST);
     // アルファブレンドを有効にする
     gl.enable(gl::BLEND);
-    // アルファブレンドは、srcのアルファを使ってdstの値を割り引いてブレンドする
-    // gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ONE);
+    gl.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+
+    // 深度テストを有効にする
+    gl.enable(gl::DEPTH_TEST);
+    gl.depth_func(gl::LEQUAL);
 
     gl.clear_color(color[0], color[1], color[2], color[3]);
     gl.clear_depth(1.0);

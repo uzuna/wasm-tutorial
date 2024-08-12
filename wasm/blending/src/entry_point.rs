@@ -22,14 +22,6 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
 
     let gl = crate::webgl::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
 
-    // アルファブレンドを有効にする
-    gl.enable(gl::BLEND);
-    gl.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-
-    // 深度テストを有効にする
-    gl.enable(gl::DEPTH_TEST);
-    gl.depth_func(gl::LEQUAL);
-
     // 画面クリア
     gl.clear_color(0.0, 0.0, 0.75, 1.0);
     gl.clear_depth(1.0);
@@ -65,16 +57,17 @@ pub fn start_webgl2_gradiation(canvas: HtmlCanvasElement) -> std::result::Result
     canvas.set_width(500);
     canvas.set_height(300);
     // グラデーションシェーダー
-    let gl = crate::webgl::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
+    // let gl = crate::webgl::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
+    let gl = webgl2::context::get_context(&canvas, [0.0, 0.0, 0.0, 1.0])?;
     let gl = Rc::new(gl);
 
-    // アルファブレンドを有効にする
-    gl.enable(gl::BLEND);
-    gl.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+    // // アルファブレンドを有効にする
+    // gl.enable(gl::BLEND);
+    // gl.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
-    // 深度テストを有効にする
-    gl.enable(gl::DEPTH_TEST);
-    gl.depth_func(gl::LEQUAL);
+    // // 深度テストを有効にする
+    // gl.enable(gl::DEPTH_TEST);
+    // gl.depth_func(gl::LEQUAL);
 
     // 画面クリア
     gl.clear_color(0.0, 0.0, 0.75, 1.0);
