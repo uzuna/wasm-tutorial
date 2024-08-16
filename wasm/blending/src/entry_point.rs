@@ -146,25 +146,35 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<GlContext, JsValu
 
     let ctx = GlContext::new(BlendMode::Alpha);
     let ctx_clone = ctx.clone();
-    let mut a = AnimationLoop::new(move |t| {
-        let t = t as f32 / 500.0;
+    let mut a = AnimationLoop::new(move |time| {
+        let t = time as f32 / 500.0;
         let x = t.sin() * 0.5;
         let y = t.cos() * 0.5;
+        let gt = time as f32 / 700.0;
+        let gx = gt.sin() * 0.5;
+        let gs = gt.cos() * 0.1;
         let u = s.uniform();
+
+        let global_mat = Matrix3::identity()
+            .append_translation(&Vector2::new(0.0, gx))
+            .append_scaling(gs + 0.8);
 
         // 背景色を描画。Canvasの影響を可視化するために青線をAlphaブレンドで描画
         BlendMode::Alpha.enable(&gl);
         gl_clear_color(&gl, BG_COLOR);
         u.set_local_mat(Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1.0, 0.1)));
+        u.set_global_mat(global_mat);
         u.set_color([0.0, 0.0, 1.0, 1.0]);
         s.draw(&v0);
 
         // 指定のブレンドモードで、赤と緑の矩形を描画
         ctx_clone.blend.borrow().enable(&gl);
         u.set_local_mat(local_mat.with_translation(x, y));
+        u.set_global_mat(global_mat);
         u.set_color([1.0, 0.0, 0.0, x.abs() + 0.1]);
         s.draw(&v0);
         u.set_local_mat(local_mat.with_translation(-x, -y));
+        u.set_global_mat(global_mat);
         u.set_color([0.0, 1.0, 0.0, y.abs() + 0.1]);
         s.draw(&v0);
         Ok(())

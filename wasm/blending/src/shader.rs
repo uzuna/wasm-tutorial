@@ -1,9 +1,7 @@
 use std::rc::Rc;
 
 use wasm_utils::{error::*, info};
-use web_sys::{
-    WebGlBuffer, WebGlTexture, WebGlUniformLocation,
-};
+use web_sys::{WebGlBuffer, WebGlTexture, WebGlUniformLocation};
 use webgl2::{
     gl, uniform_location,
     vertex::{buffer_data, buffer_data_f32, create_buffer, Vao, VaoDefine},
@@ -21,9 +19,11 @@ pub struct SingleColorShaderGl1 {
 impl SingleColorShaderGl1 {
     pub const VERT: &'static str = r#"attribute vec2 position;
 uniform mat3 local_mat;
+uniform mat3 global_mat;
 
 void main(void){
-	gl_Position = vec4((local_mat * vec3(position, 1.0)).xy, 0.0, 1.0);
+    // 順序に意味がある。global=移動先にlocal=変形を先に適用してから頂点情報に適用する
+	gl_Position = vec4((global_mat * local_mat * vec3(position, 1.0)).xy, 0.0, 1.0);
 }
 "#;
 
@@ -97,24 +97,29 @@ pub struct SingleColorUniform {
     gl: Rc<gl>,
     // 色の設定
     color: WebGlUniformLocation,
-    // ローカル座標変換行列。global座標系が必要なときにはuniformを追加する
+    // ローカル座標変換行列。配置の前に描画内容の変形移動を行う行列。オブジェクトに対する個別の変換
     local_mat: WebGlUniformLocation,
+    // 座標空間全体のうち、どこに描画するかを決める行列。カメラ行列に相当
+    global_mat: WebGlUniformLocation,
 }
 
 impl SingleColorUniform {
     pub fn new(gl: Rc<gl>, program: &Program) -> Result<Self> {
         let color = uniform_location(&gl, program, "u_color")?;
         let local_mat = uniform_location(&gl, program, "local_mat")?;
+        let global_mat = uniform_location(&gl, program, "global_mat")?;
         Ok(Self {
             gl,
             color,
             local_mat,
+            global_mat,
         })
     }
 
     pub fn init(&self) {
         self.set_color([0.0, 0.0, 0.0, 0.0]);
         self.set_local_mat(nalgebra::Matrix3::identity());
+        self.set_global_mat(nalgebra::Matrix3::identity());
     }
 
     pub fn set_color(&self, color: [f32; 4]) {
@@ -124,6 +129,11 @@ impl SingleColorUniform {
     pub fn set_local_mat(&self, mat: nalgebra::Matrix3<f32>) {
         self.gl
             .uniform_matrix3fv_with_f32_array(Some(&self.local_mat), false, mat.as_slice());
+    }
+
+    pub fn set_global_mat(&self, mat: nalgebra::Matrix3<f32>) {
+        self.gl
+            .uniform_matrix3fv_with_f32_array(Some(&self.global_mat), false, mat.as_slice());
     }
 }
 
