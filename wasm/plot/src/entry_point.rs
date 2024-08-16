@@ -1,17 +1,19 @@
 use std::{cell::RefCell, rc::Rc, sync::atomic::AtomicBool, time::Duration};
 
-use nalgebra::Vector2;
 use rand::Rng;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use wasm_bindgen::prelude::*;
 use wasm_utils::{animation::PlayStopButton, error::*};
 use web_sys::{HtmlButtonElement, HtmlCanvasElement};
-use webgl2::{font::TextShader, gl};
+use webgl2::{
+    font::{Align, TextShader},
+    gl,
+    viewport::{LocalView, ViewPort},
+};
 
 use crate::{
     plot::Chart,
     shader::{PlaneShader, PlotParams},
-    viewport::{LocalView, ViewPort},
 };
 
 #[wasm_bindgen(start)]
@@ -81,7 +83,7 @@ pub fn start(
     )?;
 
     let font = webgl2::font_asset::load(&gl)?;
-    let mut text = font.create_text_vertex("Hello,0000000000");
+    let mut text = font.create_text_vertex("Hello,0000000000", Align::left_bottom());
     let ts = TextShader::new(gl.clone())?;
 
     // ViewPort確認
@@ -90,9 +92,8 @@ pub fn start(
     plane.uniform().local_mat(&gl, lp.local_mat());
     plane.draw();
 
-    let mat = nalgebra::Matrix3::identity()
-        .append_nonuniform_scaling(&Vector2::new(0.002 / viewport.aspect(), 0.002));
-    ts.set_mat(&gl, mat.as_slice());
+    let mat = viewport.font_mat(512, 768 / 2, 16.0);
+    ts.set_mat(&gl, &mat);
     let tv = ts.link_vertex(&text)?;
     ts.draw(&gl, &tv);
 

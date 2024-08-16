@@ -1,5 +1,5 @@
+use crate::gl;
 use nalgebra::Vector2;
-use webgl2::gl;
 
 /// Window表示インスタンスのうち、表示領域に使う領域を保持する
 ///
@@ -17,17 +17,29 @@ impl ViewPort {
         Self { x, y, w, h }
     }
 
-    // px指定でOpenGLローカル座標を取得。左上原点
+    // OpenGl空間に収まる正規化された幅と高さ
+    #[inline]
+    fn normalized_wh(&self, width: u32, heifht: u32) -> (f32, f32) {
+        (width as f32 / self.w as f32, heifht as f32 / self.h as f32)
+    }
+
+    // px単位の座標をOpenGL空間に変換する。pxの指定は左上原点で、OpenGLは中央原点右上向き
+    #[inline]
+    fn normalized_position(&self, x: i32, y: i32) -> (f32, f32) {
+        let (ww, wh) = (self.w as f32 / 2.0, self.h as f32 / 2.0);
+        let x = (x as f32 - ww) / ww;
+        // y軸は下から上に向かうので反転
+        let y = (wh - y as f32) / wh;
+        (x, y)
+    }
+
+    /// px指定でOpenGLローカル座標を取得。左上原点
     pub fn local(&self, x: i32, y: i32, w: u32, h: u32) -> LocalView {
         // let scissor = Scissor::new(x, h as i32 - y, w as i32, h as i32);
         // y座標は下からなので反転
         let scissor = self.scissor_area(x, y, w, h);
-        let ww = self.w as f32 / 2.0;
-        let wh = self.h as f32 / 2.0;
-        let x = (x as f32 - ww) / ww;
-        let y = (wh - y as f32) / wh;
-        let w = w as f32 / self.w as f32;
-        let h = h as f32 / self.h as f32;
+        let (x, y) = self.normalized_position(x, y);
+        let (w, h) = self.normalized_wh(w, h);
         LocalView {
             // 幅2.0のOpenGL空間に変換
             x: x + w,
@@ -38,6 +50,16 @@ impl ViewPort {
             aspect: self.aspect(),
             scissor,
         }
+    }
+
+    /// フォントに関する行列を取得
+    pub fn font_mat(&self, x: i32, y: i32, point: f32) -> nalgebra::Matrix3<f32> {
+        let (x, y) = self.normalized_position(x, y);
+        let scale = point / self.h as f32;
+        let scale = scale * 2.0;
+        nalgebra::Matrix3::identity()
+            .append_nonuniform_scaling(&Vector2::new(scale / self.aspect(), scale))
+            .append_translation(&Vector2::new(x, y))
     }
 
     fn scissor_area(&self, x: i32, y: i32, w: u32, h: u32) -> Scissor {

@@ -2,9 +2,9 @@ use std::{collections::VecDeque, rc::Rc};
 
 use nalgebra::Vector2;
 use wasm_utils::error::*;
-use webgl2::{gl, GlPoint2d};
+use webgl2::{gl, viewport::LocalView, GlPoint2d};
 
-use crate::{shader::PlotParams, viewport::LocalView};
+use crate::shader::PlotParams;
 
 /// チャート全体を描画するための構造体
 pub struct Chart {

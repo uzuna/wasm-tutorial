@@ -18,7 +18,7 @@ tokio.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 wasm-utils = { workspace = true }
-webgl2 = { workspace = true, features = ["vertex", "context", "font-asset"] }
+webgl2 = { workspace = true, features = ["vertex", "context", "font-asset", "viewport"] }
 futures-util.workspace = true
 
 [dependencies.web-sys]

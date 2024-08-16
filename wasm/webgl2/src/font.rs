@@ -14,7 +14,7 @@ use crate::{
 pub struct TextShader {
     gl: Rc<gl>,
     program: Program,
-    window_mat: WebGlUniformLocation,
+    local_mat: WebGlUniformLocation,
     texture: WebGlUniformLocation,
 }
 
@@ -23,12 +23,12 @@ impl TextShader {
 layout(location = 0) in vec2 position;
 layout(location = 1) in vec2 coord;
 
-uniform mat3 window_mat;
+uniform mat3 local_mat;
 
 out vec2 tex_coord;
 
 void main() {
-    gl_Position = vec4((window_mat * vec3(position, 1.0)).xy, 0.0, 1.0);
+    gl_Position = vec4((local_mat * vec3(position, 1.0)).xy, 0.0, 1.0);
     tex_coord = coord;
 }
 "#;
@@ -58,13 +58,13 @@ void main() {
 
     pub fn new(gl: Rc<gl>) -> Result<Self> {
         let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
-        let window_mat = uniform_location(&gl, &program, "window_mat")?;
+        let local_mat = uniform_location(&gl, &program, "local_mat")?;
         let texture = uniform_location(&gl, &program, "u_texture")?;
 
         Ok(Self {
             gl,
             program,
-            window_mat,
+            local_mat,
             texture,
         })
     }
@@ -92,9 +92,9 @@ void main() {
         })
     }
 
-    pub fn set_mat(&self, gl: &gl, mat: &[f32]) {
+    pub fn set_mat(&self, gl: &gl, mat: &nalgebra::Matrix3<f32>) {
         self.program.use_program(gl);
-        gl.uniform_matrix3fv_with_f32_array(Some(&self.window_mat), false, mat);
+        gl.uniform_matrix3fv_with_f32_array(Some(&self.local_mat), false, mat.as_slice());
     }
 
     pub fn draw(&self, gl: &gl, vao: &TextVao) {
@@ -199,7 +199,9 @@ impl Font {
     }
 
     /// 文字列情報から頂点情報を作成する
-    pub fn create_text_vertex(&self, text: &str) -> TextVertex2d {
+    ///
+    /// 高さが2.0の大きさの頂点データが作られる
+    pub fn create_text_vertex(&self, text: &str, align: Align) -> TextVertex2d {
         let mut positions = vec![];
         let mut uvs = vec![];
 
@@ -215,9 +217,19 @@ impl Font {
             })
             .sum::<i32>() as f32;
         // 現在の文字の配置位置。中央揃えを想定
-        let mut pos_x = -total_advance / 2.;
-        // テキストの高さ(改行なしを想定)
-        let pos_y = self.detail.size as f32 / 2.;
+        let mut pos_x = match align.text {
+            TextAlign::Left => 0.0,
+            TextAlign::Center => -total_advance / 2.,
+            TextAlign::Right => -total_advance,
+        };
+        // 7座標も0,0原点が中心に来るように配置
+        let pos_y = match align.vertical {
+            VerticalAlign::Top => -(self.detail.size as f32),
+            VerticalAlign::Middle => -(self.detail.size as f32 / 2.),
+            VerticalAlign::Bottom => 0.0,
+        };
+        // フォントサイズに関わらず高さを2.0に合わせる
+        let scale = 2.0 / self.detail.size as f32;
 
         // (x0,y1) --- (x1,y1)
         // |         /  |
@@ -227,10 +239,10 @@ impl Font {
         for c in text.chars() {
             if let Some(ch) = self.detail.characters.get(&c) {
                 // 4つの頂点を作る
-                let x0 = pos_x - ch.origin_x as f32;
-                let y0 = pos_y + ch.origin_y as f32 - ch.height as f32;
-                let x1 = x0 + ch.width as f32;
-                let y1 = y0 + ch.height as f32;
+                let x0 = (pos_x - ch.origin_x as f32) * scale;
+                let y0 = (pos_y + ch.origin_y as f32 - ch.height as f32) * scale;
+                let x1 = x0 + (ch.width as f32 * scale);
+                let y1 = y0 + (ch.height as f32 * scale);
 
                 positions.push(GlPoint2d::new(x0, y1));
                 positions.push(GlPoint2d::new(x0, y0));
@@ -316,6 +328,55 @@ impl FontTextureDetail {
     pub fn height(&self) -> u32 {
         self.height
     }
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
+pub struct Align {
+    pub text: TextAlign,
+    pub vertical: VerticalAlign,
+}
+
+impl Align {
+    pub fn left_top() -> Self {
+        Self {
+            text: TextAlign::Left,
+            vertical: VerticalAlign::Top,
+        }
+    }
+    pub fn left_bottom() -> Self {
+        Self {
+            text: TextAlign::Left,
+            vertical: VerticalAlign::Bottom,
+        }
+    }
+    pub fn center_middle() -> Self {
+        Self {
+            text: TextAlign::Center,
+            vertical: VerticalAlign::Middle,
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
+pub enum TextAlign {
+    Left,
+    #[default]
+    Center,
+    Right,
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
+pub enum VerticalAlign {
+    Top,
+    #[default]
+    Middle,
+    Bottom,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

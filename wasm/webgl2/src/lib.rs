@@ -18,6 +18,9 @@ pub mod font;
 #[cfg(feature = "font-asset")]
 pub mod font_asset;
 
+#[cfg(feature = "viewport")]
+pub mod viewport;
+
 use error::Result;
 
 pub fn uniform_location(gl: &gl, program: &Program, name: &str) -> Result<WebGlUniformLocation> {
