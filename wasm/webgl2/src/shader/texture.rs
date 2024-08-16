@@ -154,6 +154,11 @@ impl VaoDefine for TextureVd {
 
 /// 1x1pxの色のテクスチャを作成する
 pub fn color_texture(gl: &gl, color: [u8; 4]) -> WebGlTexture {
+    create_texture(gl, 1, 1, Some(&color))
+}
+
+/// テクスチャを作成する
+pub fn create_texture(gl: &gl, width: i32, height: i32, body: Option<&[u8]>) -> WebGlTexture {
     let texture = gl.create_texture().expect("Failed to create texture");
     gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
     gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
@@ -164,12 +169,31 @@ pub fn color_texture(gl: &gl, color: [u8; 4]) -> WebGlTexture {
         gl::TEXTURE_2D,
         0,
         gl::RGBA as i32,
-        1,
-        1,
+        width,
+        height,
         0,
         gl::RGBA,
         gl::UNSIGNED_BYTE,
-        Some(&color),
+        body,
+    )
+    .expect("Failed to set texture image");
+    texture
+}
+
+pub fn create_texture_image_element(gl: &gl, element: &web_sys::HtmlImageElement) -> WebGlTexture {
+    let texture = gl.create_texture().expect("Failed to create texture");
+    gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+    gl.tex_image_2d_with_u32_and_u32_and_html_image_element(
+        gl::TEXTURE_2D,
+        0,
+        gl::RGBA as i32,
+        gl::RGBA,
+        gl::UNSIGNED_BYTE,
+        element,
     )
     .expect("Failed to set texture image");
     texture

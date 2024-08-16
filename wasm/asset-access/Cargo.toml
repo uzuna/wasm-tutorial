@@ -11,11 +11,15 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 wasm-bindgen.workspace = true
-wasm-utils = { workspace = true }
+wasm-bindgen-futures.workspace = true
+wasm-utils.workspace = true
 webgl2 = { workspace = true, features = ["context", "shader"] }
 
 [dependencies.web-sys]
 workspace = true
+features = [
+    "HtmlImageElement",
+]
 
 [profile.release]
 opt-level = "s"
