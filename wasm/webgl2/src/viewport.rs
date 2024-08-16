@@ -52,7 +52,7 @@ impl ViewPort {
         }
     }
 
-    /// フォントに関する行列を取得
+    /// フォントに関する行列を取得。大きさはフォントの縦幅の大きさのpx数で指定
     pub fn font_mat(&self, x: i32, y: i32, point: f32) -> nalgebra::Matrix3<f32> {
         let (x, y) = self.normalized_position(x, y);
         let scale = point / self.h as f32;

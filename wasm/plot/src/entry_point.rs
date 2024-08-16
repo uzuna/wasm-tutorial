@@ -83,7 +83,7 @@ pub fn start(
     )?;
 
     let font = webgl2::font_asset::load(&gl)?;
-    let mut text = font.create_text_vertex("Hello,0000000000", Align::left_bottom());
+    let mut text = font.create_text_vertex("0000000000", Align::left_bottom());
     let ts = TextShader::new(gl.clone())?;
 
     // ViewPort確認
@@ -92,7 +92,7 @@ pub fn start(
     plane.uniform().local_mat(&gl, lp.local_mat());
     plane.draw();
 
-    let mat = viewport.font_mat(512, 768 / 2, 16.0);
+    let mat = viewport.font_mat(512, 128, 16.0);
     ts.set_mat(&gl, &mat);
     let tv = ts.link_vertex(&text)?;
     ts.draw(&gl, &tv);
@@ -111,9 +111,15 @@ pub fn start(
 
         viewport.scissor(&gl);
         plane.draw();
-        font.update_text(&mut text, &format!("Hello,{}", time as u32));
-        text.update_uv(&gl, &tv);
-        ts.draw(&gl, &tv);
+
+        if let Some(s) = chart.series(0) {
+            if let Some((time, value)) = s.last() {
+                font.update_text(&mut text, &format!("{:.5}", value));
+                text.update(&gl, &tv);
+                ts.draw(&gl, &tv);
+            }
+        }
+
         Ok(())
     });
 

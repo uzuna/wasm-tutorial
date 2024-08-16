@@ -120,6 +120,7 @@ pub struct TextVertex2d {
     // 文字列長の最大値と現在値
     pub capacity: usize,
     pub len: usize,
+    align: Align,
 }
 
 impl TextVertex2d {
@@ -198,26 +199,9 @@ impl Font {
         self.texture.as_ref()
     }
 
-    /// 文字列情報から頂点情報を作成する
-    ///
-    /// 高さが2.0の大きさの頂点データが作られる
-    pub fn create_text_vertex(&self, text: &str, align: Align) -> TextVertex2d {
-        let mut positions = vec![];
-        let mut uvs = vec![];
-
-        // テキストの全幅
-        let total_advance = text
-            .chars()
-            .map(|c| {
-                self.detail
-                    .characters
-                    .get(&c)
-                    .map(|ch| ch.advance)
-                    .unwrap_or(0)
-            })
-            .sum::<i32>() as f32;
+    fn aling_position(&self, align: Align, total_advance: f32) -> (f32, f32) {
         // 現在の文字の配置位置。中央揃えを想定
-        let mut pos_x = match align.text {
+        let pos_x = match align.text {
             TextAlign::Left => 0.0,
             TextAlign::Center => -total_advance / 2.,
             TextAlign::Right => -total_advance,
@@ -228,6 +212,33 @@ impl Font {
             VerticalAlign::Middle => -(self.detail.size as f32 / 2.),
             VerticalAlign::Bottom => 0.0,
         };
+        (pos_x, pos_y)
+    }
+
+    // テキストの全幅
+    fn total_advance(&self, text: &str) -> f32 {
+        text.chars()
+            .map(|c| {
+                self.detail
+                    .characters
+                    .get(&c)
+                    .map(|ch| ch.advance)
+                    .unwrap_or(0)
+            })
+            .sum::<i32>() as f32
+    }
+
+    /// 文字列情報から頂点情報を作成する
+    ///
+    /// 高さが2.0の大きさの頂点データが作られる
+    pub fn create_text_vertex(&self, text: &str, align: Align) -> TextVertex2d {
+        let mut positions = vec![];
+        let mut uvs = vec![];
+
+        // 描画開始位置の決定
+        let total_advance = self.total_advance(text);
+        let (mut pos_x, pos_y) = self.aling_position(align, total_advance);
+
         // フォントサイズに関わらず高さを2.0に合わせる
         let scale = 2.0 / self.detail.size as f32;
 
@@ -276,6 +287,7 @@ impl Font {
             text_pt: self.detail.size as f32,
             capacity: text.len(),
             len: text.len(),
+            align,
         }
     }
 
@@ -293,11 +305,45 @@ impl Font {
         uvs[5] = GlPoint2d::new(u1, v0);
     }
 
+    fn set_vertex(&self, vs: &mut [GlPoint2d], ch: &Character, pos_x: f32, pos_y: f32) {
+        let scale = 2.0 / self.detail.size as f32;
+
+        // 4つの頂点を作る
+        let x0 = (pos_x - ch.origin_x as f32) * scale;
+        let y0 = (pos_y + ch.origin_y as f32 - ch.height as f32) * scale;
+        let x1 = x0 + (ch.width as f32 * scale);
+        let y1 = y0 + (ch.height as f32 * scale);
+
+        vs[0] = GlPoint2d::new(x0, y1);
+        vs[1] = GlPoint2d::new(x0, y0);
+        vs[2] = GlPoint2d::new(x1, y1);
+        vs[3] = GlPoint2d::new(x1, y1);
+        vs[4] = GlPoint2d::new(x0, y0);
+        vs[5] = GlPoint2d::new(x1, y0);
+    }
+
     pub fn update_text(&self, v: &mut TextVertex2d, text: &str) {
-        for (i, c) in text.chars().enumerate() {
-            let uv_index = i * Self::CHAR_VERTEX_COUNT;
-            if let Some(ch) = self.detail.characters.get(&c) {
-                self.set_uv(&mut v.uvs[uv_index..uv_index + Self::CHAR_VERTEX_COUNT], ch);
+        let total_advance = self.total_advance(text);
+        let (mut pos_x, pos_y) = self.aling_position(v.align, total_advance);
+        for i in 0..v.capacity {
+            let idx = i * Self::CHAR_VERTEX_COUNT;
+            let idx_next = idx + Self::CHAR_VERTEX_COUNT;
+            if i < text.len() {
+                let c = text.chars().nth(i).unwrap();
+                if let Some(ch) = self.detail.characters.get(&c) {
+                    self.set_uv(&mut v.uvs[idx..idx_next], ch);
+                    self.set_vertex(&mut v.positions[idx..idx_next], ch, pos_x, pos_y);
+                    pos_x += ch.advance as f32;
+                }
+            } else {
+                // 文字列が短い場合は空白で埋める
+                self.set_uv(&mut v.uvs[idx..idx_next], &self.detail.characters[&' ']);
+                self.set_vertex(
+                    &mut v.positions[idx..idx_next],
+                    &self.detail.characters[&' '],
+                    pos_x,
+                    pos_y,
+                );
             }
         }
     }

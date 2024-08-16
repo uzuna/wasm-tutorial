@@ -50,6 +50,10 @@ impl Chart {
             series.draw(gl);
         }
     }
+
+    pub fn series(&self, index: usize) -> Option<&SeriesRenderer> {
+        self.series.get(index)
+    }
 }
 
 /// 1データ系列を描画するための構造体
@@ -128,6 +132,13 @@ impl SeriesRenderer {
     pub fn draw(&self, gl: &gl) {
         self.dot_shader.draw(gl);
         self.plane_shader.draw();
+    }
+
+    pub fn last(&self) -> Option<(f32, f32)> {
+        self.buffer
+            .time
+            .back()
+            .map(|&t| (t, *self.buffer.value.back().unwrap()))
     }
 }
 
