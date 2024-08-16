@@ -1,11 +1,11 @@
 use std::rc::Rc;
 
-use wasm_utils::{error::*, info};
+use wasm_utils::error::*;
 use web_sys::{WebGlBuffer, WebGlTexture, WebGlUniformLocation};
 use webgl2::{
     gl, uniform_location,
-    vertex::{buffer_data, buffer_data_f32, create_buffer, Vao, VaoDefine},
-    GlPoint, GlPoint2d, GlPoint3d, GlPoint4d, Program,
+    vertex::{buffer_data, create_buffer, Vao, VaoDefine},
+    GlPoint, GlPoint2d, Program,
 };
 
 /// Webgl1.0のシングルカラーシェーダー
@@ -134,87 +134,6 @@ impl SingleColorUniform {
     pub fn set_global_mat(&self, mat: nalgebra::Matrix3<f32>) {
         self.gl
             .uniform_matrix3fv_with_f32_array(Some(&self.global_mat), false, mat.as_slice());
-    }
-}
-
-pub struct VertexObject {
-    gl: Rc<gl>,
-    vertex: web_sys::WebGlBuffer,
-    coord: web_sys::WebGlBuffer,
-    color: web_sys::WebGlBuffer,
-    index: web_sys::WebGlBuffer,
-    index_count: i32,
-}
-
-impl VertexObject {
-    const RECT_VERTEX: [GlPoint3d; 4] = [
-        GlPoint3d::new(-1.0, 1.0, 0.0),
-        GlPoint3d::new(1.0, 1.0, 0.0),
-        GlPoint3d::new(-1.0, -1.0, 0.0),
-        GlPoint3d::new(1.0, -1.0, 0.0),
-    ];
-
-    const RECT_COORD: [GlPoint2d; 4] = [
-        GlPoint2d::new(0.0, 0.0),
-        GlPoint2d::new(1.0, 0.0),
-        GlPoint2d::new(0.0, 1.0),
-        GlPoint2d::new(1.0, 1.0),
-    ];
-
-    const RECT_COLOR: [GlPoint4d; 4] = [
-        GlPoint4d::new(1.0, 0.0, 0.0, 1.0),
-        GlPoint4d::new(0.0, 1.0, 0.0, 1.0),
-        GlPoint4d::new(0.0, 0.0, 1.0, 1.0),
-        GlPoint4d::new(1.0, 1.0, 1.0, 1.0),
-    ];
-
-    const RECT_INDEX: [u16; 6] = [0, 1, 2, 3, 2, 1];
-    pub fn new(gl: Rc<gl>) -> Result<Self> {
-        let vertex = create_buffer(&gl)?;
-        let coord = create_buffer(&gl)?;
-        let color = create_buffer(&gl)?;
-        let index = create_buffer(&gl)?;
-
-        Ok(Self {
-            gl,
-            vertex,
-            coord,
-            color,
-            index,
-            index_count: 0,
-        })
-    }
-
-    pub fn rect(gl: Rc<gl>) -> Result<Self> {
-        let mut v = Self::new(gl)?;
-        v.rect_inner();
-        Ok(v)
-    }
-
-    fn rect_inner(&mut self) {
-        let gl = &self.gl;
-        let data = bytemuck::cast_slice(&Self::RECT_VERTEX);
-        gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.vertex));
-        buffer_data_f32(gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
-        gl.bind_buffer(gl::ARRAY_BUFFER, None);
-        info!("bind_buffer {}", gl.get_error());
-
-        let data = bytemuck::cast_slice(&Self::RECT_COORD);
-        gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.coord));
-        buffer_data_f32(gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
-        gl.bind_buffer(gl::ARRAY_BUFFER, None);
-
-        let data = bytemuck::cast_slice(&Self::RECT_COLOR);
-        gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.color));
-        buffer_data_f32(gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
-        gl.bind_buffer(gl::ARRAY_BUFFER, None);
-
-        let data = bytemuck::cast_slice(&Self::RECT_INDEX);
-        gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(&self.index));
-        buffer_data_f32(gl, gl::ELEMENT_ARRAY_BUFFER, data, gl::STATIC_DRAW);
-        gl.bind_buffer(gl::ARRAY_BUFFER, None);
-
-        self.index_count = Self::RECT_INDEX.len() as i32;
     }
 }
 
