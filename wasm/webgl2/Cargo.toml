@@ -7,10 +7,11 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
-context = ["web-sys/HtmlCanvasElement"]
-font = ["dep:fxhash", "dep:serde", "web-sys/WebGlTexture", "vertex", "dep:nalgebra"]
+context = ["web-sys/HtmlCanvasElement", "dep:serde"]
+font = ["vertex", "dep:fxhash", "dep:serde", "web-sys/WebGlTexture", "dep:nalgebra"]
 font-asset = ["font", "dep:serde_json", "web-sys/WebglCompressedTextureS3tc"]
-font-asset-compress = ["font", "font-asset", "dep:include-bytes-zstd"]
+font-asset-compress = ["font-asset", "dep:include-bytes-zstd"]
+shader = ["vertex", "web-sys/WebGlTexture", "dep:nalgebra"]
 vertex = ["web-sys/WebGlBuffer"]
 viewport = ["dep:nalgebra"]
 

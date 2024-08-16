@@ -4,9 +4,16 @@ use nalgebra::{Matrix3, Vector2};
 use wasm_bindgen::{convert::IntoWasmAbi, prelude::*};
 use wasm_utils::{animation::AnimationLoop, error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
-use webgl2::{blend::BlendMode, context::gl_clear_color, gl, vertex::buffer_data_f32, Program};
+use webgl2::{
+    blend::BlendMode,
+    context::gl_clear_color,
+    gl,
+    shader::texture::{color_texture, TextureShader},
+    vertex::buffer_data_f32,
+    Program,
+};
 
-use crate::shader::{color_texture, SingleColorShaderGl1, TextureShader};
+use crate::shader::SingleColorShaderGl1;
 
 const BG_COLOR: [f32; 4] = [0.0, 0.2, 0.2, 1.0];
 
@@ -207,16 +214,13 @@ pub fn start_webgl2_texture(canvas: HtmlCanvasElement) -> std::result::Result<Gl
     let u = s.uniform();
 
     u.set_mat(Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1.0, 0.1)));
-    gl.bind_texture(gl::TEXTURE_2D, Some(&t_b));
-    s.draw(&vao);
+    s.draw(&vao, &t_b);
 
     u.set_mat(local_mat.with_translation(-0.5, -0.5));
-    gl.bind_texture(gl::TEXTURE_2D, Some(&t_r));
-    s.draw(&vao);
+    s.draw(&vao, &t_r);
 
     u.set_mat(local_mat.with_translation(0.5, 0.5));
-    gl.bind_texture(gl::TEXTURE_2D, Some(&t_g));
-    s.draw(&vao);
+    s.draw(&vao, &t_g);
 
     let ctx = GlContext::new(BlendMode::Alpha);
     let ctx_clone = ctx.clone();
@@ -228,17 +232,14 @@ pub fn start_webgl2_texture(canvas: HtmlCanvasElement) -> std::result::Result<Gl
         BlendMode::Alpha.enable(&gl);
         gl_clear_color(&gl, BG_COLOR);
         u.set_mat(Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1.0, 0.1)));
-        gl.bind_texture(gl::TEXTURE_2D, Some(&t_b));
-        s.draw(&vao);
+        s.draw(&vao, &t_b);
 
         ctx_clone.blend.borrow().enable(&gl);
         u.set_mat(local_mat.with_translation(-0.5, -0.5));
-        gl.bind_texture(gl::TEXTURE_2D, Some(&t_r));
-        s.draw(&vao);
+        s.draw(&vao, &t_r);
 
         u.set_mat(local_mat.with_translation(0.5, 0.5));
-        gl.bind_texture(gl::TEXTURE_2D, Some(&t_g));
-        s.draw(&vao);
+        s.draw(&vao, &t_g);
         Ok(())
     });
     a.start();

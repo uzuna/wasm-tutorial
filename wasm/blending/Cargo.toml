@@ -15,7 +15,7 @@ nalgebra.workspace = true
 wasm-bindgen.workspace = true
 wasm-utils = { workspace = true }
 js-sys.workspace = true
-webgl2 = { workspace = true, features = ["vertex", "context", "font-asset"] }
+webgl2 = { workspace = true, features = ["shader", "context", "font-asset"] }
 
 [dependencies.web-sys]
 workspace = true

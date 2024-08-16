@@ -133,9 +133,11 @@ where
 }
 
 /// 画面全体を覆う四角形の頂点座標
+///
+/// 左下, 右下, 左上, 右上の順
 pub const UNIT_RECT: [GlPoint2d; 4] = [
-    GlPoint2d::new(-1.0, 1.0),
     GlPoint2d::new(-1.0, -1.0),
     GlPoint2d::new(1.0, -1.0),
+    GlPoint2d::new(-1.0, 1.0),
     GlPoint2d::new(1.0, 1.0),
 ];
