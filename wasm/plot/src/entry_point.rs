@@ -82,9 +82,15 @@ pub fn start(
         playing.clone(),
     )?;
 
+    // フォント情報の読み出しとシェーダーの作成
     let font = webgl2::font_asset::load(&gl)?;
-    let mut text = font.create_text_vertex("0000000000", Align::left_bottom());
     let ts = TextShader::new(gl.clone())?;
+
+    // テキストの頂点情報を作成し、VAOで描画メモリを確保
+    let mut text = font.text_by_capacity(10, Align::left_bottom());
+    let mat = viewport.font_mat(512, 128, 16.0);
+    ts.local_mat(&gl, &mat);
+    let tv = ts.create_vbo(&text)?;
 
     // ViewPort確認
     let lp = viewport.local(512, 256, 512, 128);
@@ -92,9 +98,7 @@ pub fn start(
     plane.uniform().local_mat(&gl, lp.local_mat());
     plane.draw();
 
-    let mat = viewport.font_mat(512, 128, 16.0);
-    ts.set_mat(&gl, &mat);
-    let tv = ts.link_vertex(&text)?;
+    // テキスト描画
     ts.draw(&gl, &tv);
 
     let a = wasm_utils::animation::AnimationLoop::new(move |time| {
@@ -109,13 +113,15 @@ pub fn start(
         c2.draw(&gl, current_time);
         c3.draw(&gl, current_time);
 
+        // Scissorを解除して全体に描画
         viewport.scissor(&gl);
         plane.draw();
 
+        // Chart.Seriese0の最後のデータを取得してテキストに反映
         if let Some(s) = chart.series(0) {
             if let Some((time, value)) = s.last() {
-                font.update_text(&mut text, &format!("{:.5}", value));
-                text.update(&gl, &tv);
+                text.update_text(&format!("{:.5}", value));
+                text.apply_to_vao(&gl, &tv);
                 ts.draw(&gl, &tv);
             }
         }

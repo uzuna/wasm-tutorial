@@ -15,7 +15,6 @@ pub struct TextShader {
     gl: Rc<gl>,
     program: Program,
     local_mat: WebGlUniformLocation,
-    texture: WebGlUniformLocation,
 }
 
 impl TextShader {
@@ -59,13 +58,11 @@ void main() {
     pub fn new(gl: Rc<gl>) -> Result<Self> {
         let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
         let local_mat = uniform_location(&gl, &program, "local_mat")?;
-        let texture = uniform_location(&gl, &program, "u_texture")?;
 
         Ok(Self {
             gl,
             program,
             local_mat,
-            texture,
         })
     }
 
@@ -74,25 +71,26 @@ void main() {
     }
 
     /// テキストの描画に使うVBOを作成する
-    pub fn link_vertex(&self, v_text: &TextVertex2d) -> Result<TextVao> {
+    pub fn create_vbo(&self, v_text: &TextVertex) -> Result<TextVao> {
         self.program.use_program(&self.gl);
+        let v = &v_text.vertex;
 
         let vao = Vao::new(&self.gl, self.program.program())?;
         vao.buffer_data(
             &self.gl,
             TextVaoDefine::Vertex,
-            &v_text.positions,
+            &v.positions,
             gl::STATIC_DRAW,
         );
-        vao.buffer_data(&self.gl, TextVaoDefine::Uv, &v_text.uvs, gl::DYNAMIC_DRAW);
+        vao.buffer_data(&self.gl, TextVaoDefine::Uv, &v.uvs, gl::DYNAMIC_DRAW);
         Ok(TextVao {
-            texture: v_text.texture.clone(),
+            texture: v_text.font.texture.clone(),
             vao,
-            vertex_size: v_text.positions.len() as i32,
+            vertex_size: v.positions.len() as i32,
         })
     }
 
-    pub fn set_mat(&self, gl: &gl, mat: &nalgebra::Matrix3<f32>) {
+    pub fn local_mat(&self, gl: &gl, mat: &nalgebra::Matrix3<f32>) {
         self.program.use_program(gl);
         gl.uniform_matrix3fv_with_f32_array(Some(&self.local_mat), false, mat.as_slice());
     }
@@ -106,39 +104,54 @@ void main() {
     }
 }
 
+/// テキスト描画情報と、その更新方法を提供する構造体
+pub struct TextVertex {
+    font: Rc<FontInner>,
+    vertex: TextVertexInner,
+}
+
+impl TextVertex {
+    /// テキストを更新する。最初に作った時以上の文字列は無視される
+    pub fn update_text(&mut self, text: &str) {
+        self.font.update_text(&mut self.vertex, text);
+    }
+
+    /// 頂点情報をVBOに適用する
+    pub fn apply_to_vao(&self, gl: &gl, vao: &TextVao) {
+        self.vertex.update(gl, vao);
+    }
+}
+
 /// 画面に対して文字列を表示するための頂点情報
 ///
 /// 三次元空間内での文字描画は想定しない
 #[derive(Debug, PartialEq)]
-pub struct TextVertex2d {
-    texture: Rc<WebGlTexture>,
+struct TextVertexInner {
     // テキストのピクセルサイズで頂点を作る
-    pub positions: Vec<GlPoint2d>,
-    pub uvs: Vec<GlPoint2d>,
+    positions: Vec<GlPoint2d>,
+    uvs: Vec<GlPoint2d>,
     // テキストの標準サイズ
-    pub text_pt: f32,
+    text_pt: f32,
     // 文字列長の最大値と現在値
-    pub capacity: usize,
-    pub len: usize,
+    capacity: usize,
+    len: usize,
     align: Align,
 }
 
-impl TextVertex2d {
-    // 数字などvertexを変更しない場合
-    pub fn update_uv(&self, gl: &gl, vao: &TextVao) {
-        vao.vao.buffer_sub_data(gl, TextVaoDefine::Uv, &self.uvs, 0);
-    }
-
+impl TextVertexInner {
     // 数字以外の文字列を描画する場合。文字によって位置が変わるのでpositionも変更する
-    pub fn update(&self, gl: &gl, vao: &TextVao) {
+    //
+    // TODO: 数字だけなどならuv更新に限定するなど効率化する余地がある
+    fn update(&self, gl: &gl, vao: &TextVao) {
         vao.vao
             .buffer_sub_data(gl, TextVaoDefine::Vertex, &self.positions, 0);
         vao.vao.buffer_sub_data(gl, TextVaoDefine::Uv, &self.uvs, 0);
     }
 }
 
+/// テキスト描画用のVBOの定義
 #[derive(Debug, PartialEq)]
-pub enum TextVaoDefine {
+enum TextVaoDefine {
     Vertex,
     Uv,
 }
@@ -162,7 +175,10 @@ impl VaoDefine for TextVaoDefine {
     }
 }
 
-/// テキスト描画用のVBO
+/// テキスト描画用のVAO
+///
+/// GPUメモリ上に保持されたテキストの頂点とテクスチャを保持している。
+/// この構造体があれば[Font]や[TextVertex]が無くても描画自体は可能
 pub struct TextVao {
     texture: Rc<WebGlTexture>,
     vao: Vao<TextVaoDefine>,
@@ -182,21 +198,48 @@ impl TextVao {
 
 /// フォントテクスチャと切り出し情報を保持する構造体
 pub struct Font {
+    inner: Rc<FontInner>,
+}
+
+impl Font {
+    /// フォントテクスチャと切り出し情報を保持する構造体を作成する
+    pub fn new(texture: WebGlTexture, detail: FontTextureDetail) -> Self {
+        Self {
+            inner: Rc::new(FontInner::new(texture, detail)),
+        }
+    }
+
+    /// 文字列と整列情報から頂点とテキスト編集構造体を作成する
+    pub fn text(&self, text: &str, align: Align) -> TextVertex {
+        let vi = self.inner.create_text_vertex(text, align);
+        TextVertex {
+            font: self.inner.clone(),
+            vertex: vi,
+        }
+    }
+
+    /// 文字数を指定して、空のテキスト編集構造体を作成する
+    #[inline]
+    pub fn text_by_capacity(&self, text_len: u32, align: Align) -> TextVertex {
+        let text = " ".repeat(text_len as usize);
+        self.text(&text, align)
+    }
+}
+
+struct FontInner {
+    // テクスチャはTextVaoがある限り描画可能にするためRcで包む
     texture: Rc<WebGlTexture>,
     detail: FontTextureDetail,
 }
 
-impl Font {
+impl FontInner {
     const CHAR_VERTEX_COUNT: usize = 6;
-    pub fn new(texture: WebGlTexture, detail: FontTextureDetail) -> Self {
+
+    fn new(texture: WebGlTexture, detail: FontTextureDetail) -> Self {
         Self {
             texture: Rc::new(texture),
             detail,
         }
-    }
-
-    pub fn texture(&self) -> &WebGlTexture {
-        self.texture.as_ref()
     }
 
     fn aling_position(&self, align: Align, total_advance: f32) -> (f32, f32) {
@@ -231,7 +274,7 @@ impl Font {
     /// 文字列情報から頂点情報を作成する
     ///
     /// 高さが2.0の大きさの頂点データが作られる
-    pub fn create_text_vertex(&self, text: &str, align: Align) -> TextVertex2d {
+    fn create_text_vertex(&self, text: &str, align: Align) -> TextVertexInner {
         let mut positions = vec![];
         let mut uvs = vec![];
 
@@ -280,8 +323,7 @@ impl Font {
                 pos_x += ch.advance as f32;
             }
         }
-        TextVertex2d {
-            texture: self.texture.clone(),
+        TextVertexInner {
             positions,
             uvs,
             text_pt: self.detail.size as f32,
@@ -322,7 +364,7 @@ impl Font {
         vs[5] = GlPoint2d::new(x1, y0);
     }
 
-    pub fn update_text(&self, v: &mut TextVertex2d, text: &str) {
+    fn update_text(&self, v: &mut TextVertexInner, text: &str) {
         let total_advance = self.total_advance(text);
         let (mut pos_x, pos_y) = self.aling_position(v.align, total_advance);
         for i in 0..v.capacity {
@@ -376,6 +418,7 @@ impl FontTextureDetail {
     }
 }
 
+/// テキスト描画の整列情報
 #[derive(
     Debug, Clone, Copy, Default, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize,
 )]
@@ -405,6 +448,7 @@ impl Align {
     }
 }
 
+/// 0,0原点にテキストの左右中央がいずれが来るかのことを指す
 #[derive(
     Debug, Clone, Copy, Default, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize,
 )]
@@ -415,6 +459,7 @@ pub enum TextAlign {
     Right,
 }
 
+/// 0,0原点にテキストの上下中央がいずれが来るかのことを指す
 #[derive(
     Debug, Clone, Copy, Default, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize,
 )]

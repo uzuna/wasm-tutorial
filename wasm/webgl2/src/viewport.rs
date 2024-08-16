@@ -47,7 +47,6 @@ impl ViewPort {
             y: y - h,
             w,
             h,
-            aspect: self.aspect(),
             scissor,
         }
     }
@@ -107,7 +106,6 @@ pub struct LocalView {
     y: f32,
     w: f32,
     h: f32,
-    aspect: f32,
     scissor: Scissor,
 }
 
