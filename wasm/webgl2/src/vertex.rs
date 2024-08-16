@@ -2,7 +2,7 @@ use bytemuck::NoUninit;
 use wasm_bindgen::JsError;
 use web_sys::{WebGlBuffer, WebGlProgram, WebGlVertexArrayObject};
 
-use crate::{error::Result, gl, GlInt, GlPoint};
+use crate::{error::Result, gl, GlInt, GlPoint, GlPoint2d};
 
 pub fn create_buffer(gl: &gl) -> Result<web_sys::WebGlBuffer> {
     gl.create_buffer()
@@ -131,3 +131,11 @@ where
         }
     }
 }
+
+/// 画面全体を覆う四角形の頂点座標
+pub const UNIT_RECT: [GlPoint2d; 4] = [
+    GlPoint2d::new(-1.0, 1.0),
+    GlPoint2d::new(-1.0, -1.0),
+    GlPoint2d::new(1.0, -1.0),
+    GlPoint2d::new(1.0, 1.0),
+];
