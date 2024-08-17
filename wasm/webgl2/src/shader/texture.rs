@@ -198,3 +198,26 @@ pub fn create_texture_image_element(gl: &gl, element: &web_sys::HtmlImageElement
     .expect("Failed to set texture image");
     texture
 }
+
+pub fn crate_blank_texture(gl: &gl) -> WebGlTexture {
+    let texture = gl.create_texture().expect("Failed to create texture");
+    gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+    texture
+}
+
+pub fn rebind_texture(gl: &gl, texture: &WebGlTexture, element: &web_sys::HtmlImageElement) {
+    gl.bind_texture(gl::TEXTURE_2D, Some(texture));
+    gl.tex_image_2d_with_u32_and_u32_and_html_image_element(
+        gl::TEXTURE_2D,
+        0,
+        gl::RGBA as i32,
+        gl::RGBA,
+        gl::UNSIGNED_BYTE,
+        element,
+    )
+    .expect("Failed to set texture image");
+}

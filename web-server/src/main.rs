@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
-use axum::{response::IntoResponse, routing::get, Json, Router};
+use axum::{http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use image::{ImageBuffer, ImageEncoder, Rgba};
 use rand::Rng;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -22,7 +23,8 @@ async fn main() {
             Router::new()
                 .route("/hello", get(Hello::get_response))
                 .route("/ws/echo", get(echo_ws))
-                .route("/ws/boid/gen_stream", get(gen_boid_ws)),
+                .route("/ws/boid/gen_stream", get(gen_boid_ws))
+                .route("/texture/generate/:name", get(gen_texture)),
         )
         .fallback_service(serve_dir)
         .layer(TraceLayer::new_for_http());
@@ -93,4 +95,109 @@ async fn gen_boid_ws(ws: axum::extract::ws::WebSocketUpgrade) -> impl IntoRespon
             ticker.tick().await;
         }
     })
+}
+
+/// 画像フォーマット
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+enum ImageFormat {
+    Qoi,
+    #[default]
+    Png,
+    Jpeg,
+    Webp,
+}
+
+/// 画像生成リクエスト
+#[derive(Debug, Default, PartialEq, serde::Deserialize)]
+struct TextureQuery {
+    width: Option<u32>,
+    height: Option<u32>,
+    format: Option<ImageFormat>,
+    color_front: Option<[u8; 4]>,
+    color_back: Option<[u8; 4]>,
+}
+
+impl TextureQuery {
+    fn width(&self) -> u32 {
+        self.width.unwrap_or(128)
+    }
+    fn height(&self) -> u32 {
+        self.height.unwrap_or(128)
+    }
+    fn format(&self) -> ImageFormat {
+        self.format.unwrap_or_default()
+    }
+    fn color_front(&self) -> [u8; 4] {
+        self.color_front.unwrap_or([128, 128, 128, 255])
+    }
+    fn color_back(&self) -> [u8; 4] {
+        self.color_back.unwrap_or([0, 0, 0, 255])
+    }
+}
+
+fn write_image(
+    img: &ImageBuffer<Rgba<u8>, Vec<u8>>,
+    format: ImageFormat,
+) -> Result<Vec<u8>, image::error::ImageError> {
+    use image::ExtendedColorType::Rgba8;
+    let mut buf = Vec::new();
+    match format {
+        ImageFormat::Qoi => {
+            use image::codecs::qoi::QoiEncoder;
+            let encoder = QoiEncoder::new(&mut buf);
+            encoder.write_image(img, img.width(), img.height(), Rgba8)?
+        }
+        ImageFormat::Png => {
+            use image::codecs::png::{CompressionType::Best, FilterType::NoFilter, PngEncoder};
+            let encoder = PngEncoder::new_with_quality(&mut buf, Best, NoFilter);
+            encoder.write_image(img, img.width(), img.height(), Rgba8)?;
+        }
+        ImageFormat::Jpeg => {
+            use image::codecs::jpeg::JpegEncoder;
+            let encoder = JpegEncoder::new_with_quality(&mut buf, 100);
+            encoder.write_image(img, img.width(), img.height(), Rgba8)?;
+        }
+        ImageFormat::Webp => {
+            use image::codecs::webp::WebPEncoder;
+            let encoder = WebPEncoder::new_lossless(&mut buf);
+            encoder.write_image(img, img.width(), img.height(), Rgba8)?;
+        }
+    }
+    Ok(buf)
+}
+
+async fn gen_texture(
+    axum::extract::Path(_name): axum::extract::Path<String>,
+    query: axum::extract::Query<TextureQuery>,
+) -> impl IntoResponse {
+    use image::{ImageBuffer, Rgba};
+
+    // parse query
+    let front_color = Rgba(query.color_front());
+    let back_color = Rgba(query.color_back());
+    let width = query.width();
+    let height = query.height();
+    let format = query.format();
+
+    // generage image
+    let img = ImageBuffer::from_fn(width, height, |x, y| match (x, y) {
+        (x, y) if x < width / 2 && y < height / 2 => front_color,
+        (x, y) if x >= width / 2 && y >= height / 2 => front_color,
+        _ => back_color,
+    });
+
+    match write_image(&img, format) {
+        Ok(buf) => (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "image/png")],
+            buf,
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            [(axum::http::header::CONTENT_TYPE, "text/plain")],
+            format!("failed to generate image: {:?}", e)
+                .to_owned()
+                .into_bytes(),
+        ),
+    }
 }

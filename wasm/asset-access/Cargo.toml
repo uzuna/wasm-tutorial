@@ -10,10 +10,14 @@ rust-version.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+gloo-timers.workspace = true
+futures-util.workspace = true
+fxhash.workspace = true
+nalgebra.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 wasm-utils.workspace = true
-webgl2 = { workspace = true, features = ["context", "shader"] }
+webgl2 = { workspace = true, features = ["context", "shader", "viewport"] }
 
 [dependencies.web-sys]
 workspace = true

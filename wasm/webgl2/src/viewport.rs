@@ -4,6 +4,7 @@ use nalgebra::Vector2;
 /// Window表示インスタンスのうち、表示領域に使う領域を保持する
 ///
 /// 単位はpx
+#[derive(Debug, Clone)]
 pub struct ViewPort {
     pub x: i32,
     pub y: i32,
@@ -75,6 +76,12 @@ impl ViewPort {
     pub fn scissor(&self, gl: &gl) {
         gl.enable(gl::SCISSOR_TEST);
         gl.scissor(self.x, self.y, self.w as i32, self.h as i32);
+    }
+
+    /// Acpect比の歪みを補正する行列を取得
+    pub fn normalized_unit_mat(&self) -> nalgebra::Matrix3<f32> {
+        nalgebra::Matrix3::identity()
+            .append_nonuniform_scaling(&Vector2::new(1.0 / self.aspect(), 1.0))
     }
 }
 

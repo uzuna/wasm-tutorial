@@ -1,12 +1,21 @@
+use core::f32;
 use std::{cell::RefCell, rc::Rc};
 
+use fxhash::FxHashMap;
+use nalgebra::Vector2;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use wasm_utils::{error::*, info};
-use web_sys::{HtmlCanvasElement, HtmlImageElement};
+use wasm_utils::{animation::AnimationLoop, error::*, info};
+use web_sys::{HtmlCanvasElement, HtmlImageElement, WebGlTexture};
+use webgl2::{
+    context::{gl_clear_color, COLOR_BLACK},
+    gl,
+    shader::texture::{TextureShader, TextureVd},
+};
 
 thread_local! {
-    static LOAD_CLOSUER: RefCell<Option<Closure<dyn FnMut()>>> = RefCell::new(None);
+    // forgetするとメモリリークになるっぽいので、手動で削除するために保持
+    static LOAD_CLOSUER: RefCell<FxHashMap<String,Closure<dyn FnMut()>>> = RefCell::new(FxHashMap::default());
 }
 
 #[wasm_bindgen(start)]
@@ -18,48 +27,139 @@ pub fn init() -> Result<()> {
 #[wasm_bindgen]
 pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     check_memory_usage("start");
-    let width = 500;
-    let height = 300;
+    let width = 1000;
+    let height = 600;
     canvas.set_width(width);
     canvas.set_height(height);
+    let vp = webgl2::viewport::ViewPort::new(0, 0, width, height);
 
     let gl = webgl2::context::get_context(&canvas, webgl2::context::COLOR_BLACK)?;
     let gl = Rc::new(gl);
 
-    let s = webgl2::shader::texture::TextureShader::new(gl.clone())?;
-    let v = s.create_vao(&webgl2::vertex::UNIT_RECT)?;
-    let texture = webgl2::shader::texture::color_texture(&gl, [0, 128, 0, 255]);
-    // 事前に緑色のテクスチャを描画
-    s.draw(&v, &texture);
+    let mut ctx = DrawContext {
+        gl: gl.clone(),
+        objects: vec![],
+    };
 
-    check_memory_usage("before spawn_local");
-    // 画像を非同期で読み込んで描画
-    spawn_local(async move {
-        let img = HtmlImageElement::new().unwrap();
-        let img = Rc::new(img);
-        img.set_src("../resources/fonts/Ubuntu_Mono_64px.png");
-        let img_clone = img.clone();
-        let closure = Closure::wrap(Box::new(move || {
-            let texture = webgl2::shader::texture::create_texture_image_element(&gl, &img_clone);
-            s.draw(&v, &texture);
-            // manually drop closure
-            LOAD_CLOSUER.with(|c| if let Some(_) = c.borrow_mut().take() {});
-            check_memory_usage("take closure");
-        }) as Box<dyn FnMut()>);
-        check_memory_usage("create closure");
-        let _ = img.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref());
-
-        // 大量のデータを読み込むときは、forgetせず、imgもclosureも破棄したいがどうする?
-        // https://docs.rs/gloo-events/0.2.0/gloo_events/struct.EventListener.html
-        LOAD_CLOSUER.with(|c| {
-            *c.borrow_mut() = Some(closure);
+    let length = 100;
+    for i in 0..length {
+        let x = (i as f32 / length as f32 * f32::consts::PI * 2.0).sin();
+        let y = (i as f32 / length as f32 * f32::consts::PI * 2.0).cos();
+        let s = TextureShader::new(gl.clone())?;
+        s.uniform().set_mat(
+            vp.normalized_unit_mat()
+                .append_scaling(0.1)
+                .append_translation(&Vector2::new(x / vp.aspect(), y)),
+        );
+        let v = s.create_vao(&webgl2::vertex::UNIT_RECT)?;
+        let texture = webgl2::shader::texture::crate_blank_texture(&gl);
+        let texture = Rc::new(texture);
+        lazy_load_texture(
+            format!("../api/texture/generate/test{}", i).as_str(),
+            gl.clone(),
+            texture.clone(),
+        );
+        ctx.objects.push(Drawable {
+            shader: s,
+            vao: v,
+            texture,
         });
+    }
+    let mut a = AnimationLoop::new(move |_| {
+        ctx.draw();
+        Ok(())
+    });
+    a.start();
+    a.forget();
+
+    spawn_local(async move {
+        use futures_util::{future::ready, stream::StreamExt};
+        let interval = std::time::Duration::from_secs(1);
+        gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
+            .for_each(|_| {
+                let len = LOAD_CLOSUER.with_borrow(|x| x.len());
+                info!("closure_length {}", len);
+                check_memory_usage("after draw");
+                ready(())
+            })
+            .await;
     });
 
     Ok(())
 }
 
+struct Drawable {
+    shader: TextureShader,
+    vao: webgl2::vertex::Vao<TextureVd>,
+    texture: Rc<WebGlTexture>,
+}
+
+struct DrawContext {
+    gl: Rc<gl>,
+    objects: Vec<Drawable>,
+}
+
+impl DrawContext {
+    fn draw(&self) {
+        gl_clear_color(&self.gl, COLOR_BLACK);
+        for obj in self.objects.iter() {
+            obj.shader.draw(&obj.vao, &obj.texture);
+        }
+    }
+}
+
+// テクスチャを読み込む
+#[allow(dead_code)]
+fn load_texture(src: &str, gl: Rc<gl>, mut cb: impl FnMut(web_sys::WebGlTexture) + 'static) {
+    let src = src.to_string();
+    spawn_local(async move {
+        let img = HtmlImageElement::new().unwrap();
+        let img = Rc::new(img);
+        img.set_src(&src);
+        let img_clone = img.clone();
+        let del_key = src.to_string();
+        let closure = Closure::wrap(Box::new(move || {
+            let texture = webgl2::shader::texture::create_texture_image_element(&gl, &img_clone);
+            // manually drop closure
+            LOAD_CLOSUER.with(|c| {
+                c.borrow_mut().remove(&del_key);
+            });
+            img_clone.remove();
+            cb(texture);
+        }) as Box<dyn FnMut()>);
+        let _ = img.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref());
+        LOAD_CLOSUER.with(|c| {
+            c.borrow_mut().insert(src, closure);
+        });
+    });
+}
+
+// テクスチャを先に確保しておき、後から画像を読み込む
+fn lazy_load_texture(src: &str, gl: Rc<gl>, texture: Rc<WebGlTexture>) {
+    let src = src.to_string();
+    spawn_local(async move {
+        let img = HtmlImageElement::new().unwrap();
+        let img = Rc::new(img);
+        img.set_src(&src);
+        let img_clone = img.clone();
+        let del_key = src.to_string();
+        let closure = Closure::wrap(Box::new(move || {
+            webgl2::shader::texture::rebind_texture(&gl, &texture, &img_clone);
+            // manually drop closure
+            LOAD_CLOSUER.with(|c| {
+                c.borrow_mut().remove(&del_key);
+            });
+            img_clone.remove();
+        }) as Box<dyn FnMut()>);
+        let _ = img.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref());
+        LOAD_CLOSUER.with(|c| {
+            c.borrow_mut().insert(src, closure);
+        });
+    });
+}
+
 // WebAssembly.Memoryの使用量をログ出力
+// 線形メモリの状態で、growした結果がいつ開放されるのかはよくわからない
 // https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Memory
 fn check_memory_usage(place: &str) {
     let m = wasm_bindgen::memory()
