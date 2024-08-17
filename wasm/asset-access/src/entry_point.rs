@@ -14,7 +14,8 @@ use webgl2::{
 };
 
 thread_local! {
-    // forgetするとメモリリークになるっぽいので、手動で削除するために保持
+    // テクs茶ロードのたびにクロージャをforgetするとメモリリークになるため
+    // マニュアルドロップするために一時保存する
     static LOAD_CLOSUER: RefCell<FxHashMap<String,Closure<dyn FnMut()>>> = RefCell::new(FxHashMap::default());
 }
 
@@ -41,6 +42,8 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         objects: vec![],
     };
 
+    let mut textures = vec![];
+
     let length = 100;
     for i in 0..length {
         let x = (i as f32 / length as f32 * f32::consts::PI * 2.0).sin();
@@ -54,11 +57,18 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         let v = s.create_vao(&webgl2::vertex::UNIT_RECT)?;
         let texture = webgl2::shader::texture::crate_blank_texture(&gl);
         let texture = Rc::new(texture);
+
+        let color_front = rgba_to_hexcode(i as u8, 0, 0, 255);
         lazy_load_texture(
-            format!("../api/texture/generate/test{}", i).as_str(),
+            format!(
+                "../api/texture/generate/test{}?color_front={}",
+                i, color_front
+            )
+            .as_str(),
             gl.clone(),
             texture.clone(),
         );
+        textures.push(texture.clone());
         ctx.objects.push(Drawable {
             shader: s,
             vao: v,
@@ -71,7 +81,9 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     });
     a.start();
     a.forget();
+    check_memory_usage("after spawn");
 
+    // monitorring closure length
     spawn_local(async move {
         use futures_util::{future::ready, stream::StreamExt};
         let interval = std::time::Duration::from_secs(1);
@@ -79,7 +91,38 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
             .for_each(|_| {
                 let len = LOAD_CLOSUER.with_borrow(|x| x.len());
                 info!("closure_length {}", len);
-                check_memory_usage("after draw");
+                check_memory_usage("monitoring");
+                ready(())
+            })
+            .await;
+    });
+
+    // メモリリークの有無を確認するためにテクスチャを定期的に読み出す
+    // 実際にforgetではメモリ使用量が増える付けることが確認できた
+    spawn_local(async move {
+        use futures_util::{future::ready, stream::StreamExt};
+        let interval = std::time::Duration::from_secs(5);
+        let mut counter = 0;
+        gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
+            .for_each(|_| {
+                let f = match counter % 3 {
+                    0 => |i| rgba_to_hexcode(i as u8, 0, 128, 255),
+                    1 => |i| rgba_to_hexcode(128, i as u8, 0, 255),
+                    _ => |i| rgba_to_hexcode(0, 128, i as u8, 255),
+                };
+                for (i, texture) in textures.iter().enumerate() {
+                    let color_front = f(i);
+                    lazy_load_texture(
+                        format!(
+                            "../api/texture/generate/test{}?color_front={}",
+                            i, color_front
+                        )
+                        .as_str(),
+                        gl.clone(),
+                        texture.clone(),
+                    );
+                }
+                counter += 1;
                 ready(())
             })
             .await;
@@ -170,4 +213,9 @@ fn check_memory_usage(place: &str) {
         .dyn_into::<web_sys::js_sys::ArrayBuffer>()
         .expect("should have buffer");
     info!("memory usage [{place}] {} byte", a.byte_length());
+}
+
+fn rgba_to_hexcode(r: u8, g: u8, b: u8, a: u8) -> String {
+    // queryに含めるために`#`は`%23`にする
+    format!("%23{:02X}{:02X}{:02X}{:02X}", r, g, b, a)
 }

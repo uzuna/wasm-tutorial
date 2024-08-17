@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use axum::{http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use hex_color::HexColor;
 use image::{ImageBuffer, ImageEncoder, Rgba};
 use rand::Rng;
 use tower_http::{services::ServeDir, trace::TraceLayer};
@@ -113,8 +114,8 @@ struct TextureQuery {
     width: Option<u32>,
     height: Option<u32>,
     format: Option<ImageFormat>,
-    color_front: Option<[u8; 4]>,
-    color_back: Option<[u8; 4]>,
+    color_front: Option<String>,
+    color_back: Option<String>,
 }
 
 impl TextureQuery {
@@ -128,10 +129,22 @@ impl TextureQuery {
         self.format.unwrap_or_default()
     }
     fn color_front(&self) -> [u8; 4] {
-        self.color_front.unwrap_or([128, 128, 128, 255])
+        Self::parse_color(self.color_front.as_deref(), [128, 128, 128, 255])
     }
     fn color_back(&self) -> [u8; 4] {
-        self.color_back.unwrap_or([0, 0, 0, 255])
+        Self::parse_color(self.color_back.as_deref(), [0, 0, 0, 255])
+    }
+    fn parse_color(color: Option<&str>, default: [u8; 4]) -> [u8; 4] {
+        match color {
+            Some(color) => match HexColor::parse(color) {
+                Ok(color) => [color.r, color.g, color.b, color.a],
+                Err(e) => {
+                    tracing::warn!("failed to parse color: {:?}", e);
+                    default
+                }
+            },
+            None => default,
+        }
     }
 }
 
