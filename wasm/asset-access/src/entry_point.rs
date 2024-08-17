@@ -86,7 +86,7 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     // monitorring closure length
     spawn_local(async move {
         use futures_util::{future::ready, stream::StreamExt};
-        let interval = std::time::Duration::from_secs(1);
+        let interval = std::time::Duration::from_secs(60);
         gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
             .for_each(|_| {
                 let len = LOAD_CLOSUER.with_borrow(|x| x.len());
