@@ -3,14 +3,15 @@ use std::rc::Rc;
 use wasm_utils::error::*;
 use web_sys::{WebGlBuffer, WebGlUniformLocation};
 use webgl2::{
-    gl, uniform_location,
+    context::Context,
+    gl,
+    program::Program,
     vertex::{buffer_data, create_buffer},
-    GlPoint, GlPoint2d, Program,
+    GlPoint, GlPoint2d,
 };
 
 /// Webgl1.0のシングルカラーシェーダー
 pub struct SingleColorShaderGl1 {
-    gl: Rc<gl>,
     program: Program,
     uniform: SingleColorUniform,
     position: u32,
@@ -42,19 +43,18 @@ void main(void){
         GlPoint2d::new(1.0, -1.0),
     ];
 
-    pub fn new(gl: Rc<gl>) -> Result<Self> {
-        let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
-        program.use_program(&gl);
+    pub fn new(ctx: &Context) -> Result<Self> {
+        let program = ctx.program(Self::VERT, Self::FRAG)?;
+        program.use_program();
 
-        let uniform = SingleColorUniform::new(gl.clone(), &program)?;
+        let uniform = SingleColorUniform::new(&program)?;
         uniform.init();
         // 初期カラーは赤
         uniform.set_color([1.0, 0.0, 0.0, 1.0]);
 
-        let position = gl.get_attrib_location(program.program(), "position") as u32;
+        let position = ctx.gl().get_attrib_location(program.program(), "position") as u32;
 
         let s = Self {
-            gl,
             program,
             uniform,
             position,
@@ -63,7 +63,7 @@ void main(void){
     }
 
     pub fn use_program(&self) {
-        self.program.use_program(&self.gl);
+        self.program.use_program();
     }
 
     pub fn uniform(&self) -> &SingleColorUniform {
@@ -71,25 +71,20 @@ void main(void){
     }
 
     pub fn create_vbo(&self, data: &[GlPoint2d; 4]) -> Result<WebGlBuffer> {
-        let vbo = create_buffer(&self.gl)?;
-        self.gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vbo));
-        buffer_data(&self.gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
-        self.gl.enable_vertex_attrib_array(self.position);
-        self.gl.vertex_attrib_pointer_with_i32(
-            self.position,
-            GlPoint2d::size(),
-            gl::FLOAT,
-            false,
-            0,
-            0,
-        );
+        let gl = self.program.gl();
+        let vbo = create_buffer(gl)?;
+        gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vbo));
+        buffer_data(gl, gl::ARRAY_BUFFER, data, gl::STATIC_DRAW);
+        gl.enable_vertex_attrib_array(self.position);
+        gl.vertex_attrib_pointer_with_i32(self.position, GlPoint2d::size(), gl::FLOAT, false, 0, 0);
         Ok(vbo)
     }
 
     pub fn draw(&self, vbo: &WebGlBuffer) {
         self.use_program();
-        self.gl.bind_buffer(gl::ARRAY_BUFFER, Some(vbo));
-        self.gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
+        let gl = &self.program.gl();
+        gl.bind_buffer(gl::ARRAY_BUFFER, Some(vbo));
+        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
     }
 }
 
@@ -104,12 +99,12 @@ pub struct SingleColorUniform {
 }
 
 impl SingleColorUniform {
-    pub fn new(gl: Rc<gl>, program: &Program) -> Result<Self> {
-        let color = uniform_location(&gl, program, "u_color")?;
-        let local_mat = uniform_location(&gl, program, "local_mat")?;
-        let global_mat = uniform_location(&gl, program, "global_mat")?;
+    pub fn new(program: &Program) -> Result<Self> {
+        let color = program.uniform_location("u_color")?;
+        let local_mat = program.uniform_location("local_mat")?;
+        let global_mat = program.uniform_location("global_mat")?;
         Ok(Self {
-            gl,
+            gl: program.gl().clone(),
             color,
             local_mat,
             global_mat,

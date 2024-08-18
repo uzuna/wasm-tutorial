@@ -7,11 +7,7 @@ use web_sys::{WebGlProgram, WebGlShader, WebGlUniformLocation};
 use crate::{context::ContextInner, error::Result, gl, JsError};
 
 /// 2つのコンパイル済みシェーダーを渡してプログラムを作成する
-pub fn compile_program(
-    gl: &gl,
-    vertex: &WebGlShader,
-    fragment: &WebGlShader,
-) -> Result<WebGlProgram> {
+pub fn link_program(gl: &gl, vertex: &WebGlShader, fragment: &WebGlShader) -> Result<WebGlProgram> {
     let program = gl
         .create_program()
         .ok_or(JsError::new("Failed to create program object"))?;
@@ -44,6 +40,12 @@ pub fn compile_vertex(gl: &gl, vertex: &str) -> Result<WebGlShader> {
 pub fn compile_fragment(gl: &gl, fragment: &str) -> Result<WebGlShader> {
     let s = compile_shader(gl, fragment, ShaderType::Fragment)?;
     Ok(s)
+}
+
+pub fn compile_program(gl: &gl, vertex: &str, fragment: &str) -> Result<WebGlProgram> {
+    let vertex = compile_vertex(gl, vertex)?;
+    let fragment = compile_fragment(gl, fragment)?;
+    link_program(gl, &vertex, &fragment)
 }
 
 /// シェーダースクリプトの種類
@@ -102,7 +104,7 @@ impl Program {
         let fragment = compile_fragment(gl, frag)?;
 
         // Link shaders
-        let program = compile_program(gl, &vertex, &fragment)?;
+        let program = link_program(gl, &vertex, &fragment)?;
         #[cfg(feature = "metrics")]
         ctx.metrics().shader.inc_shader(1);
         Ok(Self {

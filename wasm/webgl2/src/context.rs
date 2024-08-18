@@ -43,7 +43,7 @@ impl WebGL2ContextOption {
 // WebGLはCanvas毎に別コンテキストを持つため、グローバル定義はせずにCanvas毎にコンテキストを持つ
 pub(crate) struct ContextInner {
     gl: Rc<gl>,
-    canvas: HtmlCanvasElement,
+    _canvas: HtmlCanvasElement,
     #[cfg(feature = "metrics")]
     metrics: crate::metrics::Metrics,
 }
@@ -52,7 +52,7 @@ impl ContextInner {
     fn new(gl: Rc<gl>, canvas: HtmlCanvasElement) -> Self {
         Self {
             gl,
-            canvas,
+            _canvas: canvas,
             #[cfg(feature = "metrics")]
             metrics: crate::metrics::Metrics::default(),
         }
@@ -67,9 +67,10 @@ impl ContextInner {
         &self.metrics
     }
 
-    pub fn canvas_size(&self) -> (u32, u32) {
-        let width = self.canvas.width();
-        let height = self.canvas.height();
+    #[cfg(feature = "viewport")]
+    pub(crate) fn canvas_size(&self) -> (u32, u32) {
+        let width = self._canvas.width();
+        let height = self._canvas.height();
         (width, height)
     }
 }

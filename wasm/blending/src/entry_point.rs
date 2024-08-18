@@ -5,12 +5,8 @@ use wasm_bindgen::{convert::IntoWasmAbi, prelude::*};
 use wasm_utils::{animation::AnimationLoop, error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
 use webgl2::{
-    blend::BlendMode,
-    context::gl_clear_color,
-    gl,
-    shader::texture::{color_texture, TextureShader},
-    vertex::buffer_data_f32,
-    Program,
+    blend::BlendMode, context::gl_clear_color, gl, program::compile_program,
+    shader::texture::TextureShader, texture::color_texture, vertex::buffer_data_f32,
 };
 
 use crate::shader::SingleColorShaderGl1;
@@ -130,10 +126,9 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<GlContext, JsValu
     canvas.set_height(height);
     let local_mat = LocalMat::new(width as f32 / height as f32);
 
-    let gl = webgl2::context::get_context(&canvas, BG_COLOR)?;
-
-    let gl = Rc::new(gl);
-    let s = SingleColorShaderGl1::new(gl.clone())?;
+    let ctx = webgl2::context::Context::new(canvas, BG_COLOR)?;
+    let gl = ctx.gl().clone();
+    let s = SingleColorShaderGl1::new(&ctx)?;
     let u = s.uniform();
 
     // 背景色を描画
@@ -200,16 +195,16 @@ pub fn start_webgl2_texture(canvas: HtmlCanvasElement) -> std::result::Result<Gl
     canvas.set_height(height);
     let local_mat = LocalMat::new(width as f32 / height as f32);
 
-    let gl = webgl2::context::get_context(&canvas, BG_COLOR)?;
-    let gl = Rc::new(gl);
-    let s = TextureShader::new(gl.clone())?;
+    let ctx = webgl2::context::Context::new(canvas, BG_COLOR)?;
+    let gl = ctx.gl().clone();
+    let s = TextureShader::new(&ctx)?;
 
     let r = SingleColorShaderGl1::UNIT_RECT;
     let vao = s.create_vao(&r)?;
 
-    let t_r = color_texture(&gl, [255, 0, 0, 128]);
-    let t_g = color_texture(&gl, [0, 255, 0, 128]);
-    let t_b = color_texture(&gl, [0, 0, 255, 255]);
+    let t_r = color_texture(&gl, [255, 0, 0, 128])?;
+    let t_g = color_texture(&gl, [0, 255, 0, 128])?;
+    let t_b = color_texture(&gl, [0, 0, 255, 255])?;
 
     let u = s.uniform();
 
@@ -260,10 +255,8 @@ pub fn get_context_rs(canvas: HtmlCanvasElement) -> Result<gl> {
 }
 
 #[wasm_bindgen]
-pub fn create_program_rs(gl: gl) -> std::result::Result<WebGlProgram, JsValue> {
-    let p = Program::new(&gl, SingleColorShaderGl1::VERT, SingleColorShaderGl1::FRAG)?;
-    p.use_program(&gl);
-    Ok(p.into_program())
+pub fn create_program_rs(gl: gl) -> Result<WebGlProgram> {
+    compile_program(&gl, SingleColorShaderGl1::VERT, SingleColorShaderGl1::FRAG)
 }
 
 #[wasm_bindgen]
