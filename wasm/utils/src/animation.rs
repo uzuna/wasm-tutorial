@@ -109,7 +109,12 @@ pub struct PlayStopButton {
 }
 
 impl PlayStopButton {
-    pub fn new(
+    pub fn new(element: web_sys::HtmlButtonElement, animation_loop: AnimationLoop) -> Self {
+        let playing = Rc::new(RefCell::new(AtomicBool::new(false)));
+        Self::new_with_flag(element, animation_loop, playing)
+    }
+
+    pub fn new_with_flag(
         element: web_sys::HtmlButtonElement,
         animation_loop: AnimationLoop,
         playing: Rc<RefCell<AtomicBool>>,
@@ -176,6 +181,10 @@ impl PlayStopButton {
             .add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())
             .unwrap();
         PlayAnimaionContext { ctx, closure }
+    }
+
+    pub fn flag(&self) -> Rc<RefCell<AtomicBool>> {
+        self.playing.clone()
     }
 
     fn forget(&self) {

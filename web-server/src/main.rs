@@ -25,7 +25,8 @@ async fn main() {
                 .route("/hello", get(Hello::get_response))
                 .route("/ws/echo", get(echo_ws))
                 .route("/ws/boid/gen_stream", get(gen_boid_ws))
-                .route("/texture/generate/:name", get(gen_texture)),
+                .route("/texture/generate/:name", get(gen_texture))
+                .route("/sleep/:msec", get(get_sleep)),
         )
         .fallback_service(serve_dir)
         .layer(TraceLayer::new_for_http());
@@ -213,4 +214,9 @@ async fn gen_texture(
                 .into_bytes(),
         ),
     }
+}
+
+async fn get_sleep(axum::extract::Path(msec): axum::extract::Path<u64>) -> impl IntoResponse {
+    tokio::time::sleep(std::time::Duration::from_millis(msec)).await;
+    format!("slept {msec} msec").into_response()
 }

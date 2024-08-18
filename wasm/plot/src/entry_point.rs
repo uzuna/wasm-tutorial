@@ -130,7 +130,7 @@ pub fn start(
     });
 
     // TODO: 止めるべきはAnimationLoopのインスタンスではなく、データ更新部分では?
-    let btn = PlayStopButton::new(play_pause_btn, a, playing);
+    let btn = PlayStopButton::new_with_flag(play_pause_btn, a, playing);
 
     let ctx = btn.start();
     // JSに戻したらGCで回収されたためforgetする

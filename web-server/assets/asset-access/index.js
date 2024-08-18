@@ -5,4 +5,5 @@ import init, { start } from "./pkg/asset_access.js";
 await init();
 
 const canvas_webgl = document.getElementById("webgl-canvas");
-const context = start(canvas_webgl);
+const play_pause_btn = document.getElementById("play-pause");
+const context = start(canvas_webgl,play_pause_btn);

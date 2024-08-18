@@ -8,9 +8,12 @@ rust-version.workspace = true
 
 [features]
 default = ["console_error_panic_hook"]
+waitgroup = ["dep:futures-channel", "dep:futures-util"]
 
 [dependencies]
 console_error_panic_hook = { workspace = true, optional = true }
+futures-channel = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
 wasm-bindgen.workspace = true
 
 [dependencies.web-sys]
@@ -26,5 +29,7 @@ features = [
 ]
 
 [dev-dependencies]
+gloo-timers.workspace = true
 wasm-bindgen-test.workspace = true
+wasm-bindgen-futures.workspace = true
 

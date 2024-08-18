@@ -16,7 +16,7 @@ fxhash.workspace = true
 nalgebra.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
-wasm-utils.workspace = true
+wasm-utils = { workspace = true, features = ["waitgroup"] }
 webgl2 = { workspace = true, features = ["context", "shader", "viewport"] }
 
 [dependencies.web-sys]
@@ -24,6 +24,9 @@ workspace = true
 features = [
     "HtmlImageElement",
 ]
+
+[dev-dependencies]
+wasm-bindgen-test.workspace = true
 
 [profile.release]
 opt-level = "s"
