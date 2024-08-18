@@ -43,14 +43,16 @@ impl WebGL2ContextOption {
 // WebGLはCanvas毎に別コンテキストを持つため、グローバル定義はせずにCanvas毎にコンテキストを持つ
 pub(crate) struct ContextInner {
     gl: Rc<gl>,
+    _canvas: HtmlCanvasElement,
     #[cfg(feature = "metrics")]
     metrics: crate::metrics::Metrics,
 }
 
 impl ContextInner {
-    fn new(gl: Rc<gl>) -> Self {
+    fn new(gl: Rc<gl>, canvas: HtmlCanvasElement) -> Self {
         Self {
             gl,
+            _canvas: canvas,
             #[cfg(feature = "metrics")]
             metrics: crate::metrics::Metrics::default(),
         }
@@ -67,9 +69,9 @@ impl ContextInner {
 }
 
 /// WebGL2RenderingContextをラップする構造体
+#[derive(Clone)]
 pub struct Context {
     ctx: Rc<ContextInner>,
-    _canvas: HtmlCanvasElement,
 }
 
 impl Context {
@@ -77,9 +79,12 @@ impl Context {
     pub fn new(canvas: HtmlCanvasElement, color: [f32; 4]) -> Result<Self> {
         let gl = get_context(&canvas, color)?;
         Ok(Self {
-            ctx: Rc::new(ContextInner::new(Rc::new(gl))),
-            _canvas: canvas,
+            ctx: Rc::new(ContextInner::new(Rc::new(gl), canvas)),
         })
+    }
+
+    pub(crate) fn ctx(&self) -> Rc<ContextInner> {
+        self.ctx.clone()
     }
 
     /// 生のWebGL2RenderingContextを取得する

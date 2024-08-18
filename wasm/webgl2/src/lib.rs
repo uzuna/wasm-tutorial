@@ -29,6 +29,9 @@ pub mod shader;
 #[cfg(feature = "metrics")]
 pub mod metrics;
 
+#[cfg(feature = "texture")]
+pub mod texture;
+
 use error::Result;
 
 pub fn uniform_location(gl: &gl, program: &Program, name: &str) -> Result<WebGlUniformLocation> {

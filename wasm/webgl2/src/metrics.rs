@@ -12,6 +12,8 @@ pub struct Metrics {
     pub shader: Arc<ShaderCount>,
     #[cfg(feature = "vertex")]
     pub vertex: Arc<VertexCount>,
+    #[cfg(feature = "texture")]
+    pub texture: Arc<TextureCount>,
 }
 
 impl std::fmt::Display for Metrics {
@@ -20,6 +22,8 @@ impl std::fmt::Display for Metrics {
         writeln!(f, "  {}", self.shader)?;
         #[cfg(feature = "vertex")]
         writeln!(f, "  {}", self.vertex)?;
+        #[cfg(feature = "texture")]
+        writeln!(f, "  {}", self.texture)?;
         Ok(())
     }
 }
@@ -53,6 +57,7 @@ impl std::fmt::Display for ShaderCount {
 }
 
 /// 頂点に関する数を測定するための構造体です。
+#[cfg(feature = "vertex")]
 #[derive(Default)]
 pub struct VertexCount {
     pub vao_count: AtomicU32,
@@ -89,6 +94,49 @@ impl std::fmt::Display for VertexCount {
             f,
             "VertexArrayObjects: {}, {} B",
             self.vao_count.load(std::sync::atomic::Ordering::Relaxed),
+            self.bytes_count.load(std::sync::atomic::Ordering::Relaxed)
+        )
+    }
+}
+
+#[cfg(feature = "texture")]
+#[derive(Default)]
+pub struct TextureCount {
+    pub texture_count: AtomicU32,
+    pub bytes_count: AtomicU64,
+}
+
+#[cfg(feature = "texture")]
+impl TextureCount {
+    pub fn inc_texture(&self, inc: u32) {
+        self.texture_count
+            .fetch_add(inc, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn sub_texture(&self, sub: u32) {
+        self.texture_count
+            .fetch_sub(sub, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn inc_bytes(&self, inc: u64) {
+        self.bytes_count
+            .fetch_add(inc, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn sub_bytes(&self, sub: u64) {
+        self.bytes_count
+            .fetch_sub(sub, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[cfg(feature = "texture")]
+impl std::fmt::Display for TextureCount {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Textures: {}, {} B",
+            self.texture_count
+                .load(std::sync::atomic::Ordering::Relaxed),
             self.bytes_count.load(std::sync::atomic::Ordering::Relaxed)
         )
     }
