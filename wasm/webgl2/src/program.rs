@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use web_sys::{WebGlProgram, WebGlShader, WebGlUniformLocation};
 
-use crate::{context::ContextInner, error::Result, gl, JsError};
+use crate::{error::Result, gl, JsError};
 
 /// 2つのコンパイル済みシェーダーを渡してプログラムを作成する
 pub fn link_program(gl: &gl, vertex: &WebGlShader, fragment: &WebGlShader) -> Result<WebGlProgram> {
@@ -46,6 +46,22 @@ pub fn compile_program(gl: &gl, vertex: &str, fragment: &str) -> Result<WebGlPro
     let vertex = compile_vertex(gl, vertex)?;
     let fragment = compile_fragment(gl, fragment)?;
     link_program(gl, &vertex, &fragment)
+}
+
+pub fn uniform_location(
+    gl: &gl,
+    program: &WebGlProgram,
+    name: &str,
+) -> Result<WebGlUniformLocation> {
+    gl.get_uniform_location(program, name)
+        .ok_or(JsError::new(&format!(
+            "Failed to get uniform location {}",
+            name
+        )))
+}
+
+pub fn uniform_block_binding(gl: &gl, program: &WebGlProgram, name: &str, index: u32) {
+    gl.uniform_block_binding(program, gl.get_uniform_block_index(program, name), index);
 }
 
 /// シェーダースクリプトの種類
@@ -90,15 +106,21 @@ fn compile_shader(gl: &gl, shader_script: &str, type_: ShaderType) -> Result<Web
 }
 
 /// WebGLコンテキストに結びついたシェーダープログラムの構造体
+#[cfg(feature = "context")]
 pub struct Program {
-    ctx: Rc<ContextInner>,
+    ctx: Rc<crate::context::ContextInner>,
     program: WebGlProgram,
     vertex: WebGlShader,
     fragment: WebGlShader,
 }
 
+#[cfg(feature = "context")]
 impl Program {
-    pub(crate) fn new(ctx: Rc<ContextInner>, vert: &str, frag: &str) -> Result<Self> {
+    pub(crate) fn new(
+        ctx: Rc<crate::context::ContextInner>,
+        vert: &str,
+        frag: &str,
+    ) -> Result<Self> {
         let gl = ctx.gl();
         let vertex = compile_vertex(gl, vert)?;
         let fragment = compile_fragment(gl, frag)?;
@@ -115,7 +137,7 @@ impl Program {
         })
     }
 
-    pub(crate) fn ctx(&self) -> Rc<ContextInner> {
+    pub(crate) fn ctx(&self) -> Rc<crate::context::ContextInner> {
         self.ctx.clone()
     }
 
@@ -146,6 +168,7 @@ impl Program {
     }
 }
 
+#[cfg(feature = "context")]
 impl Drop for Program {
     fn drop(&mut self) {
         let gl = self.ctx.gl();

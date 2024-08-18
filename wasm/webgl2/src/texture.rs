@@ -194,12 +194,12 @@ fn create_texture_inner(gl: &gl) -> Result<WebGlTexture> {
 impl Context {
     /// 画像のバイト列からテクスチャを作成する
     pub fn create_texture(&self, config: &Texture2dConfig, body: Option<&[u8]>) -> Result<Texture> {
-        Texture::new_from_bytes(self.ctx(), config, body)
+        Texture::new_from_bytes(self.ctx.clone(), config, body)
     }
 
     /// 空のテクスチャを作成する
     pub fn create_blank_texture(&self) -> Result<Texture> {
-        Texture::new_from_bytes(self.ctx(), &Texture2dConfig::new_rgba(1, 1), None)
+        Texture::new_from_bytes(self.ctx.clone(), &Texture2dConfig::new_rgba(1, 1), None)
     }
 
     /// 画像要素からテクスチャを作成する
@@ -208,7 +208,7 @@ impl Context {
         filter: &TextureFilter,
         element: &web_sys::HtmlImageElement,
     ) -> Result<Texture> {
-        Texture::new_from_image_element(self.ctx(), filter, element)
+        Texture::new_from_image_element(self.ctx.clone(), filter, element)
     }
 }
 

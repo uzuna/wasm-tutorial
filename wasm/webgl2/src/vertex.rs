@@ -4,9 +4,7 @@ use bytemuck::NoUninit;
 use wasm_bindgen::JsError;
 use web_sys::{WebGlBuffer, WebGlVertexArrayObject};
 
-use crate::{
-    context::ContextInner, error::Result, gl, program::Program, GlInt, GlPoint, GlPoint2d,
-};
+use crate::{error::Result, gl, GlInt, GlPoint, GlPoint2d};
 
 pub fn create_buffer(gl: &gl) -> Result<web_sys::WebGlBuffer> {
     gl.create_buffer()
@@ -42,7 +40,8 @@ pub fn buffer_subdata<P: GlPoint + NoUninit>(gl: &gl, target: u32, data: &[P], o
     }
 }
 
-impl Program {
+#[cfg(feature = "context")]
+impl crate::program::Program {
     /// VAOを作成する
     pub fn create_vao<T>(&self) -> Result<Vao<T>>
     where
@@ -71,11 +70,12 @@ pub trait VaoDefine: 'static + Sized + PartialEq {
 /// Vertex Array Objectを作成する
 ///
 /// 紐付けを明らかにするために、引数にGlコンテキストとProgramを必要とする
+#[cfg(feature = "context")]
 pub struct Vao<T>
 where
     T: VaoDefine,
 {
-    ctx: Rc<ContextInner>,
+    ctx: Rc<crate::context::ContextInner>,
     vao: WebGlVertexArrayObject,
     vbos: Vec<WebGlBuffer>,
     index: Option<WebGlBuffer>,
@@ -84,11 +84,12 @@ where
     _phantom: std::marker::PhantomData<T>,
 }
 
+#[cfg(feature = "context")]
 impl<T> Vao<T>
 where
     T: VaoDefine,
 {
-    pub(crate) fn new(prog: &Program) -> Result<Self> {
+    pub(crate) fn new(prog: &crate::program::Program) -> Result<Self> {
         let gl = prog.gl();
         let vao = gl
             .create_vertex_array()
@@ -189,6 +190,7 @@ where
     }
 }
 
+#[cfg(feature = "context")]
 impl<T> Drop for Vao<T>
 where
     T: VaoDefine,

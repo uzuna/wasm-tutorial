@@ -3,7 +3,7 @@ use gloo_net::websocket::Message;
 
 use wasm_utils::{error::*, info};
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 struct CreateBoidRequest {
     pos: [f32; 3],
     vel: [f32; 3],
@@ -21,7 +21,7 @@ pub fn start_websocket(url: &str) -> Result<()> {
             match msg {
                 Ok(Message::Bytes(byte)) => {
                     let x = ciborium::from_reader::<CreateBoidRequest, _>(byte.as_slice()).unwrap();
-                    info!("byte {:?}", x);
+                    info!("byte pos: {:?}, vel: {:?}", x.pos, x.vel);
                 }
                 Ok(Message::Text(text)) => {
                     info!("text {:?}", text);

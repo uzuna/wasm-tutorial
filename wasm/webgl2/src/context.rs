@@ -91,10 +91,6 @@ impl Context {
         })
     }
 
-    pub(crate) fn ctx(&self) -> Rc<ContextInner> {
-        self.ctx.clone()
-    }
-
     /// 生のWebGL2RenderingContextを取得する
     pub fn gl(&self) -> &Rc<gl> {
         self.ctx.gl()

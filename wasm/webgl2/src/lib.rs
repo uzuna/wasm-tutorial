@@ -1,8 +1,6 @@
 use bytemuck::{Pod, Zeroable};
-use program::Program;
 use wasm_bindgen::JsError;
 pub use web_sys::WebGl2RenderingContext as gl;
-use web_sys::WebGlUniformLocation;
 
 pub mod blend;
 pub mod error;
@@ -31,24 +29,6 @@ pub mod metrics;
 
 #[cfg(feature = "texture")]
 pub mod texture;
-
-use error::Result;
-
-pub fn uniform_location(gl: &gl, program: &Program, name: &str) -> Result<WebGlUniformLocation> {
-    gl.get_uniform_location(program.program(), name)
-        .ok_or(JsError::new(&format!(
-            "Failed to get uniform location {}",
-            name
-        )))
-}
-
-pub fn uniform_block_binding(gl: &gl, program: &Program, name: &str, index: u32) {
-    gl.uniform_block_binding(
-        program.program(),
-        gl.get_uniform_block_index(program.program(), name),
-        index,
-    );
-}
 
 pub type GlEnum = u32;
 pub type GlInt = i32;
