@@ -79,6 +79,8 @@ where
     vao: WebGlVertexArrayObject,
     vbos: Vec<WebGlBuffer>,
     index: Option<WebGlBuffer>,
+    total_count: u32,
+    total_bytes: u64,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -93,6 +95,7 @@ where
             .ok_or(JsError::new("Failed to create vao"))?;
         gl.bind_vertex_array(Some(&vao));
         let mut vbos = vec![];
+        let mut total_count = 0;
         for v in T::iter() {
             // Attributeの位置を取得
             let loc = gl.get_attrib_location(prog.program(), v.name()) as u32;
@@ -102,6 +105,7 @@ where
             gl.enable_vertex_attrib_array(loc);
             gl.vertex_attrib_pointer_with_i32(loc, v.size_of(), gl::FLOAT, false, 0, 0);
             vbos.push(vbo);
+            total_count += 1;
         }
         let index = if T::has_index_buffer() {
             let index = create_buffer(&gl)?;
@@ -113,12 +117,18 @@ where
         gl.bind_vertex_array(None);
 
         let ctx = prog.ctx();
-        ctx.metrics().vertex.inc_vao(T::iter().len() as u32);
+        #[cfg(feature = "metrics")]
+        {
+            let vertex = &ctx.metrics().vertex;
+            vertex.inc_vao(total_count);
+        }
         Ok(Self {
             ctx,
             vao,
             vbos,
             index,
+            total_count,
+            total_bytes: 0,
             _phantom: std::marker::PhantomData,
         })
     }
@@ -138,10 +148,17 @@ where
     }
 
     // usage: gl::STATIC_DRAW, gl::DYNAMIC_DRAW, gl::STREAM_DRAW
-    pub fn buffer_data<P: GlPoint + NoUninit>(&self, vd: T, data: &[P], usage: u32) {
+    pub fn buffer_data<P: GlPoint + NoUninit>(&mut self, vd: T, data: &[P], usage: u32) {
         let gl = self.ctx.gl();
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.vbos[vd.index()]));
         buffer_data(&gl, gl::ARRAY_BUFFER, data, usage);
+        let bytes = data.len() as u64 * P::size() as u64 * std::mem::size_of::<f32>() as u64;
+        self.total_bytes += bytes;
+        #[cfg(feature = "metrics")]
+        {
+            let vertex = &self.ctx.metrics().vertex;
+            vertex.inc_bytes(bytes);
+        }
     }
 
     pub fn buffer_sub_data<P: GlPoint + NoUninit>(&self, vd: T, data: &[P], offset: i32) {
@@ -150,12 +167,20 @@ where
         buffer_subdata(&gl, gl::ARRAY_BUFFER, data, offset);
     }
 
-    pub fn index_buffer_data(&self, data: &[u16], usage: u32) {
+    pub fn index_buffer_data(&mut self, data: &[u16], usage: u32) {
         let gl = self.ctx.gl();
         gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, self.index.as_ref());
         unsafe {
             let view = js_sys::Uint16Array::view(data);
             gl.buffer_data_with_array_buffer_view(gl::ELEMENT_ARRAY_BUFFER, &view, usage);
+        }
+
+        let total_bytes = data.len() as u64 * std::mem::size_of::<u16>() as u64;
+        self.total_bytes += total_bytes;
+        #[cfg(feature = "metrics")]
+        {
+            let vertex = &self.ctx.metrics().vertex;
+            vertex.inc_bytes(total_bytes);
         }
     }
 }
@@ -167,7 +192,12 @@ where
     fn drop(&mut self) {
         let gl = self.ctx.gl();
         gl.delete_vertex_array(Some(&self.vao));
-        self.ctx.metrics().vertex.sub_vao(T::iter().len() as u32);
+        #[cfg(feature = "metrics")]
+        {
+            let vertex = &self.ctx.metrics().vertex;
+            vertex.sub_vao(self.total_count);
+            vertex.sub_bytes(self.total_bytes);
+        }
     }
 }
 

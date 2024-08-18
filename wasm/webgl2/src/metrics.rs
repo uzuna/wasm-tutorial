@@ -1,4 +1,7 @@
-use std::sync::{atomic::AtomicU32, Arc};
+use std::sync::{
+    atomic::{AtomicU32, AtomicU64},
+    Arc,
+};
 
 /// WebGLのメトリクスを管理するための構造体です。
 ///
@@ -53,6 +56,7 @@ impl std::fmt::Display for ShaderCount {
 #[derive(Default)]
 pub struct VertexCount {
     pub vao_count: AtomicU32,
+    pub bytes_count: AtomicU64,
 }
 
 #[cfg(feature = "vertex")]
@@ -66,6 +70,16 @@ impl VertexCount {
         self.vao_count
             .fetch_sub(sub, std::sync::atomic::Ordering::Relaxed);
     }
+
+    pub fn inc_bytes(&self, inc: u64) {
+        self.bytes_count
+            .fetch_add(inc, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn sub_bytes(&self, sub: u64) {
+        self.bytes_count
+            .fetch_sub(sub, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 #[cfg(feature = "vertex")]
@@ -73,8 +87,9 @@ impl std::fmt::Display for VertexCount {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "VertexArrayObjects: {}",
-            self.vao_count.load(std::sync::atomic::Ordering::Relaxed)
+            "VertexArrayObjects: {}, {} B",
+            self.vao_count.load(std::sync::atomic::Ordering::Relaxed),
+            self.bytes_count.load(std::sync::atomic::Ordering::Relaxed)
         )
     }
 }

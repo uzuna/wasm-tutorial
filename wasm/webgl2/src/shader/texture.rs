@@ -64,7 +64,7 @@ void main() {
     }
 
     pub fn create_vao(&self, vert: &[GlPoint2d; 4]) -> Result<Vao<TextureVd>> {
-        let vao = self.program.create_vao()?;
+        let mut vao = self.program.create_vao()?;
         vao.buffer_data(TextureVd::Position, vert, gl::STATIC_DRAW);
         vao.buffer_data(TextureVd::Coord, &TextureVd::FRAG, gl::STATIC_DRAW);
         Ok(vao)
