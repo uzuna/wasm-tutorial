@@ -1,8 +1,12 @@
+use std::rc::Rc;
+
 use bytemuck::NoUninit;
 use wasm_bindgen::JsError;
-use web_sys::{WebGlBuffer, WebGlProgram, WebGlVertexArrayObject};
+use web_sys::{WebGlBuffer, WebGlVertexArrayObject};
 
-use crate::{error::Result, gl, GlInt, GlPoint, GlPoint2d};
+use crate::{
+    context::ContextInner, error::Result, gl, program::Program, GlInt, GlPoint, GlPoint2d,
+};
 
 pub fn create_buffer(gl: &gl) -> Result<web_sys::WebGlBuffer> {
     gl.create_buffer()
@@ -38,6 +42,16 @@ pub fn buffer_subdata<P: GlPoint + NoUninit>(gl: &gl, target: u32, data: &[P], o
     }
 }
 
+impl Program {
+    /// VAOを作成する
+    pub fn create_vao<T>(&self) -> Result<Vao<T>>
+    where
+        T: VaoDefine,
+    {
+        Vao::new(self)
+    }
+}
+
 pub trait VaoDefine: 'static + Sized + PartialEq {
     // 頂点バッファのリスト
     fn iter() -> std::slice::Iter<'static, Self>;
@@ -54,10 +68,14 @@ pub trait VaoDefine: 'static + Sized + PartialEq {
     }
 }
 
+/// Vertex Array Objectを作成する
+///
+/// 紐付けを明らかにするために、引数にGlコンテキストとProgramを必要とする
 pub struct Vao<T>
 where
     T: VaoDefine,
 {
+    ctx: Rc<ContextInner>,
     vao: WebGlVertexArrayObject,
     vbos: Vec<WebGlBuffer>,
     index: Option<WebGlBuffer>,
@@ -68,7 +86,8 @@ impl<T> Vao<T>
 where
     T: VaoDefine,
 {
-    pub fn new(gl: &gl, prog: &WebGlProgram) -> Result<Self> {
+    pub(crate) fn new(prog: &Program) -> Result<Self> {
+        let gl = prog.gl();
         let vao = gl
             .create_vertex_array()
             .ok_or(JsError::new("Failed to create vao"))?;
@@ -76,23 +95,27 @@ where
         let mut vbos = vec![];
         for v in T::iter() {
             // Attributeの位置を取得
-            let loc = gl.get_attrib_location(prog, v.name()) as u32;
+            let loc = gl.get_attrib_location(prog.program(), v.name()) as u32;
             // VBOを作成して紐付け
-            let vbo = create_buffer(gl)?;
+            let vbo = create_buffer(&gl)?;
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vbo));
             gl.enable_vertex_attrib_array(loc);
             gl.vertex_attrib_pointer_with_i32(loc, v.size_of(), gl::FLOAT, false, 0, 0);
             vbos.push(vbo);
         }
         let index = if T::has_index_buffer() {
-            let index = create_buffer(gl)?;
+            let index = create_buffer(&gl)?;
             gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(&index));
             Some(index)
         } else {
             None
         };
         gl.bind_vertex_array(None);
+
+        let ctx = prog.ctx();
+        ctx.metrics().vertex.inc_vao(T::iter().len() as u32);
         Ok(Self {
+            ctx,
             vao,
             vbos,
             index,
@@ -100,11 +123,13 @@ where
         })
     }
 
-    pub fn bind(&self, gl: &gl) {
+    pub fn bind(&self) {
+        let gl = self.ctx.gl();
         gl.bind_vertex_array(Some(&self.vao));
     }
 
-    pub fn unbind(&self, gl: &gl) {
+    pub fn unbind(&self) {
+        let gl = self.ctx.gl();
         gl.bind_vertex_array(None);
     }
 
@@ -113,22 +138,36 @@ where
     }
 
     // usage: gl::STATIC_DRAW, gl::DYNAMIC_DRAW, gl::STREAM_DRAW
-    pub fn buffer_data<P: GlPoint + NoUninit>(&self, gl: &gl, vd: T, data: &[P], usage: u32) {
+    pub fn buffer_data<P: GlPoint + NoUninit>(&self, vd: T, data: &[P], usage: u32) {
+        let gl = self.ctx.gl();
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.vbos[vd.index()]));
-        buffer_data(gl, gl::ARRAY_BUFFER, data, usage);
+        buffer_data(&gl, gl::ARRAY_BUFFER, data, usage);
     }
 
-    pub fn buffer_sub_data<P: GlPoint + NoUninit>(&self, gl: &gl, vd: T, data: &[P], offset: i32) {
+    pub fn buffer_sub_data<P: GlPoint + NoUninit>(&self, vd: T, data: &[P], offset: i32) {
+        let gl = self.ctx.gl();
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.vbos[vd.index()]));
-        buffer_subdata(gl, gl::ARRAY_BUFFER, data, offset);
+        buffer_subdata(&gl, gl::ARRAY_BUFFER, data, offset);
     }
 
-    pub fn index_buffer_data(&self, gl: &gl, data: &[u16], usage: u32) {
+    pub fn index_buffer_data(&self, data: &[u16], usage: u32) {
+        let gl = self.ctx.gl();
         gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, self.index.as_ref());
         unsafe {
             let view = js_sys::Uint16Array::view(data);
             gl.buffer_data_with_array_buffer_view(gl::ELEMENT_ARRAY_BUFFER, &view, usage);
         }
+    }
+}
+
+impl<T> Drop for Vao<T>
+where
+    T: VaoDefine,
+{
+    fn drop(&mut self) {
+        let gl = self.ctx.gl();
+        gl.delete_vertex_array(Some(&self.vao));
+        self.ctx.metrics().vertex.sub_vao(T::iter().len() as u32);
     }
 }
 

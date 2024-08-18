@@ -42,33 +42,33 @@ pub fn start(
     canvas.set_height(height);
     let vp = webgl2::viewport::ViewPort::new(0, 0, width, height);
 
-    let gl = webgl2::context::get_context(&canvas, webgl2::context::COLOR_BLACK)?;
-    let gl = Rc::new(gl);
+    let glctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
 
     let mut ctx = DrawContext {
-        gl: gl.clone(),
+        gl: glctx.gl(),
         objects: vec![],
     };
 
+    let metrics = glctx.metrics().clone();
     let mut textures = vec![];
 
     let length = 100;
     for i in 0..length {
         let x = (i as f32 / length as f32 * f32::consts::PI * 2.0).sin();
         let y = (i as f32 / length as f32 * f32::consts::PI * 2.0).cos();
-        let s = TextureShader::new(gl.clone())?;
+        let s = TextureShader::new(&glctx)?;
         s.uniform().set_mat(
             vp.normalized_unit_mat()
                 .append_scaling(0.1)
                 .append_translation(&Vector2::new(x / vp.aspect(), y)),
         );
         let v = s.create_vao(&webgl2::vertex::UNIT_RECT)?;
-        let texture = webgl2::shader::texture::crate_blank_texture(&gl);
+        let texture = webgl2::shader::texture::crate_blank_texture(&glctx.gl());
         let texture = Rc::new(texture);
 
         let color_front = rgba_to_hexcode(i as u8, 0, 0, 255);
         lazy_load_texture(
-            gl.clone(),
+            glctx.gl(),
             format!(
                 "../api/texture/generate/test{}?color_front={}",
                 i, color_front
@@ -101,16 +101,17 @@ pub fn start(
     // monitorring closure length
     spawn_local(async move {
         use futures_util::{future::ready, stream::StreamExt};
-        let interval = std::time::Duration::from_secs(60);
+        let interval = std::time::Duration::from_secs(5);
         gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
             .for_each(|_| {
                 let len = LOAD_CLOSUER.with_borrow(|x| x.len());
-                info!("closure_length {}", len);
+                info!("closure_length {} {}", len, metrics);
                 check_memory_usage("monitoring");
                 ready(())
             })
             .await;
     });
+    let gl = glctx.gl();
 
     // メモリリークの有無を確認するためにテクスチャを定期的に読み出す
     // 実際にforgetではメモリ使用量が増える付けることが確認できた

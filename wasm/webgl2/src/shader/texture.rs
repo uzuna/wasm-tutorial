@@ -5,8 +5,9 @@ use std::rc::Rc;
 use web_sys::{WebGlTexture, WebGlUniformLocation};
 
 use crate::{
+    context::Context,
     error::Result,
-    gl, uniform_location,
+    gl,
     vertex::{Vao, VaoDefine},
     GlPoint, GlPoint2d, Program,
 };
@@ -46,13 +47,13 @@ void main() {
     fragmentColor = texture(u_texture, tex_coord);
 }
 "#;
-    pub fn new(gl: Rc<gl>) -> Result<Self> {
-        let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
-        program.use_program(&gl);
-        let uniform = TextureUniform::new(gl.clone(), &program)?;
+    pub fn new(ctx: &Context) -> Result<Self> {
+        let program = ctx.program(Self::VERT, Self::FRAG)?;
+        program.use_program();
+        let uniform = TextureUniform::new(&program)?;
         uniform.init();
         Ok(Self {
-            gl,
+            gl: ctx.gl(),
             program,
             uniform,
         })
@@ -63,24 +64,20 @@ void main() {
     }
 
     pub fn create_vao(&self, vert: &[GlPoint2d; 4]) -> Result<Vao<TextureVd>> {
-        let vao = Vao::new(&self.gl, self.program.program())?;
-        vao.buffer_data(&self.gl, TextureVd::Position, vert, gl::STATIC_DRAW);
-        vao.buffer_data(
-            &self.gl,
-            TextureVd::Coord,
-            &TextureVd::FRAG,
-            gl::STATIC_DRAW,
-        );
+        let vao = self.program.create_vao()?;
+        vao.buffer_data(TextureVd::Position, vert, gl::STATIC_DRAW);
+        vao.buffer_data(TextureVd::Coord, &TextureVd::FRAG, gl::STATIC_DRAW);
         Ok(vao)
     }
 
     /// テクスチャを描画する
     pub fn draw(&self, vao: &Vao<TextureVd>, texture: &WebGlTexture) {
-        self.program.use_program(&self.gl);
-        self.gl.active_texture(gl::TEXTURE0);
-        self.gl.bind_texture(gl::TEXTURE_2D, Some(texture));
-        vao.bind(&self.gl);
-        self.gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
+        self.program.use_program();
+        let gl = self.gl.as_ref();
+        gl.active_texture(gl::TEXTURE0);
+        gl.bind_texture(gl::TEXTURE_2D, Some(texture));
+        vao.bind();
+        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
     }
 }
 
@@ -91,11 +88,12 @@ pub struct TextureUniform {
 }
 
 impl TextureUniform {
-    pub fn new(gl: Rc<gl>, program: &Program) -> Result<Self> {
-        let local_mat = uniform_location(&gl, program, "local_mat")?;
-        let texture = uniform_location(&gl, program, "u_texture")?;
+    pub fn new(program: &Program) -> Result<Self> {
+        let local_mat = program.uniform_location("local_mat")?;
+        let texture = program.uniform_location("u_texture")?;
+
         Ok(Self {
-            gl,
+            gl: program.gl(),
             local_mat,
             texture,
         })
