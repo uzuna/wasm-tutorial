@@ -10,6 +10,8 @@ rust-version.workspace = true
 axum = { version = "0.7", features = ["json", "query", "ws"] }
 ciborium.workspace = true
 futures-util.workspace = true
+hex_color = "3"
+image = { version = "0.25.2", no-default-features = false, features = ["png", "jpeg", "webp"] }
 rand.workspace = true
 serde.workspace = true
 tokio = { version = "1.0", features = ["full"] }

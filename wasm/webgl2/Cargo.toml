@@ -7,19 +7,24 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
-vertex = ["web-sys/WebGlBuffer"]
-context = ["web-sys/HtmlCanvasElement"]
-font = ["dep:fxhash", "dep:serde", "web-sys/WebGlTexture", "vertex"]
+context = ["web-sys/HtmlCanvasElement", "dep:serde"]
+font = ["vertex", "dep:fxhash", "dep:serde", "web-sys/WebGlTexture", "dep:nalgebra"]
 font-asset = ["font", "dep:serde_json", "web-sys/WebglCompressedTextureS3tc"]
+font-asset-compress = ["font-asset", "dep:include-bytes-zstd"]
+shader = ["vertex", "web-sys/WebGlTexture", "web-sys/HtmlImageElement","dep:nalgebra"]
+vertex = ["web-sys/WebGlBuffer"]
+viewport = ["dep:nalgebra"]
 
 [dependencies]
 bytemuck = { version = "1.16.1", features = ["derive"] }
 fxhash = { workspace = true, optional = true }
+include-bytes-zstd = { version = "0.1.0", optional = true }
 js-sys.workspace = true
+nalgebra = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-wasm-bindgen.workspace = true
 serde-wasm-bindgen = "0.6.5"
+wasm-bindgen.workspace = true
 
 [dependencies.web-sys]
 workspace = true

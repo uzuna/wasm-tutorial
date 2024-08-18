@@ -1,5 +1,5 @@
 [package]
-name = "plot"
+name = "asset-access"
 version = "0.1.0"
 edition.workspace = true
 authors.workspace = true
@@ -10,20 +10,20 @@ rust-version.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-getrandom.workspace = true
 gloo-timers.workspace = true
+futures-util.workspace = true
+fxhash.workspace = true
 nalgebra.workspace = true
-rand.workspace = true
-tokio.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
-wasm-utils = { workspace = true }
-webgl2 = { workspace = true, features = ["vertex", "context", "font-asset", "viewport"] }
-futures-util.workspace = true
+wasm-utils = { workspace = true, features = ["waitgroup"] }
+webgl2 = { workspace = true, features = ["context", "shader", "viewport"] }
 
 [dependencies.web-sys]
 workspace = true
-features = []
+features = [
+    "HtmlImageElement",
+]
 
 [dev-dependencies]
 wasm-bindgen-test.workspace = true

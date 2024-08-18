@@ -12,7 +12,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 ciborium.workspace = true
 futures.workspace = true
-gloo-net.workspace = true
+gloo-net = { workspace = true, features = ["websocket", "json"] }
 nalgebra.workspace = true
 serde.workspace = true
 tokio.workspace = true

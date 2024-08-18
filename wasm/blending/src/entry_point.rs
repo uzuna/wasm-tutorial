@@ -4,9 +4,16 @@ use nalgebra::{Matrix3, Vector2};
 use wasm_bindgen::{convert::IntoWasmAbi, prelude::*};
 use wasm_utils::{animation::AnimationLoop, error::*, info};
 use web_sys::{HtmlCanvasElement, WebGlBuffer, WebGlProgram};
-use webgl2::{blend::BlendMode, context::gl_clear_color, gl, vertex::buffer_data_f32, Program};
+use webgl2::{
+    blend::BlendMode,
+    context::gl_clear_color,
+    gl,
+    shader::texture::{color_texture, TextureShader},
+    vertex::buffer_data_f32,
+    Program,
+};
 
-use crate::shader::{color_texture, SingleColorShaderGl1, TextureShader};
+use crate::shader::SingleColorShaderGl1;
 
 const BG_COLOR: [f32; 4] = [0.0, 0.2, 0.2, 1.0];
 
@@ -146,25 +153,35 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<GlContext, JsValu
 
     let ctx = GlContext::new(BlendMode::Alpha);
     let ctx_clone = ctx.clone();
-    let mut a = AnimationLoop::new(move |t| {
-        let t = t as f32 / 500.0;
+    let mut a = AnimationLoop::new(move |time| {
+        let t = time as f32 / 500.0;
         let x = t.sin() * 0.5;
         let y = t.cos() * 0.5;
+        let gt = time as f32 / 700.0;
+        let gx = gt.sin() * 0.5;
+        let gs = gt.cos() * 0.1;
         let u = s.uniform();
+
+        let global_mat = Matrix3::identity()
+            .append_translation(&Vector2::new(0.0, gx))
+            .append_scaling(gs + 0.8);
 
         // 背景色を描画。Canvasの影響を可視化するために青線をAlphaブレンドで描画
         BlendMode::Alpha.enable(&gl);
         gl_clear_color(&gl, BG_COLOR);
         u.set_local_mat(Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1.0, 0.1)));
+        u.set_global_mat(global_mat);
         u.set_color([0.0, 0.0, 1.0, 1.0]);
         s.draw(&v0);
 
         // 指定のブレンドモードで、赤と緑の矩形を描画
         ctx_clone.blend.borrow().enable(&gl);
         u.set_local_mat(local_mat.with_translation(x, y));
+        u.set_global_mat(global_mat);
         u.set_color([1.0, 0.0, 0.0, x.abs() + 0.1]);
         s.draw(&v0);
         u.set_local_mat(local_mat.with_translation(-x, -y));
+        u.set_global_mat(global_mat);
         u.set_color([0.0, 1.0, 0.0, y.abs() + 0.1]);
         s.draw(&v0);
         Ok(())
@@ -197,16 +214,13 @@ pub fn start_webgl2_texture(canvas: HtmlCanvasElement) -> std::result::Result<Gl
     let u = s.uniform();
 
     u.set_mat(Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1.0, 0.1)));
-    gl.bind_texture(gl::TEXTURE_2D, Some(&t_b));
-    s.draw(&vao);
+    s.draw(&vao, &t_b);
 
     u.set_mat(local_mat.with_translation(-0.5, -0.5));
-    gl.bind_texture(gl::TEXTURE_2D, Some(&t_r));
-    s.draw(&vao);
+    s.draw(&vao, &t_r);
 
     u.set_mat(local_mat.with_translation(0.5, 0.5));
-    gl.bind_texture(gl::TEXTURE_2D, Some(&t_g));
-    s.draw(&vao);
+    s.draw(&vao, &t_g);
 
     let ctx = GlContext::new(BlendMode::Alpha);
     let ctx_clone = ctx.clone();
@@ -218,17 +232,14 @@ pub fn start_webgl2_texture(canvas: HtmlCanvasElement) -> std::result::Result<Gl
         BlendMode::Alpha.enable(&gl);
         gl_clear_color(&gl, BG_COLOR);
         u.set_mat(Matrix3::identity().append_nonuniform_scaling(&Vector2::new(1.0, 0.1)));
-        gl.bind_texture(gl::TEXTURE_2D, Some(&t_b));
-        s.draw(&vao);
+        s.draw(&vao, &t_b);
 
         ctx_clone.blend.borrow().enable(&gl);
         u.set_mat(local_mat.with_translation(-0.5, -0.5));
-        gl.bind_texture(gl::TEXTURE_2D, Some(&t_r));
-        s.draw(&vao);
+        s.draw(&vao, &t_r);
 
         u.set_mat(local_mat.with_translation(0.5, 0.5));
-        gl.bind_texture(gl::TEXTURE_2D, Some(&t_g));
-        s.draw(&vao);
+        s.draw(&vao, &t_g);
         Ok(())
     });
     a.start();

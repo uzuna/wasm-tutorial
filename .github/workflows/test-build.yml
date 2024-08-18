@@ -18,12 +18,14 @@ jobs:
         with:
           tool: wasm-pack,cargo-generate
       - name: Build the package
-        run: make -C boids build
+        run: |
+          make -C boids build
+          make -C asset-access build
       - name: Upload the package
         uses: actions/upload-artifact@v4
         with:
-          name: asset-wasm-boids-pkg
-          path: web-server/assets/boids/pkg
+          name: asset-wasm-pkg
+          path: web-server/assets/*/pkg
           retention-days: 1
   build-server-pkg:
     needs: [build-wasm-radar]
@@ -39,8 +41,8 @@ jobs:
       - name: Download the package
         uses: actions/download-artifact@v4
         with:
-          name: asset-wasm-boids-pkg
-          path: web-server/assets/boids/pkg
+          name: asset-wasm-pkg
+          path: web-server/assets/
       - name: Build the package
         run: cargo deb -p web-server
       - name: Upload the package

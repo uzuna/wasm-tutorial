@@ -1,16 +1,19 @@
 use std::{cell::RefCell, rc::Rc, sync::atomic::AtomicBool, time::Duration};
 
-use nalgebra::Vector2;
 use rand::Rng;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use wasm_bindgen::prelude::*;
 use wasm_utils::{animation::PlayStopButton, error::*};
 use web_sys::{HtmlButtonElement, HtmlCanvasElement};
-use webgl2::{font::TextShader, gl};
+use webgl2::{
+    font::{Align, TextShader},
+    gl,
+    viewport::{LocalView, ViewPort},
+};
 
 use crate::{
-    plot::{Chart, ViewPort},
-    shader::PlotParams,
+    plot::Chart,
+    shader::{PlaneShader, PlotParams},
 };
 
 #[wasm_bindgen(start)]
@@ -24,25 +27,25 @@ pub fn start(
     canvas: HtmlCanvasElement,
     play_pause_btn: HtmlButtonElement,
 ) -> std::result::Result<(), JsValue> {
-    canvas.set_width(1024);
-    canvas.set_height(768);
+    let viewport = ViewPort::new(0, 0, 1024, 768);
+    canvas.set_width(viewport.w);
+    canvas.set_height(viewport.h);
 
-    let aspect = 1024.0 / 768.0;
     let gl = webgl2::context::get_context(&canvas, webgl2::context::COLOR_BLACK)?;
     let gl = Rc::new(gl);
     let playing = Rc::new(RefCell::new(AtomicBool::new(false)));
 
     // 1Chart単位を手で組む
-    let mut chart = Chart::new(ViewPort::new(0, 768 - 128, 1024, 128))?;
+    let mut chart = Chart::new(viewport.local(0, 0, 1024, 128))?;
     let s1 = chart.add_series(
-        &gl,
+        gl.clone(),
         PlotParams::new(Duration::from_secs(10), 30, (-10.0, 10.0)),
         "Random Walk 1",
     )?;
 
     let mut prop = PlotParams::new(Duration::from_secs(10), 10, (-5.0, 5.0));
     prop.color = [0.0, 1.0, 0.0, 1.0];
-    let s2 = chart.add_series(&gl, prop, "Random Walk 2")?;
+    let s2 = chart.add_series(gl.clone(), prop, "Random Walk 2")?;
 
     let mut dcm1 = DataChannelMap::new();
     dcm1.add(
@@ -65,31 +68,37 @@ pub fn start(
     let mut prop = PlotParams::new(Duration::from_secs(10), 100, (-5.0, 5.0));
     prop.point_size = 3.0;
     let (mut c2, mut dcm2) = random_walk_chart(
-        &gl,
-        ViewPort::new(0, 768 - 256, 1024, 128),
+        gl.clone(),
+        viewport.local(0, 128, 512, 128),
         prop.clone(),
         16,
         playing.clone(),
     )?;
     let (mut c3, mut dcm3) = random_walk_chart(
-        &gl,
-        ViewPort::new(0, 768 - 384, 1024, 128),
+        gl.clone(),
+        viewport.local(512, 256, 512, 128),
         prop.clone(),
         16,
         playing.clone(),
     )?;
 
+    // フォント情報の読み出しとシェーダーの作成
     let font = webgl2::font_asset::load(&gl)?;
-    let mut text = font.create_text_vertex("Hello,0000000000");
     let ts = TextShader::new(gl.clone())?;
 
-    let mat = nalgebra::Matrix3::identity()
-        .append_nonuniform_scaling(&Vector2::new(0.002, 0.002 * aspect));
-    let mat: [[f32; 3]; 3] = mat.into();
-    let mm = mat.iter().flat_map(|a| *a).collect::<Vec<_>>();
-    ts.set_mat(&gl, &mm);
-    let tv = ts.link_vertex(&text)?;
-    gl.viewport(0, 0, 1024, 768);
+    // テキストの頂点情報を作成し、VAOで描画メモリを確保
+    let mut text = font.text_by_capacity(10, Align::left_bottom());
+    let mat = viewport.font_mat(512, 128, 16.0);
+    ts.local_mat(&gl, &mat);
+    let tv = ts.create_vbo(&text)?;
+
+    // ViewPort確認
+    let lp = viewport.local(512, 256, 512, 128);
+    let plane = PlaneShader::new(gl.clone(), [0.5, 0.5, 0.5, 1.0])?;
+    plane.uniform().local_mat(&gl, lp.local_mat());
+    plane.draw();
+
+    // テキスト描画
     ts.draw(&gl, &tv);
 
     let a = wasm_utils::animation::AnimationLoop::new(move |time| {
@@ -103,16 +112,25 @@ pub fn start(
         chart.draw(&gl, current_time);
         c2.draw(&gl, current_time);
         c3.draw(&gl, current_time);
-        // TODO 文字がプロットの下にレンダリングされる理由を特定する
-        gl.viewport(0, 0, 1024, 768);
-        font.update_text(&mut text, &format!("Hello,{}", time as u32));
-        text.update_uv(&gl, &tv);
-        ts.draw(&gl, &tv);
+
+        // Scissorを解除して全体に描画
+        viewport.scissor(&gl);
+        plane.draw();
+
+        // Chart.Seriese0の最後のデータを取得してテキストに反映
+        if let Some(s) = chart.series(0) {
+            if let Some((time, value)) = s.last() {
+                text.update_text(&format!("{:.5}", value));
+                text.apply_to_vao(&gl, &tv);
+                ts.draw(&gl, &tv);
+            }
+        }
+
         Ok(())
     });
 
     // TODO: 止めるべきはAnimationLoopのインスタンスではなく、データ更新部分では?
-    let btn = PlayStopButton::new(play_pause_btn, a, playing);
+    let btn = PlayStopButton::new_with_flag(play_pause_btn, a, playing);
 
     let ctx = btn.start();
     // JSに戻したらGCで回収されたためforgetする
@@ -122,18 +140,18 @@ pub fn start(
 
 // 大量のデータを描画するテスト
 fn random_walk_chart(
-    gl: &gl,
-    viewport: ViewPort,
+    gl: Rc<gl>,
+    localview: LocalView,
     base_prop: PlotParams,
     series_count: u32,
     playing: Rc<RefCell<AtomicBool>>,
 ) -> Result<(Chart, DataChannelMap)> {
-    let mut chart = Chart::new(viewport)?;
+    let mut chart = Chart::new(localview)?;
     for i in 0..series_count {
         let mut prop = base_prop.clone();
         let rgb = hsv_to_rgb(i as f64 * 360.0 / series_count as f64, 1.0, 1.0);
         prop.color = [rgb.0, rgb.1, rgb.2, 0.5];
-        chart.add_series(gl, prop, &format!("Random Walk {}", i))?;
+        chart.add_series(gl.clone(), prop, &format!("Random Walk {}", i))?;
     }
 
     let mut dcm = DataChannelMap::new();

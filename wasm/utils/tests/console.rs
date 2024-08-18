@@ -4,11 +4,9 @@
 
 extern crate wasm_bindgen_test;
 
-use std::assert_eq;
-
-use wasm_bindgen::{prelude::*, JsError};
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::*;
-use wasm_utils::{animation::AnimationLoop, error, info};
+use wasm_utils::{error, info};
 
 wasm_bindgen_test_configure!(run_in_browser);
 

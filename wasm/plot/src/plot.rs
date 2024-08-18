@@ -1,15 +1,15 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, rc::Rc};
 
 use nalgebra::Vector2;
 use wasm_utils::error::*;
-use webgl2::{gl, GlPoint2d};
+use webgl2::{gl, viewport::LocalView, GlPoint2d};
 
 use crate::shader::PlotParams;
 
 /// チャート全体を描画するための構造体
 pub struct Chart {
-    // 表示位置の情報
-    viewport: ViewPort,
+    // 画面全体のうちこのチャートが使っても良い領域
+    localview: LocalView,
     // データ系列
     series: Vec<SeriesRenderer>,
     // データ系列のラベル
@@ -17,16 +17,20 @@ pub struct Chart {
 }
 
 impl Chart {
-    pub fn new(viewport: ViewPort) -> Result<Self> {
+    pub fn new(localview: LocalView) -> Result<Self> {
         Ok(Self {
-            viewport,
+            localview,
             series: Vec::new(),
             labels: Vec::new(),
         })
     }
 
-    pub fn add_series(&mut self, gl: &gl, prop: PlotParams, label: &str) -> Result<usize> {
-        let series = SeriesRenderer::new(gl, prop)?;
+    pub fn add_series(&mut self, gl: Rc<gl>, prop: PlotParams, label: &str) -> Result<usize> {
+        let mut series = SeriesRenderer::new(gl.clone(), prop)?;
+        // 表示スケールの設定
+        let local_mat = self.localview.local_mat();
+        series.set_local_mat(&gl, local_mat);
+
         let index = self.series.len();
         self.series.push(series);
         self.labels.push(label.to_string());
@@ -40,11 +44,15 @@ impl Chart {
     }
 
     pub fn draw(&mut self, gl: &gl, current_time: f32) {
-        self.viewport.set_gl(gl);
+        self.localview.scissor(gl);
         for series in self.series.iter_mut() {
             series.update_window(gl, current_time);
             series.draw(gl);
         }
+    }
+
+    pub fn series(&self, index: usize) -> Option<&SeriesRenderer> {
+        self.series.get(index)
     }
 }
 
@@ -56,21 +64,33 @@ pub struct SeriesRenderer {
     dot_shader: crate::shader::DotShader,
     // 描画とは別にデータを保持
     buffer: DataBuffer,
+    // 表示範囲確認
+    plane_shader: crate::shader::PlaneShader,
 }
 
 impl SeriesRenderer {
-    pub fn new(gl: &gl, prop: PlotParams) -> Result<Self> {
-        let dot_shader = crate::shader::DotShader::new(gl, &prop)?;
+    pub fn new(gl: Rc<gl>, prop: PlotParams) -> Result<Self> {
+        let dot_shader = crate::shader::DotShader::new(&gl, &prop)?;
         let buffer = DataBuffer {
             time: VecDeque::new(),
             value: VecDeque::new(),
             max_len: prop.point_count,
         };
+        let plane_shader = crate::shader::PlaneShader::new(gl, [0.5, 0.5, 0.5, 1.0])?;
         Ok(Self {
             params: prop,
             dot_shader,
             buffer,
+            plane_shader,
         })
+    }
+
+    /// ローカル座標変換行列を設定。
+    pub fn set_local_mat(&mut self, gl: &gl, mat: nalgebra::Matrix3<f32>) {
+        self.dot_shader.use_program(gl);
+        self.dot_shader.uniform().local_mat(gl, mat);
+        self.plane_shader.use_program();
+        self.plane_shader.uniform().local_mat(gl, mat);
     }
 
     pub fn add_data(&mut self, gl: &gl, time: f32, value: f32) {
@@ -89,12 +109,15 @@ impl SeriesRenderer {
 
         let height = (self.params.y_range.1 - self.params.y_range.0) * 0.5;
         let y_trans = self.params.y_range.0 + height;
+
+        // 新しいプロットの位置はどのように決定する?
+        // OpenGL Unit範囲に表示すると考えたときに、この座標はどの程度動かせば良い?
         let mat = nalgebra::Matrix3::identity()
             .append_translation(&Vector2::new(-current_time + window_width_scale, -y_trans))
             .append_nonuniform_scaling(&Vector2::new(1.0 / window_width_scale, 1.0 / height));
 
         self.dot_shader.use_program(gl);
-        self.dot_shader.set_window_mat(gl, mat);
+        self.dot_shader.uniform().plot_mat(gl, mat);
     }
 
     pub fn set_y_range(&mut self, y_range: (f32, f32)) {
@@ -107,31 +130,15 @@ impl SeriesRenderer {
     }
 
     pub fn draw(&self, gl: &gl) {
-        self.dot_shader.use_program(gl);
         self.dot_shader.draw(gl);
+        self.plane_shader.draw();
     }
-}
 
-/// OpenGL画面のうち、描画する範囲を表す
-#[derive(Debug, Clone, Copy)]
-pub struct ViewPort {
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
-}
-
-impl ViewPort {
-    pub fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Self {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-    fn set_gl(&self, gl: &gl) {
-        gl.viewport(self.x, self.y, self.width, self.height);
+    pub fn last(&self) -> Option<(f32, f32)> {
+        self.buffer
+            .time
+            .back()
+            .map(|&t| (t, *self.buffer.value.back().unwrap()))
     }
 }
 
