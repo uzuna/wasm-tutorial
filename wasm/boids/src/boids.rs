@@ -19,14 +19,6 @@ impl Boid {
         self.pos
     }
 
-    pub fn zero() -> Self {
-        Self {
-            pos: Vec3f::zeros(),
-            vel: Vec3f::zeros(),
-            param: BoidsParameter::default(),
-        }
-    }
-
     pub fn distance(&self, other: &Boid) -> f32 {
         (self.pos - other.pos).norm()
     }

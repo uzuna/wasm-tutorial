@@ -5,15 +5,16 @@ use std::rc::Rc;
 use web_sys::{WebGlTexture, WebGlUniformLocation};
 
 use crate::{
+    context::Context,
     error::Result,
-    gl, uniform_location,
+    gl,
+    program::Program,
     vertex::{Vao, VaoDefine},
-    GlPoint, GlPoint2d, Program,
+    GlPoint, GlPoint2d,
 };
 
 /// シンプルなテクスチャ描画用のシェーダー
 pub struct TextureShader {
-    gl: Rc<gl>,
     program: Program,
     uniform: TextureUniform,
 }
@@ -46,16 +47,12 @@ void main() {
     fragmentColor = texture(u_texture, tex_coord);
 }
 "#;
-    pub fn new(gl: Rc<gl>) -> Result<Self> {
-        let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
-        program.use_program(&gl);
-        let uniform = TextureUniform::new(gl.clone(), &program)?;
+    pub fn new(ctx: &Context) -> Result<Self> {
+        let program = ctx.program(Self::VERT, Self::FRAG)?;
+        program.use_program();
+        let uniform = TextureUniform::new(&program)?;
         uniform.init();
-        Ok(Self {
-            gl,
-            program,
-            uniform,
-        })
+        Ok(Self { program, uniform })
     }
 
     pub fn uniform(&self) -> &TextureUniform {
@@ -63,24 +60,20 @@ void main() {
     }
 
     pub fn create_vao(&self, vert: &[GlPoint2d; 4]) -> Result<Vao<TextureVd>> {
-        let vao = Vao::new(&self.gl, self.program.program())?;
-        vao.buffer_data(&self.gl, TextureVd::Position, vert, gl::STATIC_DRAW);
-        vao.buffer_data(
-            &self.gl,
-            TextureVd::Coord,
-            &TextureVd::FRAG,
-            gl::STATIC_DRAW,
-        );
+        let mut vao = self.program.create_vao()?;
+        vao.buffer_data(TextureVd::Position, vert, gl::STATIC_DRAW);
+        vao.buffer_data(TextureVd::Coord, &TextureVd::FRAG, gl::STATIC_DRAW);
         Ok(vao)
     }
 
     /// テクスチャを描画する
     pub fn draw(&self, vao: &Vao<TextureVd>, texture: &WebGlTexture) {
-        self.program.use_program(&self.gl);
-        self.gl.active_texture(gl::TEXTURE0);
-        self.gl.bind_texture(gl::TEXTURE_2D, Some(texture));
-        vao.bind(&self.gl);
-        self.gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
+        self.program.use_program();
+        let gl = self.program.gl();
+        gl.active_texture(gl::TEXTURE0);
+        gl.bind_texture(gl::TEXTURE_2D, Some(texture));
+        vao.bind();
+        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
     }
 }
 
@@ -91,11 +84,12 @@ pub struct TextureUniform {
 }
 
 impl TextureUniform {
-    pub fn new(gl: Rc<gl>, program: &Program) -> Result<Self> {
-        let local_mat = uniform_location(&gl, program, "local_mat")?;
-        let texture = uniform_location(&gl, program, "u_texture")?;
+    pub fn new(program: &Program) -> Result<Self> {
+        let local_mat = program.uniform_location("local_mat")?;
+        let texture = program.uniform_location("u_texture")?;
+
         Ok(Self {
-            gl,
+            gl: program.gl().clone(),
             local_mat,
             texture,
         })
@@ -150,74 +144,4 @@ impl VaoDefine for TextureVd {
             TextureVd::Position | TextureVd::Coord => GlPoint2d::size(),
         }
     }
-}
-
-/// 1x1pxの色のテクスチャを作成する
-pub fn color_texture(gl: &gl, color: [u8; 4]) -> WebGlTexture {
-    create_texture(gl, 1, 1, Some(&color))
-}
-
-/// テクスチャを作成する
-pub fn create_texture(gl: &gl, width: i32, height: i32, body: Option<&[u8]>) -> WebGlTexture {
-    let texture = gl.create_texture().expect("Failed to create texture");
-    gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
-    gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
-        gl::TEXTURE_2D,
-        0,
-        gl::RGBA as i32,
-        width,
-        height,
-        0,
-        gl::RGBA,
-        gl::UNSIGNED_BYTE,
-        body,
-    )
-    .expect("Failed to set texture image");
-    texture
-}
-
-pub fn create_texture_image_element(gl: &gl, element: &web_sys::HtmlImageElement) -> WebGlTexture {
-    let texture = gl.create_texture().expect("Failed to create texture");
-    gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
-    gl.tex_image_2d_with_u32_and_u32_and_html_image_element(
-        gl::TEXTURE_2D,
-        0,
-        gl::RGBA as i32,
-        gl::RGBA,
-        gl::UNSIGNED_BYTE,
-        element,
-    )
-    .expect("Failed to set texture image");
-    texture
-}
-
-pub fn crate_blank_texture(gl: &gl) -> WebGlTexture {
-    let texture = gl.create_texture().expect("Failed to create texture");
-    gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
-    texture
-}
-
-pub fn rebind_texture(gl: &gl, texture: &WebGlTexture, element: &web_sys::HtmlImageElement) {
-    gl.bind_texture(gl::TEXTURE_2D, Some(texture));
-    gl.tex_image_2d_with_u32_and_u32_and_html_image_element(
-        gl::TEXTURE_2D,
-        0,
-        gl::RGBA as i32,
-        gl::RGBA,
-        gl::UNSIGNED_BYTE,
-        element,
-    )
-    .expect("Failed to set texture image");
 }

@@ -1,11 +1,13 @@
-use crate::{blend::BlendMode, error::Result};
+use std::rc::Rc;
+
+use crate::{blend::BlendMode, error::Result, program::Program};
 use wasm_bindgen::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as gl};
 
 pub const COLOR_BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
 /// refer: https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/getContext
-/// jsでの定義似合わせtえcamelCaseで定義
+/// jsでの定義に合わせてcamelCaseで定義
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WebGL2ContextOption {
@@ -36,6 +38,75 @@ impl WebGL2ContextOption {
     };
 }
 
+// WebGL2RenderingContextをラップする構造体
+// WebGLの利用状況のモニタリングのためにメトリクスを持つ
+// WebGLはCanvas毎に別コンテキストを持つため、グローバル定義はせずにCanvas毎にコンテキストを持つ
+pub(crate) struct ContextInner {
+    gl: Rc<gl>,
+    _canvas: HtmlCanvasElement,
+    #[cfg(feature = "metrics")]
+    metrics: crate::metrics::Metrics,
+}
+
+impl ContextInner {
+    fn new(gl: Rc<gl>, canvas: HtmlCanvasElement) -> Self {
+        Self {
+            gl,
+            _canvas: canvas,
+            #[cfg(feature = "metrics")]
+            metrics: crate::metrics::Metrics::default(),
+        }
+    }
+
+    pub fn gl(&self) -> &Rc<gl> {
+        &self.gl
+    }
+
+    #[cfg(feature = "metrics")]
+    pub fn metrics(&self) -> &crate::metrics::Metrics {
+        &self.metrics
+    }
+
+    #[cfg(feature = "viewport")]
+    pub(crate) fn canvas_size(&self) -> (u32, u32) {
+        let width = self._canvas.width();
+        let height = self._canvas.height();
+        (width, height)
+    }
+}
+
+/// WebGL2RenderingContextをラップする構造体
+#[derive(Clone)]
+pub struct Context {
+    pub(crate) ctx: Rc<ContextInner>,
+}
+
+impl Context {
+    /// Canvas要素を受け取り、WebGL2のコンテキストを取得する
+    pub fn new(canvas: HtmlCanvasElement, color: [f32; 4]) -> Result<Self> {
+        // コンテクスト作成時点でViewPortのサイズが決まり、これ以降はHTMLのサイズを変えてもContextの大きさは変わらない
+        let gl = get_context(&canvas, color)?;
+        Ok(Self {
+            ctx: Rc::new(ContextInner::new(Rc::new(gl), canvas)),
+        })
+    }
+
+    /// 生のWebGL2RenderingContextを取得する
+    pub fn gl(&self) -> &Rc<gl> {
+        self.ctx.gl()
+    }
+
+    pub fn clear(&self, color: [f32; 4]) {
+        gl_clear_color(self.ctx.gl(), color);
+    }
+
+    /// プログラムを作成する
+    pub fn program(&self, vert: &str, frag: &str) -> Result<Program> {
+        Program::new(self.ctx.clone(), vert, frag)
+    }
+}
+
+/// Canvas要素からWebGL2RenderingContextを取得する
 pub fn get_context(canvas: &HtmlCanvasElement, color: [f32; 4]) -> Result<gl> {
     use wasm_bindgen::JsCast;
     let options = serde_wasm_bindgen::to_value(&WebGL2ContextOption::DEFAULT)?;

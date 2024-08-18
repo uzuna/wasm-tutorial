@@ -17,7 +17,7 @@ console_error_panic_hook = { workspace = true, optional = true }
 fixedbitset = "0.5.7"
 futures.workspace = true
 futures-util = "0.3.30"
-gloo-net = { workspace = true, features = ["http"] }
+gloo-net = { workspace = true, features = ["http", "json", "websocket"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 js-sys.workspace = true
 nalgebra.workspace = true
@@ -27,7 +27,7 @@ tokio-util = "0.7.11"
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 wasm-utils = { workspace = true }
-webgl2 = { workspace = true, features = ["vertex"] }
+webgl2 = { workspace = true, features = ["vertex", "context"] }
 
 [dependencies.web-sys]
 workspace = true

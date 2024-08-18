@@ -2,17 +2,19 @@
 
 use std::rc::Rc;
 
-use web_sys::{WebGlTexture, WebGlUniformLocation};
+use web_sys::WebGlUniformLocation;
 
 use crate::{
+    context::Context,
     error::Result,
-    gl, uniform_location,
+    gl,
+    program::Program,
+    texture::Texture,
     vertex::{Vao, VaoDefine},
-    GlPoint2d, Program,
+    GlPoint2d,
 };
 
 pub struct TextShader {
-    gl: Rc<gl>,
     program: Program,
     local_mat: WebGlUniformLocation,
 }
@@ -55,34 +57,21 @@ void main() {
 }
 "#;
 
-    pub fn new(gl: Rc<gl>) -> Result<Self> {
-        let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
-        let local_mat = uniform_location(&gl, &program, "local_mat")?;
+    pub fn new(ctx: &Context) -> Result<Self> {
+        let program = ctx.program(Self::VERT, Self::FRAG)?;
+        let local_mat = program.uniform_location("local_mat")?;
 
-        Ok(Self {
-            gl,
-            program,
-            local_mat,
-        })
-    }
-
-    pub fn gl(&self) -> &gl {
-        &self.gl
+        Ok(Self { program, local_mat })
     }
 
     /// テキストの描画に使うVBOを作成する
     pub fn create_vbo(&self, v_text: &TextVertex) -> Result<TextVao> {
-        self.program.use_program(&self.gl);
+        self.program.use_program();
         let v = &v_text.vertex;
 
-        let vao = Vao::new(&self.gl, self.program.program())?;
-        vao.buffer_data(
-            &self.gl,
-            TextVaoDefine::Vertex,
-            &v.positions,
-            gl::STATIC_DRAW,
-        );
-        vao.buffer_data(&self.gl, TextVaoDefine::Uv, &v.uvs, gl::DYNAMIC_DRAW);
+        let mut vao = self.program.create_vao()?;
+        vao.buffer_data(TextVaoDefine::Vertex, &v.positions, gl::STATIC_DRAW);
+        vao.buffer_data(TextVaoDefine::Uv, &v.uvs, gl::DYNAMIC_DRAW);
         Ok(TextVao {
             texture: v_text.font.texture.clone(),
             vao,
@@ -90,17 +79,22 @@ void main() {
         })
     }
 
-    pub fn local_mat(&self, gl: &gl, mat: &nalgebra::Matrix3<f32>) {
-        self.program.use_program(gl);
-        gl.uniform_matrix3fv_with_f32_array(Some(&self.local_mat), false, mat.as_slice());
+    pub fn local_mat(&self, mat: &nalgebra::Matrix3<f32>) {
+        self.program.use_program();
+        self.program.gl().uniform_matrix3fv_with_f32_array(
+            Some(&self.local_mat),
+            false,
+            mat.as_slice(),
+        );
     }
 
-    pub fn draw(&self, gl: &gl, vao: &TextVao) {
-        self.program.use_program(gl);
+    pub fn draw(&self, vao: &TextVao) {
+        self.program.use_program();
+        let gl = self.program.gl();
         gl.active_texture(gl::TEXTURE0);
-        vao.bind(gl);
+        vao.bind();
         gl.draw_arrays(gl::TRIANGLES, 0, vao.vertex_size);
-        vao.unbind(gl);
+        vao.unbind();
     }
 }
 
@@ -117,8 +111,8 @@ impl TextVertex {
     }
 
     /// 頂点情報をVBOに適用する
-    pub fn apply_to_vao(&self, gl: &gl, vao: &TextVao) {
-        self.vertex.update(gl, vao);
+    pub fn apply_to_vao(&self, vao: &TextVao) {
+        self.vertex.update(vao);
     }
 }
 
@@ -142,10 +136,10 @@ impl TextVertexInner {
     // 数字以外の文字列を描画する場合。文字によって位置が変わるのでpositionも変更する
     //
     // TODO: 数字だけなどならuv更新に限定するなど効率化する余地がある
-    fn update(&self, gl: &gl, vao: &TextVao) {
+    fn update(&self, vao: &TextVao) {
         vao.vao
-            .buffer_sub_data(gl, TextVaoDefine::Vertex, &self.positions, 0);
-        vao.vao.buffer_sub_data(gl, TextVaoDefine::Uv, &self.uvs, 0);
+            .buffer_sub_data(TextVaoDefine::Vertex, &self.positions, 0);
+        vao.vao.buffer_sub_data(TextVaoDefine::Uv, &self.uvs, 0);
     }
 }
 
@@ -180,19 +174,20 @@ impl VaoDefine for TextVaoDefine {
 /// GPUメモリ上に保持されたテキストの頂点とテクスチャを保持している。
 /// この構造体があれば[Font]や[TextVertex]が無くても描画自体は可能
 pub struct TextVao {
-    texture: Rc<WebGlTexture>,
+    texture: Texture,
     vao: Vao<TextVaoDefine>,
     // draw時に頂点数を渡す
     vertex_size: i32,
 }
 
 impl TextVao {
-    pub fn bind(&self, gl: &gl) {
-        gl.bind_texture(gl::TEXTURE_2D, Some(&self.texture));
-        self.vao.bind(gl);
+    pub fn bind(&self) {
+        let gl = self.vao.gl();
+        gl.bind_texture(gl::TEXTURE_2D, Some(self.texture.texture()));
+        self.vao.bind();
     }
-    pub fn unbind(&self, gl: &gl) {
-        self.vao.unbind(gl);
+    pub fn unbind(&self) {
+        self.vao.unbind();
     }
 }
 
@@ -203,7 +198,7 @@ pub struct Font {
 
 impl Font {
     /// フォントテクスチャと切り出し情報を保持する構造体を作成する
-    pub fn new(texture: WebGlTexture, detail: FontTextureDetail) -> Self {
+    pub fn new(texture: Texture, detail: FontTextureDetail) -> Self {
         Self {
             inner: Rc::new(FontInner::new(texture, detail)),
         }
@@ -228,18 +223,15 @@ impl Font {
 
 struct FontInner {
     // テクスチャはTextVaoがある限り描画可能にするためRcで包む
-    texture: Rc<WebGlTexture>,
+    texture: Texture,
     detail: FontTextureDetail,
 }
 
 impl FontInner {
     const CHAR_VERTEX_COUNT: usize = 6;
 
-    fn new(texture: WebGlTexture, detail: FontTextureDetail) -> Self {
-        Self {
-            texture: Rc::new(texture),
-            detail,
-        }
+    fn new(texture: Texture, detail: FontTextureDetail) -> Self {
+        Self { texture, detail }
     }
 
     fn aling_position(&self, align: Align, total_advance: f32) -> (f32, f32) {

@@ -1,10 +1,14 @@
+use std::rc::Rc;
+
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGlFramebuffer, WebGlTexture, WebGlUniformLocation};
 
 use webgl2::{
-    gl, uniform_location,
+    context::Context,
+    gl,
+    program::Program,
     vertex::{Vao, VaoDefine},
-    GlEnum, GlPoint2d, GlPoint3d, Program,
+    GlEnum, GlPoint2d, GlPoint3d,
 };
 
 use crate::error::Result;
@@ -64,21 +68,16 @@ void main() {
 }
 "#;
 
-    pub fn new(gl: &gl, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
-        let program = Program::new(gl, Self::VERT, Self::FRAG)?;
+    pub fn new(ctx: &Context, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
+        let program = ctx.program(Self::VERT, Self::FRAG)?;
         let particle = Particle::new(res, ctrl);
-        let vao = Vao::new(gl, program.program())?;
-        vao.buffer_data(
-            gl,
-            ParticleVd::Position,
-            &particle.position,
-            gl::DYNAMIC_DRAW,
-        );
+        let mut vao = program.create_vao()?;
+        vao.buffer_data(ParticleVd::Position, &particle.position, gl::DYNAMIC_DRAW);
         let vertex_len = particle.position.len() as i32;
 
-        program.use_program(gl);
-        let uniform = ParticleUniform::new(gl, &program)?;
-        uniform.init(gl);
+        program.use_program();
+        let uniform = ParticleUniform::new(&program)?;
+        uniform.init();
         Ok(Self {
             program,
             particle,
@@ -88,47 +87,52 @@ void main() {
         })
     }
 
-    pub fn set_color(&self, gl: &gl, color: [f32; 4]) {
-        self.uniform.set_color(gl, color);
+    pub fn set_color(&self, color: [f32; 4]) {
+        self.uniform.set_color(color);
     }
 
-    pub fn update(&mut self, gl: &gl, target: Point, vector_update: bool) {
+    pub fn update(&mut self, target: Point, vector_update: bool) {
         self.particle.update(target, vector_update);
         self.vao
-            .buffer_sub_data(gl, ParticleVd::Position, &self.particle.position, 0);
-        self.uniform.set_size(gl, self.particle.current_size);
+            .buffer_sub_data(ParticleVd::Position, &self.particle.position, 0);
+        self.uniform.set_size(self.particle.current_size);
     }
 
-    pub fn draw(&self, gl: &gl) {
-        self.program.use_program(gl);
-        self.vao.bind(gl);
-        gl.draw_arrays(gl::POINTS, 0, self.vertex_len);
+    pub fn draw(&self) {
+        self.program.use_program();
+        self.vao.bind();
+        self.program
+            .gl()
+            .draw_arrays(gl::POINTS, 0, self.vertex_len);
     }
 }
 
 struct ParticleUniform {
+    gl: Rc<gl>,
     size: WebGlUniformLocation,
     color: WebGlUniformLocation,
 }
 
 impl ParticleUniform {
-    pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let size = uniform_location(gl, program, "pointSize")?;
-        let color = uniform_location(gl, program, "pointColor")?;
-        Ok(Self { size, color })
+    pub fn new(program: &Program) -> Result<Self> {
+        let size = program.uniform_location("pointSize")?;
+        let color = program.uniform_location("pointColor")?;
+        let gl = program.gl().clone();
+        Ok(Self { gl, size, color })
     }
 
-    pub fn init(&self, gl: &gl) {
-        gl.uniform1f(Some(&self.size), 1.0);
-        gl.uniform4f(Some(&self.color), 1.0, 1.0, 1.0, 1.0);
+    pub fn init(&self) {
+        self.set_size(1.0);
+        self.set_color([1.0, 1.0, 1.0, 1.0]);
     }
 
-    pub fn set_size(&self, gl: &gl, size: f32) {
-        gl.uniform1f(Some(&self.size), size);
+    pub fn set_size(&self, size: f32) {
+        self.gl.uniform1f(Some(&self.size), size);
     }
 
-    pub fn set_color(&self, gl: &gl, color: [f32; 4]) {
-        gl.uniform4f(Some(&self.color), color[0], color[1], color[2], color[3]);
+    pub fn set_color(&self, color: [f32; 4]) {
+        self.gl
+            .uniform4f(Some(&self.color), color[0], color[1], color[2], color[3]);
     }
 }
 
@@ -431,45 +435,41 @@ void main(){
         GlPoint3d::new(1.0, -1.0, 0.0),
     ];
 
-    pub fn new(gl: &gl, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
-        let point = Program::new(gl, Self::POINT_VERT, Self::POINT_FRAG)?;
-        let velocity = Program::new(gl, Self::VELOCITY_VERT, Self::VELOCITY_FRAG)?;
-        let index_map = Program::new(gl, Self::VERT, Self::FRAG)?;
+    pub fn new(ctx: &Context, res: Resolution, ctrl: ParticleControl) -> Result<Self> {
+        let point = ctx.program(Self::POINT_VERT, Self::POINT_FRAG)?;
+        let velocity = ctx.program(Self::VELOCITY_VERT, Self::VELOCITY_FRAG)?;
+        let index_map = ctx.program(Self::VERT, Self::FRAG)?;
 
         let state = ParticleGpgpuState::new(ctrl);
 
-        point.use_program(gl);
-        let u_point = ParticleGpgpuPointUniform::new(gl, &point)?;
-        u_point.init(gl, &state);
+        point.use_program();
+        let u_point = ParticleGpgpuPointUniform::new(&point)?;
+        u_point.init(&state);
 
-        velocity.use_program(gl);
-        let u_velocity = ParticleGpgpuVelocityUniform::new(gl, &velocity)?;
-        u_velocity.init(gl, &res, &state);
+        velocity.use_program();
+        let u_velocity = ParticleGpgpuVelocityUniform::new(&velocity)?;
+        u_velocity.init(&res, &state);
 
-        index_map.use_program(gl);
-        let u_index = ParticleGpgpuIndexUniform::new(gl, &index_map)?;
-        u_index.init(gl, &res);
+        index_map.use_program();
+        let u_index = ParticleGpgpuIndexUniform::new(&index_map)?;
+        u_index.init(&res);
 
         // 最終描画する頂点情報を作成
         // この頂点はデータのサンプリングの位置を示すだけなので更新することはない
         let point_vert = Self::point_vert(res.x, res.y);
-        let point_vao = Vao::new(gl, point.program())?;
-        point_vao.buffer_data(gl, ParticleVd::Position, &point_vert, gl::STATIC_DRAW);
+        let mut point_vao = point.create_vao()?;
+        point_vao.buffer_data(ParticleVd::Position, &point_vert, gl::STATIC_DRAW);
 
-        let index_vao = Vao::new(gl, index_map.program())?;
-        index_vao.buffer_data(
-            gl,
-            IndexVd::Position,
-            &Self::TEXTURE_VERTEX,
-            gl::STATIC_DRAW,
-        );
+        let mut index_vao = index_map.create_vao()?;
+        index_vao.buffer_data(IndexVd::Position, &Self::TEXTURE_VERTEX, gl::STATIC_DRAW);
 
+        let gl = ctx.gl();
         // 位置と速度の情報は2つのバッファを使って交互に更新する
         let fbos = [
-            TextureFBO::new_float_vec4(gl, res)?,
-            TextureFBO::new_float_vec4(gl, res)?,
+            TextureFBO::new_float_vec4(gl.clone(), res)?,
+            TextureFBO::new_float_vec4(gl.clone(), res)?,
         ];
-        index_vao.unbind(gl);
+        index_vao.unbind();
 
         let s = Self {
             res,
@@ -486,7 +486,7 @@ void main(){
             fbo_prev_index: 0,
             state,
         };
-        s.draw_init(gl);
+        s.draw_init();
 
         Ok(s)
     }
@@ -508,70 +508,72 @@ void main(){
     }
 
     // 0番目のFBOに初期状態を書き込む
-    fn draw_init(&self, gl: &gl) {
+    fn draw_init(&self) {
+        let gl = self.point.gl();
         gl.disable(gl::BLEND);
         gl.blend_func(gl::ONE, gl::ONE);
-        self.fbos[0].bind(gl);
+        self.fbos[0].bind();
         gl.viewport(0, 0, self.res.x as i32, self.res.y as i32);
         gl.clear_color(0.0, 0.0, 0.0, 0.0);
         gl.clear(gl::COLOR_BUFFER_BIT);
-        self.index.use_program(gl);
-        self.index_vao.bind(gl);
+        self.index.use_program();
+        self.index_vao.bind();
         gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
-        TextureFBO::unbind(gl);
+        self.fbos[0].unbind();
     }
 
     /// 画面全体にインデックスを描画。インデックス確認用
     #[allow(dead_code)]
-    pub fn draw_index(&self, gl: &gl, target_res: &Resolution) {
+    pub fn draw_index(&self, target_res: &Resolution) {
+        let gl = self.point.gl();
         gl.disable(gl::BLEND);
         gl.blend_func(gl::ONE, gl::ONE);
         gl.viewport(0, 0, target_res.x as i32, target_res.y as i32);
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.clear(gl::COLOR_BUFFER_BIT);
-        self.index.use_program(gl);
-        self.index_vao.bind(gl);
+        self.index.use_program();
+        self.index_vao.bind();
         gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
     }
 
-    pub fn update(&mut self, gl: &gl, target: Point, vector_update: bool, color: [f32; 4]) {
+    pub fn update(&mut self, target: Point, vector_update: bool, color: [f32; 4]) {
         self.state.update(target, vector_update);
         self.state.ambient = color;
 
         // 移動制御uniformを更新
-        self.velocity.use_program(gl);
-        self.u_velocity.set_target(gl, self.state.target);
-        self.u_velocity.set_velocity(gl, self.state.velocity);
-        self.u_velocity
-            .set_vector_update(gl, self.state.vector_update);
+        self.velocity.use_program();
+        self.u_velocity.set_target(self.state.target);
+        self.u_velocity.set_velocity(self.state.velocity);
+        self.u_velocity.set_vector_update(self.state.vector_update);
 
         // 描画uniformを更新
-        self.point.use_program(gl);
-        self.point_vao.bind(gl);
-        self.u_point.set_ambient(gl, self.state.ambient);
-        self.u_point.set_point_size(gl, self.state.size);
+        self.point.use_program();
+        self.point_vao.bind();
+        self.u_point.set_ambient(self.state.ambient);
+        self.u_point.set_point_size(self.state.size);
     }
 
-    pub fn draw(&mut self, gl: &gl, target_res: &Resolution) {
+    pub fn draw(&mut self, target_res: &Resolution) {
+        let gl = self.point.gl();
         // FBOは交互に使うので、インデックスを切り替える
         let next = self.next_fbo_index();
         let fbos = [&self.fbos[self.fbo_prev_index], &self.fbos[next]];
         // ブレンドは無効化
         gl.disable(gl::BLEND);
-        self.index_vao.bind(gl);
+        self.index_vao.bind();
 
         // 次のFBOに位置と速度を書き込む
-        fbos[1].bind(gl);
+        fbos[1].bind();
         gl.viewport(0, 0, self.res.x as i32, self.res.y as i32);
         gl.clear_color(0.0, 0.0, 0.0, 0.0);
         gl.clear(gl::COLOR_BUFFER_BIT);
 
-        self.velocity.use_program(gl);
+        self.velocity.use_program();
         gl.active_texture(gl::TEXTURE0);
         // 前のFBOの状態をテクスチャの仕組みで取得
         gl.bind_texture(gl::TEXTURE_2D, Some(&fbos[0].texture));
         gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
-        TextureFBO::unbind(gl);
+        fbos[0].unbind();
 
         // FBOをもとに描画
         gl.viewport(0, 0, target_res.x as i32, target_res.y as i32);
@@ -586,10 +588,10 @@ void main(){
         // gl.draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
 
         // ポイントで描画
-        self.point.use_program(gl);
-        self.point_vao.bind(gl);
+        self.point.use_program();
+        self.point_vao.bind();
         gl.draw_arrays(gl::POINTS, 0, self.point_vlen);
-        self.point_vao.unbind(gl);
+        self.point_vao.unbind();
 
         gl.flush();
 
@@ -636,43 +638,47 @@ impl ParticleGpgpuState {
 }
 
 struct ParticleGpgpuPointUniform {
+    gl: Rc<gl>,
     point_size: WebGlUniformLocation,
     u_texture: WebGlUniformLocation,
     ambient: WebGlUniformLocation,
 }
 
 impl ParticleGpgpuPointUniform {
-    pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let point_size = uniform_location(gl, program, "pointSize")?;
-        let u_texture = uniform_location(gl, program, "u_texture")?;
-        let ambient = uniform_location(gl, program, "ambient")?;
+    pub fn new(program: &Program) -> Result<Self> {
+        let point_size = program.uniform_location("pointSize")?;
+        let u_texture = program.uniform_location("u_texture")?;
+        let ambient = program.uniform_location("ambient")?;
+        let gl = program.gl().clone();
         Ok(Self {
-            // resolution,
+            gl,
             point_size,
             u_texture,
             ambient,
         })
     }
 
-    fn init(&self, gl: &gl, state: &ParticleGpgpuState) {
-        self.set_ambient(gl, state.ambient);
-        self.set_point_size(gl, 20.0)
+    fn init(&self, state: &ParticleGpgpuState) {
+        self.set_ambient(state.ambient);
+        self.set_point_size(20.0)
     }
     #[allow(dead_code)]
-    pub fn set_texture_unit(&self, gl: &gl, texture_unit: i32) {
-        gl.uniform1i(Some(&self.u_texture), texture_unit);
+    pub fn set_texture_unit(&self, texture_unit: i32) {
+        self.gl.uniform1i(Some(&self.u_texture), texture_unit);
     }
 
-    pub fn set_ambient(&self, gl: &gl, color: [f32; 4]) {
-        gl.uniform4f(Some(&self.ambient), color[0], color[1], color[2], color[3]);
+    pub fn set_ambient(&self, color: [f32; 4]) {
+        self.gl
+            .uniform4f(Some(&self.ambient), color[0], color[1], color[2], color[3]);
     }
 
-    pub fn set_point_size(&self, gl: &gl, size: f32) {
-        gl.uniform1f(Some(&self.point_size), size);
+    pub fn set_point_size(&self, size: f32) {
+        self.gl.uniform1f(Some(&self.point_size), size);
     }
 }
 
 struct ParticleGpgpuVelocityUniform {
+    gl: Rc<gl>,
     resolution: WebGlUniformLocation,
     u_texture: WebGlUniformLocation,
     target: WebGlUniformLocation,
@@ -683,15 +689,17 @@ struct ParticleGpgpuVelocityUniform {
 }
 
 impl ParticleGpgpuVelocityUniform {
-    pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let resolution = uniform_location(gl, program, "resolution")?;
-        let u_texture = uniform_location(gl, program, "u_texture")?;
-        let target = uniform_location(gl, program, "target")?;
-        let vector_update = uniform_location(gl, program, "vectorUpdate")?;
-        let velocity = uniform_location(gl, program, "velocity")?;
-        let speed = uniform_location(gl, program, "speed")?;
-        let handle_rate = uniform_location(gl, program, "handleRate")?;
+    pub fn new(program: &Program) -> Result<Self> {
+        let resolution = program.uniform_location("resolution")?;
+        let u_texture = program.uniform_location("u_texture")?;
+        let target = program.uniform_location("target")?;
+        let vector_update = program.uniform_location("vectorUpdate")?;
+        let velocity = program.uniform_location("velocity")?;
+        let speed = program.uniform_location("speed")?;
+        let handle_rate = program.uniform_location("handleRate")?;
+        let gl = program.gl().clone();
         Ok(Self {
+            gl,
             resolution,
             u_texture,
             target,
@@ -702,95 +710,100 @@ impl ParticleGpgpuVelocityUniform {
         })
     }
 
-    fn init(&self, gl: &gl, res: &Resolution, state: &ParticleGpgpuState) {
-        self.set_resolution(gl, res);
-        self.set_target(gl, state.target);
-        self.set_vector_update(gl, state.vector_update);
-        self.set_velocity(gl, state.velocity);
-        self.set_speed(gl, state.ctrl.speed);
-        self.set_handle_rate(gl, state.ctrl.handle_rate);
+    fn init(&self, res: &Resolution, state: &ParticleGpgpuState) {
+        self.set_resolution(res);
+        self.set_target(state.target);
+        self.set_vector_update(state.vector_update);
+        self.set_velocity(state.velocity);
+        self.set_speed(state.ctrl.speed);
+        self.set_handle_rate(state.ctrl.handle_rate);
     }
 
     #[allow(dead_code)]
-    pub fn set_texture_unit(&self, gl: &gl, texture_unit: i32) {
-        gl.uniform1i(Some(&self.u_texture), texture_unit);
+    pub fn set_texture_unit(&self, texture_unit: i32) {
+        self.gl.uniform1i(Some(&self.u_texture), texture_unit);
     }
 
-    pub fn set_resolution(&self, gl: &gl, res: &Resolution) {
-        gl.uniform2f(Some(&self.resolution), res.x as f32, res.y as f32);
+    pub fn set_resolution(&self, res: &Resolution) {
+        self.gl
+            .uniform2f(Some(&self.resolution), res.x as f32, res.y as f32);
     }
 
-    pub fn set_target(&self, gl: &gl, target: Point) {
-        gl.uniform2f(Some(&self.target), target.x, target.y);
+    pub fn set_target(&self, target: Point) {
+        self.gl.uniform2f(Some(&self.target), target.x, target.y);
     }
 
-    pub fn set_vector_update(&self, gl: &gl, update: bool) {
-        gl.uniform1i(Some(&self.vector_update), update as i32);
+    pub fn set_vector_update(&self, update: bool) {
+        self.gl.uniform1i(Some(&self.vector_update), update as i32);
     }
 
-    pub fn set_velocity(&self, gl: &gl, velocity: f32) {
-        gl.uniform1f(Some(&self.velocity), velocity);
+    pub fn set_velocity(&self, velocity: f32) {
+        self.gl.uniform1f(Some(&self.velocity), velocity);
     }
 
-    pub fn set_speed(&self, gl: &gl, speed: f32) {
-        gl.uniform1f(Some(&self.speed), speed);
+    pub fn set_speed(&self, speed: f32) {
+        self.gl.uniform1f(Some(&self.speed), speed);
     }
 
-    pub fn set_handle_rate(&self, gl: &gl, rate: f32) {
-        gl.uniform1f(Some(&self.handle_rate), rate);
+    pub fn set_handle_rate(&self, rate: f32) {
+        self.gl.uniform1f(Some(&self.handle_rate), rate);
     }
 }
 
 struct ParticleGpgpuIndexUniform {
+    gl: Rc<gl>,
     resolution: WebGlUniformLocation,
 }
 
 impl ParticleGpgpuIndexUniform {
-    pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let resolution = uniform_location(gl, program, "resolution")?;
-        Ok(Self { resolution })
+    pub fn new(program: &Program) -> Result<Self> {
+        let resolution = program.uniform_location("resolution")?;
+        let gl = program.gl().clone();
+        Ok(Self { gl, resolution })
     }
 
-    fn init(&self, gl: &gl, res: &Resolution) {
-        self.set_resolution(gl, res);
+    fn init(&self, res: &Resolution) {
+        self.set_resolution(res);
     }
 
-    pub fn set_resolution(&self, gl: &gl, res: &Resolution) {
-        gl.uniform2f(Some(&self.resolution), res.x as f32, res.y as f32);
+    pub fn set_resolution(&self, res: &Resolution) {
+        self.gl
+            .uniform2f(Some(&self.resolution), res.x as f32, res.y as f32);
     }
 }
 
 struct TextureFBO {
+    gl: Rc<gl>,
     fbo: WebGlFramebuffer,
     texture: WebGlTexture,
 }
 impl TextureFBO {
     #[inline]
     #[allow(dead_code)]
-    fn new_rgba(gl: &gl, res: Resolution) -> Result<Self> {
+    fn new_rgba(gl: Rc<gl>, res: Resolution) -> Result<Self> {
         Self::new_inner(gl, res, gl::RGBA, gl::RGBA, gl::UNSIGNED_BYTE)
     }
 
     #[inline]
     #[allow(dead_code)]
-    fn new_half_float(gl: &gl, res: Resolution) -> Result<Self> {
+    fn new_half_float(gl: Rc<gl>, res: Resolution) -> Result<Self> {
         Self::new_inner(gl, res, gl::R16F, gl::RED, gl::FLOAT)
     }
 
     #[inline]
     #[allow(dead_code)]
-    fn new_float_vec2(gl: &gl, res: Resolution) -> Result<Self> {
+    fn new_float_vec2(gl: Rc<gl>, res: Resolution) -> Result<Self> {
         Self::new_inner(gl, res, gl::RG32F, gl::RG, gl::FLOAT)
     }
 
     #[inline]
     #[allow(dead_code)]
-    fn new_float_vec4(gl: &gl, res: Resolution) -> Result<Self> {
+    fn new_float_vec4(gl: Rc<gl>, res: Resolution) -> Result<Self> {
         Self::new_inner(gl, res, gl::RGBA32F, gl::RGBA, gl::FLOAT)
     }
 
     fn new_inner(
-        gl: &gl,
+        gl: Rc<gl>,
         res: Resolution,
         internal_format: GlEnum,
         src_format: GlEnum,
@@ -845,14 +858,14 @@ impl TextureFBO {
         gl.bind_texture(gl::TEXTURE_2D, None);
         gl.bind_framebuffer(gl::FRAMEBUFFER, None);
 
-        Ok(Self { fbo, texture })
+        Ok(Self { gl, fbo, texture })
     }
 
-    fn bind(&self, gl: &gl) {
-        gl.bind_framebuffer(gl::FRAMEBUFFER, Some(&self.fbo));
+    fn bind(&self) {
+        self.gl.bind_framebuffer(gl::FRAMEBUFFER, Some(&self.fbo));
     }
 
-    fn unbind(gl: &gl) {
-        gl.bind_framebuffer(gl::FRAMEBUFFER, None);
+    fn unbind(&self) {
+        self.gl.bind_framebuffer(gl::FRAMEBUFFER, None);
     }
 }

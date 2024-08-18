@@ -2,7 +2,7 @@ use tokio::sync::mpsc;
 use wasm_bindgen::prelude::*;
 use wasm_utils::info;
 use web_sys::HtmlCanvasElement;
-use webgl2::gl;
+use webgl2::{context::Context, gl};
 
 use crate::{
     boids_shader::BoidsShaderBuilder,
@@ -36,8 +36,8 @@ impl BoidsInitializeParam {
             boid_num: 100,
             boid_size: 0.01,
             history_len: 200,
-            history_size: 1.0,
-            history_alpha: 0.25,
+            history_size: 2.0,
+            history_alpha: 0.75,
         }
     }
 }
@@ -54,7 +54,8 @@ pub fn start_boids(
     let mut boids = crate::boids::Boids::new_circle(ip.boid_num, 0.5, 0.01);
     let mut buillder = BoidsShaderBuilder::new();
 
-    let gl = get_webgl2_context(&canvas)?;
+    let ctx = Context::new(canvas, COLOR_BLACK)?;
+    let gl = ctx.gl().clone();
     let camera = Camera::default();
     let mut view = ViewMatrix::default();
 
@@ -63,7 +64,7 @@ pub fn start_boids(
     buillder.history_len = ip.history_len;
     buillder.history_color = [0.0, 0.5, 0.4, ip.history_alpha];
 
-    let mut boids_shader = buillder.build(&gl, &boids.boids, &camera, &view)?;
+    let mut boids_shader = buillder.build(&ctx, &boids.boids, &camera, &view)?;
 
     let (tx, mut rx) = mpsc::unbounded_channel();
     let (c_tx, mut c_rx) = mpsc::unbounded_channel();
@@ -84,13 +85,13 @@ pub fn start_boids(
 
         gl_clear_color(&gl, COLOR_BLACK);
         for (b, s) in boids.boids.iter().zip(boids_shader.boids.iter_mut()) {
-            s.use_program(&gl);
-            s.update(&gl, b);
-            s.draw(&gl);
+            s.use_program();
+            s.update(b);
+            s.draw();
             let hist = s.history_mut();
-            hist.use_program(&gl);
-            hist.update(&gl, b);
-            hist.draw(&gl);
+            hist.use_program();
+            hist.update(b);
+            hist.draw();
         }
         boids.update();
         Ok(())
@@ -103,22 +104,6 @@ pub fn start_boids(
     // start ws
     start_websocket("ws://localhost:8080/api/ws/boid/gen_stream")?;
     Ok(ctrl)
-}
-
-fn get_webgl2_context(canvas: &HtmlCanvasElement) -> Result<gl, JsValue> {
-    let gl = canvas
-        .get_context("webgl2")?
-        .ok_or("Failed to get WebGl2RenderingContext")?
-        .dyn_into::<gl>()?;
-
-    gl.enable(gl::DEPTH_TEST);
-    gl.depth_func(gl::LEQUAL);
-    gl.enable(gl::CULL_FACE);
-
-    gl_clear_color(&gl, COLOR_BLACK);
-    gl.clear_depth(1.0);
-    gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-    Ok(gl)
 }
 
 #[inline]

@@ -1,18 +1,18 @@
-use crate::gl;
+use crate::{context::Context, gl};
 use nalgebra::Vector2;
 
 /// Window表示インスタンスのうち、表示領域に使う領域を保持する
 ///
 /// 単位はpx
 #[derive(Debug, Clone)]
-pub struct ViewPort {
+pub struct Viewport {
     pub x: i32,
     pub y: i32,
     pub w: u32,
     pub h: u32,
 }
 
-impl ViewPort {
+impl Viewport {
     /// canvasの表示範囲を指定。左上が原点
     pub fn new(x: i32, y: i32, w: u32, h: u32) -> Self {
         Self { x, y, w, h }
@@ -82,6 +82,13 @@ impl ViewPort {
     pub fn normalized_unit_mat(&self) -> nalgebra::Matrix3<f32> {
         nalgebra::Matrix3::identity()
             .append_nonuniform_scaling(&Vector2::new(1.0 / self.aspect(), 1.0))
+    }
+}
+
+impl Context {
+    pub fn viewport(&self) -> Viewport {
+        let (w, h) = self.ctx.canvas_size();
+        Viewport::new(0, 0, w, h)
     }
 }
 

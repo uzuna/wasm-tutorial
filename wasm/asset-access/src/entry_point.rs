@@ -7,19 +7,21 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use wasm_utils::{
     animation::{AnimationLoop, PlayStopButton},
+    error,
     error::*,
     info,
     waitgroup::{WaitGroup, Worker},
 };
-use web_sys::{HtmlButtonElement, HtmlCanvasElement, HtmlImageElement, WebGlTexture};
+use web_sys::{HtmlButtonElement, HtmlCanvasElement, HtmlImageElement};
 use webgl2::{
-    context::{gl_clear_color, COLOR_BLACK},
+    context::{gl_clear_color, Context, COLOR_BLACK},
     gl,
     shader::texture::{TextureShader, TextureVd},
+    texture::{Texture, TextureFilter},
 };
 
 thread_local! {
-    // テクs茶ロードのたびにクロージャをforgetするとメモリリークになるため
+    // テクスチャロードのたびにクロージャをforgetするとメモリリークになるため
     // マニュアルドロップするために一時保存する
     static LOAD_CLOSUER: RefCell<FxHashMap<String,Closure<dyn FnMut()>>> = RefCell::new(FxHashMap::default());
 }
@@ -36,39 +38,36 @@ pub fn start(
     play_pause_btn: HtmlButtonElement,
 ) -> std::result::Result<(), JsValue> {
     check_memory_usage("start");
-    let width = 1000;
-    let height = 600;
-    canvas.set_width(width);
-    canvas.set_height(height);
-    let vp = webgl2::viewport::ViewPort::new(0, 0, width, height);
+    canvas.set_width(1000);
+    canvas.set_height(600);
 
-    let gl = webgl2::context::get_context(&canvas, webgl2::context::COLOR_BLACK)?;
-    let gl = Rc::new(gl);
+    let glctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
+    let vp = glctx.viewport();
 
     let mut ctx = DrawContext {
-        gl: gl.clone(),
+        gl: glctx.gl().clone(),
         objects: vec![],
     };
 
+    let metrics = glctx.metrics().clone();
     let mut textures = vec![];
 
     let length = 100;
     for i in 0..length {
         let x = (i as f32 / length as f32 * f32::consts::PI * 2.0).sin();
         let y = (i as f32 / length as f32 * f32::consts::PI * 2.0).cos();
-        let s = TextureShader::new(gl.clone())?;
+        let s = TextureShader::new(&glctx)?;
         s.uniform().set_mat(
             vp.normalized_unit_mat()
                 .append_scaling(0.1)
                 .append_translation(&Vector2::new(x / vp.aspect(), y)),
         );
         let v = s.create_vao(&webgl2::vertex::UNIT_RECT)?;
-        let texture = webgl2::shader::texture::crate_blank_texture(&gl);
+        let texture = glctx.create_blank_texture()?;
         let texture = Rc::new(texture);
 
         let color_front = rgba_to_hexcode(i as u8, 0, 0, 255);
         lazy_load_texture(
-            gl.clone(),
             format!(
                 "../api/texture/generate/test{}?color_front={}",
                 i, color_front
@@ -101,11 +100,11 @@ pub fn start(
     // monitorring closure length
     spawn_local(async move {
         use futures_util::{future::ready, stream::StreamExt};
-        let interval = std::time::Duration::from_secs(60);
+        let interval = std::time::Duration::from_secs(5);
         gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
             .for_each(|_| {
                 let len = LOAD_CLOSUER.with_borrow(|x| x.len());
-                info!("closure_length {}", len);
+                info!("closure_length {} {}", len, metrics);
                 check_memory_usage("monitoring");
                 ready(())
             })
@@ -136,7 +135,6 @@ pub fn start(
                 for (i, texture) in textures.iter().enumerate() {
                     let color_front = f(i);
                     lazy_load_texture(
-                        gl.clone(),
                         format!(
                             "../api/texture/generate/test{}?color_front={}",
                             i, color_front
@@ -162,7 +160,7 @@ pub fn start(
 struct Drawable {
     shader: TextureShader,
     vao: webgl2::vertex::Vao<TextureVd>,
-    texture: Rc<WebGlTexture>,
+    texture: Rc<Texture>,
 }
 
 struct DrawContext {
@@ -174,14 +172,14 @@ impl DrawContext {
     fn draw(&self) {
         gl_clear_color(&self.gl, COLOR_BLACK);
         for obj in self.objects.iter() {
-            obj.shader.draw(&obj.vao, &obj.texture);
+            obj.shader.draw(&obj.vao, obj.texture.texture());
         }
     }
 }
 
 // テクスチャを読み込む
 #[allow(dead_code)]
-fn load_texture(gl: Rc<gl>, src: &str, mut cb: impl FnMut(web_sys::WebGlTexture) + 'static) {
+fn load_texture(glctx: Context, src: &str, mut cb: impl FnMut(Texture) + 'static) {
     let src = src.to_string();
     spawn_local(async move {
         let img = HtmlImageElement::new().unwrap();
@@ -190,13 +188,18 @@ fn load_texture(gl: Rc<gl>, src: &str, mut cb: impl FnMut(web_sys::WebGlTexture)
         let img_clone = img.clone();
         let del_key = src.to_string();
         let closure = Closure::wrap(Box::new(move || {
-            let texture = webgl2::shader::texture::create_texture_image_element(&gl, &img_clone);
+            let texture = glctx.create_texture_image_element(&TextureFilter::default(), &img_clone);
             // manually drop closure
             LOAD_CLOSUER.with(|c| {
                 c.borrow_mut().remove(&del_key);
             });
             img_clone.remove();
-            cb(texture);
+            match texture {
+                Ok(texture) => cb(texture),
+                Err(_e) => {
+                    error!("failed to create texture");
+                }
+            }
         }) as Box<dyn FnMut()>);
         let _ = img.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref());
         LOAD_CLOSUER.with(|c| {
@@ -206,7 +209,7 @@ fn load_texture(gl: Rc<gl>, src: &str, mut cb: impl FnMut(web_sys::WebGlTexture)
 }
 
 // テクスチャを先に確保しておき、後から画像を読み込む
-fn lazy_load_texture(gl: Rc<gl>, src: &str, texture: Rc<WebGlTexture>, mut worker: Option<Worker>) {
+fn lazy_load_texture(src: &str, texture: Rc<Texture>, mut worker: Option<Worker>) {
     let src = src.to_string();
     spawn_local(async move {
         let img = HtmlImageElement::new().unwrap();
@@ -215,7 +218,7 @@ fn lazy_load_texture(gl: Rc<gl>, src: &str, texture: Rc<WebGlTexture>, mut worke
         let img_clone = img.clone();
         let del_key = src.to_string();
         let closure = Closure::wrap(Box::new(move || {
-            webgl2::shader::texture::rebind_texture(&gl, &texture, &img_clone);
+            texture.update_texture_image_element(&img_clone);
             // manually drop closure
             LOAD_CLOSUER.with(|c| {
                 c.borrow_mut().remove(&del_key);

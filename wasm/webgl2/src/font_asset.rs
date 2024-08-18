@@ -1,9 +1,6 @@
 //! フォントデータの埋め込み
 
-use wasm_bindgen::JsError;
-use web_sys::WebGlTexture;
-
-use crate::{error::*, font::Font, gl};
+use crate::{context::Context, error::*, font::Font};
 
 #[cfg(not(feature = "font-asset-compress"))]
 mod inner {
@@ -37,70 +34,13 @@ mod inner {
     }
 }
 
-pub fn load(gl: &gl) -> Result<Font> {
+pub fn load(ctx: &Context) -> Result<Font> {
     let (detail, image) = inner::load()?;
 
-    let texture = gl
-        .create_texture()
-        .ok_or(JsError::new("Failed to create texture"))?;
-    gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
-
-    gl.pixel_storei(gl::UNPACK_ALIGNMENT, 1);
-    let level = 0;
-    let width = detail.width() as i32;
-    let height = detail.height() as i32;
-    let border = 0;
-    // TODO use compressed texture
-    // reference: https://developer.mozilla.org/en-US/docs/Web/API/WEBGL_compressed_texture_s3tc#ext.compressed_rgb_s3tc_dxt1_ext
-    // gl.compressed_tex_image_2d_with_u8_array(
-    //     gl::TEXTURE_2D,
-    //     level,
-    //     web_sys::WebglCompressedTextureS3tc::COMPRESSED_RGBA_S3TC_DXT5_EXT,
-    //     width,
-    //     height,
-    //     border,
-    //     FONT_DXT1,
-    // );
-    // 輝度情報のみなのでLUMINANCEを使う
-    gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
-        gl::TEXTURE_2D,
-        level,
-        gl::LUMINANCE as i32,
-        width,
-        height,
-        border,
-        gl::LUMINANCE,
-        gl::UNSIGNED_BYTE,
-        Some(image),
-    )
-    .expect("Failed to set texture image");
-
+    let config = crate::texture::Texture2dConfig::new_luminance(
+        detail.width() as i32,
+        detail.height() as i32,
+    );
+    let texture = ctx.create_texture(&config, Some(image))?;
     Ok(Font::new(texture, detail))
-}
-
-/// 1x1pxの色のテクスチャを作成する
-pub fn color_texture(gl: &gl, color: [u8; 4]) -> WebGlTexture {
-    let texture = gl.create_texture().expect("Failed to create texture");
-    gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-    gl.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
-    gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
-        gl::TEXTURE_2D,
-        0,
-        gl::RGBA as i32,
-        1,
-        1,
-        0,
-        gl::RGBA,
-        gl::UNSIGNED_BYTE,
-        Some(&color),
-    )
-    .expect("Failed to set texture image");
-    texture
 }

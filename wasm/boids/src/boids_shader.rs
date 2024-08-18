@@ -2,9 +2,11 @@ use wasm_bindgen::JsError;
 use wasm_utils::{error::*, info};
 use web_sys::{js_sys, WebGlBuffer, WebGlUniformLocation};
 use webgl2::{
-    gl, uniform_block_binding, uniform_location,
+    context::Context,
+    gl,
+    program::{uniform_block_binding, Program},
     vertex::{Vao, VaoDefine},
-    GlPoint3d, Program,
+    GlPoint3d,
 };
 
 use crate::{
@@ -38,23 +40,24 @@ impl BoidsShaderBuilder {
 
     pub fn build(
         self,
-        gl: &gl,
+        ctx: &Context,
         boids: &[Boid],
         camera: &Camera,
         view: &ViewMatrix,
     ) -> Result<BoidsShader> {
+        let gl = ctx.gl();
         let camera_ubo = CameraUbo::new(gl, camera, view)?;
         let mut boids_shaders: Vec<BoidShader> = vec![];
         for b in boids {
-            let bi = BoidShader::new(gl, b, self.boid_size, self.history_len, &camera_ubo)?;
-            bi.use_program(gl);
-            bi.set_ambient(gl, self.color);
-            bi.draw(gl);
+            let bi = BoidShader::new(ctx, b, self.boid_size, self.history_len, &camera_ubo)?;
+            bi.use_program();
+            bi.set_ambient(self.color);
+            bi.draw();
             let hist = bi.history();
-            hist.use_program(gl);
-            hist.set_ambient(gl, self.history_color);
-            hist.set_point_size(gl, self.history_size);
-            hist.draw(gl);
+            hist.use_program();
+            hist.set_ambient(self.history_color);
+            hist.set_point_size(self.history_size);
+            hist.draw();
             boids_shaders.push(bi);
         }
         Ok(BoidsShader {
@@ -180,16 +183,24 @@ void main() {
         ]
     }
 
-    pub fn new(gl: &gl, b: &Boid, size: f32, hist_len: usize, camera: &CameraUbo) -> Result<Self> {
-        let program = Program::new(gl, Self::VERT, Self::FRAG)?;
-        uniform_block_binding(gl, &program, "matrix", Self::MVP_UBI);
+    pub fn new(
+        ctx: &Context,
+        b: &Boid,
+        size: f32,
+        hist_len: usize,
+        camera: &CameraUbo,
+    ) -> Result<Self> {
+        let program = ctx.program(Self::VERT, Self::FRAG)?;
+        let gl = ctx.gl();
+        uniform_block_binding(gl, program.program(), "matrix", Self::MVP_UBI);
         gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
-        let ambient = uniform_location(gl, &program, "ambient")?;
-        let vao = Vao::new(gl, program.program())?;
-        let vert = Self::rect(b, size);
-        vao.buffer_data(gl, BoidVd::Position, &vert, gl::DYNAMIC_DRAW);
 
-        let history = BoidHistoryShader::new(gl, b, hist_len, camera)?;
+        let ambient = program.uniform_location("ambient")?;
+        let mut vao = program.create_vao()?;
+        let vert = Self::rect(b, size);
+        vao.buffer_data(BoidVd::Position, &vert, gl::DYNAMIC_DRAW);
+
+        let history = BoidHistoryShader::new(ctx, b, hist_len, camera)?;
         Ok(Self {
             program,
             ambient,
@@ -200,17 +211,17 @@ void main() {
         })
     }
 
-    pub fn use_program(&self, gl: &gl) {
-        self.program.use_program(gl);
+    pub fn use_program(&self) {
+        self.program.use_program();
     }
 
-    pub fn update(&mut self, gl: &gl, b: &Boid) {
+    pub fn update(&mut self, b: &Boid) {
         self.vao
-            .buffer_sub_data(gl, BoidVd::Position, &Self::rect(b, self.size), 0);
+            .buffer_sub_data(BoidVd::Position, &Self::rect(b, self.size), 0);
     }
 
-    pub fn set_ambient(&self, gl: &gl, ambient: [f32; 4]) {
-        gl.uniform4f(
+    pub fn set_ambient(&self, ambient: [f32; 4]) {
+        self.program.gl().uniform4f(
             Some(&self.ambient),
             ambient[0],
             ambient[1],
@@ -219,9 +230,11 @@ void main() {
         );
     }
 
-    pub fn draw(&self, gl: &gl) {
-        self.vao.bind(gl);
-        gl.draw_arrays(gl::TRIANGLE_STRIP, 0, self.vertex_len);
+    pub fn draw(&self) {
+        self.vao.bind();
+        self.program
+            .gl()
+            .draw_arrays(gl::TRIANGLE_STRIP, 0, self.vertex_len);
     }
 
     pub fn history(&self) -> &BoidHistoryShader {
@@ -275,22 +288,22 @@ void main() {
     // uniform blockのn番目のindexを指定
     const MVP_UBI: u32 = 0;
 
-    fn new(gl: &gl, b: &Boid, hist_len: usize, camera: &CameraUbo) -> Result<Self> {
-        let program = Program::new(gl, Self::VERT, Self::FRAG)?;
-
-        uniform_block_binding(gl, &program, "matrix", Self::MVP_UBI);
+    fn new(ctx: &Context, b: &Boid, hist_len: usize, camera: &CameraUbo) -> Result<Self> {
+        let program = ctx.program(Self::VERT, Self::FRAG)?;
+        let gl = ctx.gl();
+        uniform_block_binding(gl, program.program(), "matrix", Self::MVP_UBI);
         gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
 
-        let ambient = uniform_location(gl, &program, "ambient")?;
-        let point_size = uniform_location(gl, &program, "pointSize")?;
+        let ambient = program.uniform_location("ambient")?;
+        let point_size = program.uniform_location("pointSize")?;
 
-        let vao = Vao::new(gl, program.program())?;
+        let mut vao = program.create_vao()?;
 
         let vbo_len = hist_len.next_power_of_two();
         let pos = b.pos();
         let pos = GlPoint3d::new(pos.x, pos.y, pos.z);
         let v = vec![pos; vbo_len];
-        vao.buffer_data(gl, BoidVd::Position, &v, gl::DYNAMIC_DRAW);
+        vao.buffer_data(BoidVd::Position, &v, gl::DYNAMIC_DRAW);
 
         Ok(Self {
             program,
@@ -308,19 +321,19 @@ void main() {
         pos & (self.vbo_len - 1)
     }
 
-    pub fn use_program(&self, gl: &gl) {
-        self.program.use_program(gl);
+    pub fn use_program(&self) {
+        self.program.use_program();
     }
 
-    pub fn update(&mut self, gl: &gl, b: &Boid) {
+    pub fn update(&mut self, b: &Boid) {
         let next = self.index(self.current_index + 1);
         let pos = GlPoint3d::new(b.pos().x, b.pos().y, b.pos().z);
-        self.vao.buffer_sub_data(gl, BoidVd::Position, &[pos], next);
+        self.vao.buffer_sub_data(BoidVd::Position, &[pos], next);
         self.current_index = next;
     }
 
-    pub fn set_ambient(&self, gl: &gl, ambient: [f32; 4]) {
-        gl.uniform4f(
+    pub fn set_ambient(&self, ambient: [f32; 4]) {
+        self.program.gl().uniform4f(
             Some(&self.ambient),
             ambient[0],
             ambient[1],
@@ -329,12 +342,14 @@ void main() {
         );
     }
 
-    pub fn set_point_size(&self, gl: &gl, size: f32) {
-        gl.uniform1f(Some(&self.point_size), size);
+    pub fn set_point_size(&self, size: f32) {
+        self.program.gl().uniform1f(Some(&self.point_size), size);
     }
 
-    pub fn draw(&self, gl: &gl) {
-        self.vao.bind(gl);
-        gl.draw_arrays(gl::POINTS, 0, self.vertex_len);
+    pub fn draw(&self) {
+        self.vao.bind();
+        self.program
+            .gl()
+            .draw_arrays(gl::POINTS, 0, self.vertex_len);
     }
 }
