@@ -4,4 +4,4 @@ Cargo.lock
 bin/
 pkg/
 wasm-pack.log
-wgol
+/web-server/assets/wgol

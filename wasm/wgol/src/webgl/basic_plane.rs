@@ -2,7 +2,10 @@ use wasm_bindgen::JsError;
 use web_sys::{WebGlBuffer, WebGlUniformLocation, WebGlVertexArrayObject};
 
 use crate::error::Result;
-use webgl2::{gl, vertex::VaoDefine, GlEnum, GlInt, GlPoint, GlPoint3d, GlPoint4d, Program};
+use webgl2::{
+    context::Context, gl, program::Program, vertex::VaoDefine, GlEnum, GlInt, GlPoint, GlPoint3d,
+    GlPoint4d,
+};
 
 use super::camera::{Camera, ViewMatrix};
 
@@ -43,22 +46,22 @@ void main() {
 
     pub const LOCATIONS: [u32; 2] = [0, 1];
 
-    pub fn new(gl: &gl) -> Result<Self> {
-        let program = Program::new(gl, Self::VERT, Self::FRAG)?;
-        let mvp = gl
-            .get_uniform_location(program.program(), "mvp")
-            .ok_or(JsError::new("Failed to get uniform location"))?;
+    pub fn new(ctx: &Context) -> Result<Self> {
+        let program = ctx.program(Self::VERT, Self::FRAG)?;
+        let gl = program.gl();
+        let mvp = program.uniform_location("mvp")?;
         let data = ColorVertexData::rect();
         let vao = ColorVertexVao::new(gl, &data, Self::LOCATIONS)?;
 
         Ok(Self { program, mvp, vao })
     }
 
-    pub fn use_program(&self, gl: &gl) {
-        self.program.use_program(gl);
+    pub fn use_program(&self) {
+        self.program.use_program();
     }
 
-    pub fn set_mvp(&self, gl: &gl, camera: &Camera, view: &ViewMatrix) {
+    pub fn set_mvp(&self, camera: &Camera, view: &ViewMatrix) {
+        let gl = self.program.gl();
         let mvp = camera.perspective().as_matrix() * view.look_at();
         // gl.uniform_matrix4fv_with_f32_array(Some(&self.mvp), false, mvp.as_slice());
         let mvp_arrays: [[f32; 4]; 4] = mvp.into();
@@ -73,7 +76,8 @@ void main() {
         );
     }
 
-    pub fn draw(&self, gl: &gl) {
+    pub fn draw(&self) {
+        let gl = self.program.gl();
         gl.bind_vertex_array(Some(&self.vao.vao));
         gl.draw_elements_with_i32(gl::TRIANGLES, self.vao.index_count, gl::UNSIGNED_SHORT, 0);
     }

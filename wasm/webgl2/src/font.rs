@@ -8,9 +8,10 @@ use crate::{
     context::Context,
     error::Result,
     gl,
+    program::Program,
     texture::Texture,
     vertex::{Vao, VaoDefine},
-    GlPoint2d, Program,
+    GlPoint2d,
 };
 
 pub struct TextShader {

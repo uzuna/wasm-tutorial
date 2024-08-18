@@ -8,8 +8,9 @@ use crate::{
     context::Context,
     error::Result,
     gl,
+    program::Program,
     vertex::{Vao, VaoDefine},
-    GlPoint, GlPoint2d, Program,
+    GlPoint, GlPoint2d,
 };
 
 /// シンプルなテクスチャ描画用のシェーダー

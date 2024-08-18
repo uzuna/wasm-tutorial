@@ -18,6 +18,7 @@ use webgl::{
     camera::{Camera, ViewMatrix},
     interaction::ParticleControl,
 };
+use webgl2::context::{Context, COLOR_BLACK};
 
 use crate::error::Result;
 
@@ -467,6 +468,7 @@ struct Point {
 // セルの状態変更指示
 // enumはC-Styleのみサポート
 #[derive(Debug)]
+#[allow(dead_code)]
 enum CellControl {
     Alive,
     Dead,
@@ -592,15 +594,10 @@ pub fn webgl_start(canvas: HtmlCanvasElement) -> Result<()> {
     use crate::webgl::basic_plane::*;
     canvas.set_width(256);
     canvas.set_height(256);
+    let ctx = Context::new(canvas.clone(), COLOR_BLACK)?;
+    let gl = ctx.gl().clone();
 
-    let gl = canvas
-        .get_context("webgl2")
-        .map_err(|_| JsError::new("failed to get webgl2 context"))?
-        .ok_or(JsError::new("Failed to get WebGl2RenderingContext"))?
-        .dyn_into::<gl>()
-        .map_err(|_| JsError::new("failed to cast to WebGl2RenderingContext"))?;
-
-    let shader = Shader::new(&gl)?;
+    let shader = Shader::new(&ctx)?;
     let camera = Camera::default();
     let view = ViewMatrix::default();
 
@@ -612,9 +609,9 @@ pub fn webgl_start(canvas: HtmlCanvasElement) -> Result<()> {
     gl.clear_depth(1.0);
     gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
-    shader.use_program(&gl);
-    shader.set_mvp(&gl, &camera, &view);
-    shader.draw(&gl);
+    shader.use_program();
+    shader.set_mvp(&camera, &view);
+    shader.draw();
 
     Ok(())
 }
@@ -724,7 +721,7 @@ pub fn run() -> Result<()> {
     wasm_bindgen_futures::spawn_local(async move {
         match fetch_example::<Hello>("/api/hello").await {
             Ok(val) => {
-                log!("fetch_example: {:?}", val);
+                log!("fetch_example: {}", val.msg);
             }
             Err(e) => {
                 jserror(e);
@@ -786,19 +783,11 @@ pub fn webgl_interaction(
     canvas.set_width(512);
     canvas.set_height(512);
 
-    let gl = canvas
-        .get_context("webgl2")
-        .map_err(|_| JsError::new("failed to get webgl2 context"))?
-        .ok_or(JsError::new("Failed to get WebGl2RenderingContext"))?
-        .dyn_into::<gl>()
-        .map_err(|_| JsError::new("failed to cast to WebGl2RenderingContext"))?;
-    gl.clear_color(0.0, 0.0, 0.0, 1.0);
-    gl.clear(gl::COLOR_BUFFER_BIT);
+    let ctx = Context::new(canvas.clone(), COLOR_BLACK)?;
+    let gl = ctx.gl().clone();
 
     let res = Resolution::DEFAULT;
-    let mut shader = ParticleShader::new(&gl, res, ctrl)?;
-    gl.enable(gl::BLEND);
-    gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE, gl::ONE, gl::ONE);
+    let mut shader = ParticleShader::new(&ctx, res, ctrl)?;
 
     // mouse event
     let canvas_ctx = Rc::new(RefCell::new(canvas));
@@ -812,7 +801,7 @@ pub fn webgl_interaction(
         let t = timestamp_msec as f32;
         let color = hsva(t / 30., 1.0, 1.0, 0.5);
         gl.clear(gl::COLOR_BUFFER_BIT);
-        shader.set_color(&gl, color);
+        shader.set_color(color);
 
         let event = {
             let mut event = None;
@@ -831,8 +820,8 @@ pub fn webgl_interaction(
             }
             None => {}
         }
-        shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow());
-        shader.draw(&gl);
+        shader.update(*mouse_pos.borrow(), *mouse_down_flag.borrow());
+        shader.draw();
         Ok(())
     });
     a.start();
@@ -937,14 +926,8 @@ pub fn webgl_interaction_gpgpu(canvas: HtmlCanvasElement, ctrl: ParticleControl)
     canvas.set_height(512);
     let target_res = Resolution::new(512, 512);
 
-    let gl = canvas
-        .get_context("webgl2")
-        .map_err(|_| JsError::new("failed to get webgl2 context"))?
-        .ok_or(JsError::new("Failed to get WebGl2RenderingContext"))?
-        .dyn_into::<gl>()
-        .map_err(|_| JsError::new("failed to cast to WebGl2RenderingContext"))?;
-    gl.clear_color(0.0, 0.0, 0.0, 1.0);
-    gl.clear(gl::COLOR_BUFFER_BIT);
+    let ctx = Context::new(canvas.clone(), COLOR_BLACK)?;
+    let gl = ctx.gl().clone();
 
     log!("extensions: {:?}", gl.get_supported_extensions());
 
@@ -970,14 +953,12 @@ pub fn webgl_interaction_gpgpu(canvas: HtmlCanvasElement, ctrl: ParticleControl)
         Err(JsError::new("EXT_color_buffer_float is not supported"))?;
     }
 
-    let mut shader = ParticleGpgpuShader::new(&gl, target_res, ctrl)?;
-    gl.enable(gl::BLEND);
-    gl.blend_func_separate(gl::SRC_ALPHA, gl::ONE, gl::ONE, gl::ONE);
+    let mut shader = ParticleGpgpuShader::new(&ctx, target_res, ctrl)?;
 
     // test rendering
-    shader.update(&gl, Point::new(0., 0.), true, [1.0, 0.0, 0.0, 1.0]);
+    shader.update(Point::new(0., 0.), true, [1.0, 0.0, 0.0, 1.0]);
     // shader.draw_index(&gl, &target_res);
-    shader.draw(&gl, &target_res);
+    shader.draw(&target_res);
 
     // mouse event
     let canvas_ctx = Rc::new(RefCell::new(canvas));
@@ -1009,8 +990,8 @@ pub fn webgl_interaction_gpgpu(canvas: HtmlCanvasElement, ctrl: ParticleControl)
             None => {}
         }
 
-        shader.update(&gl, *mouse_pos.borrow(), *mouse_down_flag.borrow(), color);
-        shader.draw(&gl, &target_res);
+        shader.update(*mouse_pos.borrow(), *mouse_down_flag.borrow(), color);
+        shader.draw(&target_res);
         Ok(())
     });
 
