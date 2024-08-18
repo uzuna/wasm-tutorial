@@ -3,6 +3,8 @@ use std::sync::{
     Arc,
 };
 
+use crate::context::Context;
+
 /// WebGLのメトリクスを管理するための構造体です。
 ///
 /// 内部で参照共有をしているためCloneが可能
@@ -139,5 +141,12 @@ impl std::fmt::Display for TextureCount {
                 .load(std::sync::atomic::Ordering::Relaxed),
             self.bytes_count.load(std::sync::atomic::Ordering::Relaxed)
         )
+    }
+}
+
+impl Context {
+    /// メトリクスを取得する
+    pub fn metrics(&self) -> &crate::metrics::Metrics {
+        self.ctx.metrics()
     }
 }

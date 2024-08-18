@@ -38,16 +38,14 @@ pub fn start(
     play_pause_btn: HtmlButtonElement,
 ) -> std::result::Result<(), JsValue> {
     check_memory_usage("start");
-    let width = 1000;
-    let height = 600;
-    canvas.set_width(width);
-    canvas.set_height(height);
-    let vp = webgl2::viewport::ViewPort::new(0, 0, width, height);
+    canvas.set_width(1000);
+    canvas.set_height(600);
 
     let glctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
+    let vp = glctx.viewport();
 
     let mut ctx = DrawContext {
-        gl: glctx.gl(),
+        gl: glctx.gl().clone(),
         objects: vec![],
     };
 

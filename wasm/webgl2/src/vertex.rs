@@ -79,8 +79,8 @@ where
     vao: WebGlVertexArrayObject,
     vbos: Vec<WebGlBuffer>,
     index: Option<WebGlBuffer>,
-    total_count: u32,
-    total_bytes: u64,
+    _total_count: u32,
+    _total_bytes: u64,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -100,7 +100,7 @@ where
             // Attributeの位置を取得
             let loc = gl.get_attrib_location(prog.program(), v.name()) as u32;
             // VBOを作成して紐付け
-            let vbo = create_buffer(&gl)?;
+            let vbo = create_buffer(gl)?;
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(&vbo));
             gl.enable_vertex_attrib_array(loc);
             gl.vertex_attrib_pointer_with_i32(loc, v.size_of(), gl::FLOAT, false, 0, 0);
@@ -108,7 +108,7 @@ where
             total_count += 1;
         }
         let index = if T::has_index_buffer() {
-            let index = create_buffer(&gl)?;
+            let index = create_buffer(gl)?;
             gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(&index));
             Some(index)
         } else {
@@ -127,10 +127,14 @@ where
             vao,
             vbos,
             index,
-            total_count,
-            total_bytes: 0,
+            _total_count: total_count,
+            _total_bytes: 0,
             _phantom: std::marker::PhantomData,
         })
+    }
+
+    pub fn gl(&self) -> &gl {
+        self.ctx.gl()
     }
 
     pub fn bind(&self) {
@@ -151,9 +155,9 @@ where
     pub fn buffer_data<P: GlPoint + NoUninit>(&mut self, vd: T, data: &[P], usage: u32) {
         let gl = self.ctx.gl();
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.vbos[vd.index()]));
-        buffer_data(&gl, gl::ARRAY_BUFFER, data, usage);
+        buffer_data(gl, gl::ARRAY_BUFFER, data, usage);
         let bytes = data.len() as u64 * P::size() as u64 * std::mem::size_of::<f32>() as u64;
-        self.total_bytes += bytes;
+        self._total_bytes += bytes;
         #[cfg(feature = "metrics")]
         {
             let vertex = &self.ctx.metrics().vertex;
@@ -164,7 +168,7 @@ where
     pub fn buffer_sub_data<P: GlPoint + NoUninit>(&self, vd: T, data: &[P], offset: i32) {
         let gl = self.ctx.gl();
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(&self.vbos[vd.index()]));
-        buffer_subdata(&gl, gl::ARRAY_BUFFER, data, offset);
+        buffer_subdata(gl, gl::ARRAY_BUFFER, data, offset);
     }
 
     pub fn index_buffer_data(&mut self, data: &[u16], usage: u32) {
@@ -176,7 +180,7 @@ where
         }
 
         let total_bytes = data.len() as u64 * std::mem::size_of::<u16>() as u64;
-        self.total_bytes += total_bytes;
+        self._total_bytes += total_bytes;
         #[cfg(feature = "metrics")]
         {
             let vertex = &self.ctx.metrics().vertex;
@@ -195,8 +199,8 @@ where
         #[cfg(feature = "metrics")]
         {
             let vertex = &self.ctx.metrics().vertex;
-            vertex.sub_vao(self.total_count);
-            vertex.sub_bytes(self.total_bytes);
+            vertex.sub_vao(self._total_count);
+            vertex.sub_bytes(self._total_bytes);
         }
     }
 }

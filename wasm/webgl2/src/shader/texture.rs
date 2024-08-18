@@ -14,7 +14,6 @@ use crate::{
 
 /// シンプルなテクスチャ描画用のシェーダー
 pub struct TextureShader {
-    gl: Rc<gl>,
     program: Program,
     uniform: TextureUniform,
 }
@@ -52,11 +51,7 @@ void main() {
         program.use_program();
         let uniform = TextureUniform::new(&program)?;
         uniform.init();
-        Ok(Self {
-            gl: ctx.gl(),
-            program,
-            uniform,
-        })
+        Ok(Self { program, uniform })
     }
 
     pub fn uniform(&self) -> &TextureUniform {
@@ -73,7 +68,7 @@ void main() {
     /// テクスチャを描画する
     pub fn draw(&self, vao: &Vao<TextureVd>, texture: &WebGlTexture) {
         self.program.use_program();
-        let gl = self.gl.as_ref();
+        let gl = self.program.gl();
         gl.active_texture(gl::TEXTURE0);
         gl.bind_texture(gl::TEXTURE_2D, Some(texture));
         vao.bind();
@@ -93,7 +88,7 @@ impl TextureUniform {
         let texture = program.uniform_location("u_texture")?;
 
         Ok(Self {
-            gl: program.gl(),
+            gl: program.gl().clone(),
             local_mat,
             texture,
         })

@@ -43,7 +43,7 @@ impl WebGL2ContextOption {
 // WebGLはCanvas毎に別コンテキストを持つため、グローバル定義はせずにCanvas毎にコンテキストを持つ
 pub(crate) struct ContextInner {
     gl: Rc<gl>,
-    _canvas: HtmlCanvasElement,
+    canvas: HtmlCanvasElement,
     #[cfg(feature = "metrics")]
     metrics: crate::metrics::Metrics,
 }
@@ -52,31 +52,38 @@ impl ContextInner {
     fn new(gl: Rc<gl>, canvas: HtmlCanvasElement) -> Self {
         Self {
             gl,
-            _canvas: canvas,
+            canvas,
             #[cfg(feature = "metrics")]
             metrics: crate::metrics::Metrics::default(),
         }
     }
 
-    pub fn gl(&self) -> Rc<gl> {
-        self.gl.clone()
+    pub fn gl(&self) -> &Rc<gl> {
+        &self.gl
     }
 
     #[cfg(feature = "metrics")]
     pub fn metrics(&self) -> &crate::metrics::Metrics {
         &self.metrics
     }
+
+    pub fn canvas_size(&self) -> (u32, u32) {
+        let width = self.canvas.width();
+        let height = self.canvas.height();
+        (width, height)
+    }
 }
 
 /// WebGL2RenderingContextをラップする構造体
 #[derive(Clone)]
 pub struct Context {
-    ctx: Rc<ContextInner>,
+    pub(crate) ctx: Rc<ContextInner>,
 }
 
 impl Context {
     /// Canvas要素を受け取り、WebGL2のコンテキストを取得する
     pub fn new(canvas: HtmlCanvasElement, color: [f32; 4]) -> Result<Self> {
+        // コンテクスト作成時点でViewPortのサイズが決まり、これ以降はHTMLのサイズを変えてもContextの大きさは変わらない
         let gl = get_context(&canvas, color)?;
         Ok(Self {
             ctx: Rc::new(ContextInner::new(Rc::new(gl), canvas)),
@@ -88,14 +95,12 @@ impl Context {
     }
 
     /// 生のWebGL2RenderingContextを取得する
-    pub fn gl(&self) -> Rc<gl> {
+    pub fn gl(&self) -> &Rc<gl> {
         self.ctx.gl()
     }
 
-    /// メトリクスを取得する
-    #[cfg(feature = "metrics")]
-    pub fn metrics(&self) -> &crate::metrics::Metrics {
-        self.ctx.metrics()
+    pub fn clear(&self, color: [f32; 4]) {
+        gl_clear_color(self.ctx.gl(), color);
     }
 
     /// プログラムを作成する

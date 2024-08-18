@@ -98,11 +98,12 @@ pub struct Program {
 impl Program {
     pub(crate) fn new(ctx: Rc<ContextInner>, vert: &str, frag: &str) -> Result<Self> {
         let gl = ctx.gl();
-        let vertex = compile_vertex(&gl, vert)?;
-        let fragment = compile_fragment(&gl, frag)?;
+        let vertex = compile_vertex(gl, vert)?;
+        let fragment = compile_fragment(gl, frag)?;
 
         // Link shaders
-        let program = compile_program(&gl, &vertex, &fragment)?;
+        let program = compile_program(gl, &vertex, &fragment)?;
+        #[cfg(feature = "metrics")]
         ctx.metrics().shader.inc_shader(1);
         Ok(Self {
             ctx,
@@ -117,7 +118,7 @@ impl Program {
     }
 
     /// 生のWebGL2RenderingContextを取得する
-    pub fn gl(&self) -> Rc<gl> {
+    pub fn gl(&self) -> &Rc<gl> {
         self.ctx.gl()
     }
 
@@ -149,6 +150,7 @@ impl Drop for Program {
         gl.delete_program(Some(&self.program));
         gl.delete_shader(Some(&self.vertex));
         gl.delete_shader(Some(&self.fragment));
+        #[cfg(feature = "metrics")]
         self.ctx.metrics().shader.sub_shader(1);
     }
 }

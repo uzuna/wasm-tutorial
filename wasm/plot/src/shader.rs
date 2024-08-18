@@ -4,18 +4,24 @@ use nalgebra::Matrix3;
 use wasm_utils::error::*;
 use web_sys::WebGlUniformLocation;
 use webgl2::{
-    gl, uniform_location,
+    context::Context,
+    gl,
+    program::Program,
     vertex::{Vao, VaoDefine},
-    GlPoint1d, GlPoint2d, GlPoint4d, Program,
+    GlPoint1d, GlPoint2d, GlPoint4d,
 };
 
 #[derive(Clone)]
 pub struct PlotParams {
+    /// 点の色
     pub color: [f32; 4],
+    /// 点の大きさ
     pub point_size: f32,
+    /// プロットする点の数
     pub point_count: usize,
     /// plotのX軸の表示範囲
     pub time_window: Duration,
+    /// plotのY軸の表示範囲
     pub y_range: (f32, f32),
 }
 
@@ -113,31 +119,24 @@ void main() {
 }
 "#;
 
-    pub fn new(gl: &gl, param: &PlotParams) -> Result<Self> {
-        let program = Program::new(gl, Self::VERT, Self::FRAG)?;
-
-        let vao = Vao::<DotVertexDefine>::new(gl, program.program())?;
+    pub fn new(ctx: &Context, param: &PlotParams) -> Result<Self> {
+        let program = ctx.program(Self::VERT, Self::FRAG)?;
+        let mut vao = program.create_vao()?;
         let vertex_data = vec![GlPoint2d::new(0.0, 0.0); param.point_count];
-        vao.buffer_data(
-            gl,
-            DotVertexDefine::Position,
-            &vertex_data,
-            gl::DYNAMIC_DRAW,
-        );
+        vao.buffer_data(DotVertexDefine::Position, &vertex_data, gl::DYNAMIC_DRAW);
 
         let color_data = vec![GlPoint4d::new(0.0, 0.0, 0.0, 0.0); param.point_count];
-        vao.buffer_data(gl, DotVertexDefine::Color, &color_data, gl::DYNAMIC_DRAW);
+        vao.buffer_data(DotVertexDefine::Color, &color_data, gl::DYNAMIC_DRAW);
 
         let point_size_data = vec![GlPoint1d::new(param.point_size); param.point_count];
         vao.buffer_data(
-            gl,
             DotVertexDefine::PointSize,
             &point_size_data,
             gl::DYNAMIC_DRAW,
         );
 
-        let uniform = DotUniform::new(gl, &program)?;
-        uniform.init(gl);
+        let uniform = DotUniform::new(&program)?;
+        uniform.init();
 
         Ok(Self {
             program,
@@ -149,30 +148,28 @@ void main() {
         })
     }
 
-    pub fn use_program(&self, gl: &gl) {
-        self.program.use_program(gl);
+    pub fn use_program(&self) {
+        self.program.use_program();
     }
 
     pub fn uniform(&self) -> &DotUniform {
         &self.uniform
     }
 
-    pub fn add_data(&mut self, gl: &gl, p: GlPoint2d) {
+    pub fn add_data(&mut self, p: GlPoint2d) {
         let i = self.state.next();
         self.vao
-            .buffer_sub_data(gl, DotVertexDefine::Position, &[p], i as i32);
+            .buffer_sub_data(DotVertexDefine::Position, &[p], i as i32);
         self.vao
-            .buffer_sub_data(gl, DotVertexDefine::Color, &[self.default_color], i as i32);
+            .buffer_sub_data(DotVertexDefine::Color, &[self.default_color], i as i32);
     }
 
-    pub fn set_color(&mut self, color: [f32; 4]) {
-        self.default_color = GlPoint4d::from(color);
-    }
-
-    pub fn draw(&self, gl: &gl) {
-        self.vao.bind(gl);
-        gl.draw_arrays(gl::POINTS, 0, self.vertex_len);
-        self.vao.unbind(gl);
+    pub fn draw(&self) {
+        self.vao.bind();
+        self.program
+            .gl()
+            .draw_arrays(gl::POINTS, 0, self.vertex_len);
+        self.vao.unbind();
     }
 }
 
@@ -210,39 +207,35 @@ impl VaoDefine for DotVertexDefine {
 }
 
 pub struct DotUniform {
-    // pub window_mat: WebGlUniformLocation,
+    gl: Rc<gl>,
     pub local_mat: WebGlUniformLocation,
     pub plot_mat: WebGlUniformLocation,
 }
 
 impl DotUniform {
-    pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        // let window_mat = uniform_location(gl, program, "window_mat")?;
-        let local_mat = uniform_location(gl, program, "local_mat")?;
-        let plot_mat = uniform_location(gl, program, "plot_mat")?;
+    pub fn new(program: &Program) -> Result<Self> {
+        let local_mat = program.uniform_location("local_mat")?;
+        let plot_mat = program.uniform_location("plot_mat")?;
         Ok(Self {
-            // window_mat,
+            gl: program.gl().clone(),
             local_mat,
             plot_mat,
         })
     }
 
-    pub fn init(&self, gl: &gl) {
-        // self.window_mat(gl, Matrix3::identity());
-        self.local_mat(gl, Matrix3::identity());
-        self.plot_mat(gl, Matrix3::identity());
+    pub fn init(&self) {
+        self.local_mat(Matrix3::identity());
+        self.plot_mat(Matrix3::identity());
     }
 
-    // pub fn window_mat(&self, gl: &gl, mat: Matrix3<f32>) {
-    //     gl.uniform_matrix3fv_with_f32_array(Some(&self.window_mat), false, &mat.as_slice());
-    // }
-
-    pub fn local_mat(&self, gl: &gl, mat: Matrix3<f32>) {
-        gl.uniform_matrix3fv_with_f32_array(Some(&self.local_mat), false, mat.as_slice());
+    pub fn local_mat(&self, mat: Matrix3<f32>) {
+        self.gl
+            .uniform_matrix3fv_with_f32_array(Some(&self.local_mat), false, mat.as_slice());
     }
 
-    pub fn plot_mat(&self, gl: &gl, mat: Matrix3<f32>) {
-        gl.uniform_matrix3fv_with_f32_array(Some(&self.plot_mat), false, mat.as_slice());
+    pub fn plot_mat(&self, mat: Matrix3<f32>) {
+        self.gl
+            .uniform_matrix3fv_with_f32_array(Some(&self.plot_mat), false, mat.as_slice());
     }
 }
 
@@ -274,7 +267,6 @@ impl VaoDefine for PlaneVertexDefine {
 }
 
 pub struct PlaneShader {
-    gl: Rc<gl>,
     program: Program,
     uniform: PlaneUniform,
     vao: Vao<PlaneVertexDefine>,
@@ -310,24 +302,22 @@ void main() {
         GlPoint2d::new(1.0, 1.0),
     ];
 
-    pub fn new(gl: Rc<gl>, color: [f32; 4]) -> Result<Self> {
-        let program = Program::new(&gl, Self::VERT, Self::FRAG)?;
-        program.use_program(&gl);
+    pub fn new(ctx: &Context, color: [f32; 4]) -> Result<Self> {
+        let program = ctx.program(Self::VERT, Self::FRAG)?;
+        program.use_program();
 
-        let vao = Vao::<PlaneVertexDefine>::new(&gl, program.program())?;
+        let mut vao = program.create_vao()?;
         vao.buffer_data(
-            &gl,
             PlaneVertexDefine::Position,
             &Self::TRIANGLE,
             gl::DYNAMIC_DRAW,
         );
 
-        let uniform = PlaneUniform::new(&gl, &program)?;
-        uniform.init(&gl);
-        uniform.color(&gl, color);
+        let uniform = PlaneUniform::new(&program)?;
+        uniform.init();
+        uniform.color(color);
 
         Ok(Self {
-            gl,
             program,
             uniform,
             vao,
@@ -336,7 +326,7 @@ void main() {
     }
 
     pub fn use_program(&self) {
-        self.program.use_program(&self.gl);
+        self.program.use_program();
     }
 
     pub fn uniform(&self) -> &PlaneUniform {
@@ -344,34 +334,43 @@ void main() {
     }
 
     pub fn draw(&self) {
-        self.program.use_program(&self.gl);
-        self.vao.bind(&self.gl);
-        self.gl.draw_arrays(gl::LINE_LOOP, 0, self.vertex_len);
-        self.vao.unbind(&self.gl);
+        self.use_program();
+        self.vao.bind();
+        self.program
+            .gl()
+            .draw_arrays(gl::LINE_LOOP, 0, self.vertex_len);
+        self.vao.unbind();
     }
 }
 
 pub struct PlaneUniform {
+    gl: Rc<gl>,
     pub local_mat: WebGlUniformLocation,
     pub color: WebGlUniformLocation,
 }
 
 impl PlaneUniform {
-    pub fn new(gl: &gl, program: &Program) -> Result<Self> {
-        let local_mat = uniform_location(gl, program, "local_mat")?;
-        let color = uniform_location(gl, program, "u_color")?;
-        Ok(Self { local_mat, color })
+    pub fn new(program: &Program) -> Result<Self> {
+        let local_mat = program.uniform_location("local_mat")?;
+        let color = program.uniform_location("u_color")?;
+        let gl = program.gl().clone();
+        Ok(Self {
+            gl,
+            local_mat,
+            color,
+        })
     }
 
-    pub fn init(&self, gl: &gl) {
-        self.local_mat(gl, Matrix3::identity());
+    pub fn init(&self) {
+        self.local_mat(Matrix3::identity());
     }
 
-    pub fn color(&self, gl: &gl, color: [f32; 4]) {
-        gl.uniform4fv_with_f32_array(Some(&self.color), &color);
+    pub fn color(&self, color: [f32; 4]) {
+        self.gl.uniform4fv_with_f32_array(Some(&self.color), &color);
     }
 
-    pub fn local_mat(&self, gl: &gl, mat: Matrix3<f32>) {
-        gl.uniform_matrix3fv_with_f32_array(Some(&self.local_mat), false, mat.as_slice());
+    pub fn local_mat(&self, mat: Matrix3<f32>) {
+        self.gl
+            .uniform_matrix3fv_with_f32_array(Some(&self.local_mat), false, mat.as_slice());
     }
 }

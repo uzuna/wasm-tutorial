@@ -49,6 +49,10 @@ impl Texture2dConfig {
         let texture = create_texture_inner(gl)?;
         gl.bind_texture(gl::TEXTURE_2D, Some(&texture));
         self.filter.apply(gl);
+        // フォーマットが4の倍数でない場合は読み出しのアライメントを1に設定する
+        if Self::format_sizeof(self.inner_format as u32) != 4 {
+            gl.pixel_storei(gl::UNPACK_ALIGNMENT, 1);
+        }
         gl.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
             gl::TEXTURE_2D,
             0,
@@ -271,7 +275,7 @@ impl Texture {
         config: &Texture2dConfig,
         body: Option<&[u8]>,
     ) -> Result<Self> {
-        let texture = create_texture(&ctx.gl(), config, body)?;
+        let texture = create_texture(ctx.gl(), config, body)?;
         let bytes = config.bytes();
         let inner = TextureInner::new(ctx, texture, bytes)?;
         Ok(Self {
@@ -284,7 +288,7 @@ impl Texture {
         filter: &TextureFilter,
         element: &web_sys::HtmlImageElement,
     ) -> Result<Self> {
-        let texture = create_texture_image_element(&ctx.gl(), filter, element)?;
+        let texture = create_texture_image_element(ctx.gl(), filter, element)?;
         let bytes = predict_bytes_from_element(element);
         let inner = TextureInner::new(ctx, texture, bytes)?;
         Ok(Self {
@@ -304,7 +308,7 @@ impl Texture {
 
     /// 画像要素からテクスチャを更新する
     pub fn update_texture_image_element(&self, element: &web_sys::HtmlImageElement) {
-        update_texture_image_element(&self.inner.ctx.gl(), &self.inner.texture, element);
+        update_texture_image_element(self.inner.ctx.gl(), &self.inner.texture, element);
         self.inner.update_bytes(predict_bytes_from_element(element));
     }
 }
