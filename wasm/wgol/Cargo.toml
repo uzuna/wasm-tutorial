@@ -16,7 +16,7 @@ default = ["console_error_panic_hook"]
 console_error_panic_hook = { workspace = true, optional = true }
 fixedbitset = "0.5.7"
 futures.workspace = true
-futures-util = "0.3.30"
+futures-util.workspace = true
 gloo-net = { workspace = true, features = ["http", "json", "websocket"] }
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 js-sys.workspace = true
