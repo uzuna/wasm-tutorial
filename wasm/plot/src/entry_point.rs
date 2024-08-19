@@ -85,7 +85,7 @@ pub fn start(
     )?;
 
     // フォント情報の読み出しとシェーダーの作成
-    let font = webgl2::font_asset::load(&ctx)?;
+    let font = webgl2::font::embed::load(&ctx)?;
     let ts = TextShader::new(&ctx)?;
 
     // テキストの頂点情報を作成し、VAOで描画メモリを確保

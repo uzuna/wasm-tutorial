@@ -6,7 +6,6 @@ extern crate wasm_bindgen_test;
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::*;
-use web_sys::WebGlUniformLocation;
 use webgl2::font::TextShader;
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -17,7 +16,6 @@ fn test_fontshader() -> std::result::Result<(), JsValue> {
         .ok_or("Failed to get Window")?
         .document()
         .ok_or("Failed to get Document")?;
-    let body = doc.body().ok_or("Failed to create Body")?;
 
     let canvas = doc
         .create_element("canvas")

@@ -14,6 +14,9 @@ use crate::{
     GlPoint2d,
 };
 
+#[cfg(feature = "font-embed")]
+pub mod embed;
+
 pub struct TextShader {
     program: Program,
     local_mat: WebGlUniformLocation,

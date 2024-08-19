@@ -2,14 +2,14 @@
 
 use crate::{context::Context, error::*, font::Font};
 
-#[cfg(not(feature = "font-asset-compress"))]
+#[cfg(not(feature = "font-embed-compress"))]
 mod inner {
     use crate::{error::*, font::FontTextureDetail};
     // フォント画像と位置情報のJSONを埋め込む
     // bmpだと400KB程度だが、DSS圧縮で60KB程度になることが期待される
     // 輝度情報だけなら100KB程度
-    const FONT_IMAGE: &[u8] = include_bytes!("../testdata/Ubuntu_Mono_64px.lum");
-    const FONT_JSON: &str = include_str!("../testdata/Ubuntu_Mono_64px.json");
+    const FONT_IMAGE: &[u8] = include_bytes!("../../testdata/Ubuntu_Mono_64px.lum");
+    const FONT_JSON: &str = include_str!("../../testdata/Ubuntu_Mono_64px.json");
 
     pub(crate) fn load() -> Result<(FontTextureDetail, &'static [u8])> {
         let detail: FontTextureDetail = serde_json::from_str(FONT_JSON)?;
@@ -20,7 +20,7 @@ mod inner {
 // zstd圧縮を使う。
 // ただし、200KB程度の画像データの場合はほとんど圧縮効果がなく、zstd実装分増えた
 // plotバイナリで比較。261763B -> 264052B
-#[cfg(feature = "font-asset-compress")]
+#[cfg(feature = "font-embed-compress")]
 mod inner {
     use crate::{error::*, font::FontTextureDetail};
     pub(crate) fn load() -> Result<(FontTextureDetail, Vec<u8>)> {
