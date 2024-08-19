@@ -1,15 +1,12 @@
-//! Test suite for the Web and headless browsers.
-
+#![cfg(feature = "context")]
 #![cfg(target_arch = "wasm32")]
 
 extern crate wasm_bindgen_test;
 
-use std::assert_eq;
-
-use wasm_bindgen::{prelude::*, JsError};
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::*;
 use web_sys::WebGlUniformLocation;
-use webgl2::{error::Result, gl, Program};
+use webgl2::{context::Context, error::Result, program::Program};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -49,11 +46,9 @@ void main() {
 }
 "#;
 
-        pub fn new(gl: &gl) -> Result<Self> {
-            let program = Program::new(gl, Self::VERT, Self::FRAG)?;
-            let mvp = gl
-                .get_uniform_location(program.program(), "mvp")
-                .ok_or(JsError::new("Failed to get uniform location"))?;
+        pub fn new(ctx: &Context) -> Result<Self> {
+            let program = ctx.program(Self::VERT, Self::FRAG)?;
+            let mvp = program.uniform_location("mvp")?;
 
             Ok(Self { program, mvp })
         }
@@ -63,19 +58,14 @@ void main() {
         .ok_or("Failed to get Window")?
         .document()
         .ok_or("Failed to get Document")?;
-    let body = doc.body().ok_or("Failed to create Body")?;
 
     let canvas = doc
         .create_element("canvas")
         .expect("Could not create testing node");
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
 
-    let gl = canvas
-        .get_context("webgl2")?
-        .ok_or("Failed to get WebGl2RenderingContext")?
-        .dyn_into::<gl>()?;
-
-    let s = Shader::new(&gl);
+    let ctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
+    let _s = Shader::new(&ctx);
 
     Ok(())
 }

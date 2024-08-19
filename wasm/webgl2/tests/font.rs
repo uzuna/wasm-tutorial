@@ -1,15 +1,13 @@
 //! Test suite for the Web and headless browsers.
-
+#![cfg(feature = "font")]
 #![cfg(target_arch = "wasm32")]
 
 extern crate wasm_bindgen_test;
 
-use std::assert_eq;
-
-use wasm_bindgen::{prelude::*, JsError};
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::*;
 use web_sys::WebGlUniformLocation;
-use webgl2::{font::TextShader, gl, Program};
+use webgl2::font::TextShader;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -26,12 +24,9 @@ fn test_fontshader() -> std::result::Result<(), JsValue> {
         .expect("Could not create testing node");
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
 
-    let gl = canvas
-        .get_context("webgl2")?
-        .ok_or("Failed to get WebGl2RenderingContext")?
-        .dyn_into::<gl>()?;
+    let ctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
 
-    let _s = TextShader::new(&gl)?;
+    let _s = TextShader::new(&ctx)?;
 
     Ok(())
 }
