@@ -52,6 +52,13 @@ void main() {
 
             Ok(Self { program, mvp })
         }
+
+        pub fn init(&self) {
+            self.program.use_program();
+            self.program
+                .gl()
+                .uniform_matrix4fv_with_f32_array(Some(&self.mvp), false, &[0.0; 16]);
+        }
     }
 
     let doc = web_sys::window()
@@ -65,7 +72,8 @@ void main() {
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
 
     let ctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
-    let _s = Shader::new(&ctx);
+    let s = Shader::new(&ctx)?;
+    s.init();
 
     Ok(())
 }

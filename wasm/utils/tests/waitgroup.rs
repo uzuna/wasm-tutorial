@@ -4,7 +4,11 @@
 
 extern crate wasm_bindgen_test;
 
-use std::{assert, rc::Rc, sync::atomic::AtomicU32};
+use std::{
+    assert,
+    rc::Rc,
+    sync::atomic::{AtomicU32, Ordering::Relaxed},
+};
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -45,19 +49,19 @@ async fn test_wait_async() -> std::result::Result<(), JsValue> {
     // タスク開始
     spawn_local(async move {
         gloo_timers::future::TimeoutFuture::new(10).await;
-        c1.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        c1.fetch_add(1, Relaxed);
         drop(w1);
     });
     spawn_local(async move {
         gloo_timers::future::TimeoutFuture::new(20).await;
-        c2.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        c2.fetch_add(1, Relaxed);
         drop(w2);
     });
 
     // タスク前は完了が0で、待ちの後には2になる
-    assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 0);
+    assert_eq!(counter.load(Relaxed), 0);
     wg.wait().await;
-    assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 2);
+    assert_eq!(counter.load(Relaxed), 2);
 
     Ok(())
 }

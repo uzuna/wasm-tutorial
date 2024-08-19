@@ -1,5 +1,5 @@
 use std::sync::{
-    atomic::{AtomicU32, AtomicU64},
+    atomic::{AtomicU32, AtomicU64, Ordering::Relaxed},
     Arc,
 };
 
@@ -38,23 +38,17 @@ pub struct ShaderCount {
 
 impl ShaderCount {
     pub fn inc_shader(&self, inc: u32) {
-        self.shader_count
-            .fetch_add(inc, std::sync::atomic::Ordering::Relaxed);
+        self.shader_count.fetch_add(inc, Relaxed);
     }
 
     pub fn sub_shader(&self, sub: u32) {
-        self.shader_count
-            .fetch_sub(sub, std::sync::atomic::Ordering::Relaxed);
+        self.shader_count.fetch_sub(sub, Relaxed);
     }
 }
 
 impl std::fmt::Display for ShaderCount {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "Shaders: {}",
-            self.shader_count.load(std::sync::atomic::Ordering::Relaxed)
-        )
+        write!(f, "Shaders: {}", self.shader_count.load(Relaxed))
     }
 }
 
@@ -69,23 +63,19 @@ pub struct VertexCount {
 #[cfg(feature = "vertex")]
 impl VertexCount {
     pub fn inc_vao(&self, inc: u32) {
-        self.vao_count
-            .fetch_add(inc, std::sync::atomic::Ordering::Relaxed);
+        self.vao_count.fetch_add(inc, Relaxed);
     }
 
     pub fn sub_vao(&self, sub: u32) {
-        self.vao_count
-            .fetch_sub(sub, std::sync::atomic::Ordering::Relaxed);
+        self.vao_count.fetch_sub(sub, Relaxed);
     }
 
     pub fn inc_bytes(&self, inc: u64) {
-        self.bytes_count
-            .fetch_add(inc, std::sync::atomic::Ordering::Relaxed);
+        self.bytes_count.fetch_add(inc, Relaxed);
     }
 
     pub fn sub_bytes(&self, sub: u64) {
-        self.bytes_count
-            .fetch_sub(sub, std::sync::atomic::Ordering::Relaxed);
+        self.bytes_count.fetch_sub(sub, Relaxed);
     }
 }
 
@@ -95,8 +85,8 @@ impl std::fmt::Display for VertexCount {
         write!(
             f,
             "VertexArrayObjects: {}, {} B",
-            self.vao_count.load(std::sync::atomic::Ordering::Relaxed),
-            self.bytes_count.load(std::sync::atomic::Ordering::Relaxed)
+            self.vao_count.load(Relaxed),
+            self.bytes_count.load(Relaxed)
         )
     }
 }
@@ -111,23 +101,19 @@ pub struct TextureCount {
 #[cfg(feature = "texture")]
 impl TextureCount {
     pub fn inc_texture(&self, inc: u32) {
-        self.texture_count
-            .fetch_add(inc, std::sync::atomic::Ordering::Relaxed);
+        self.texture_count.fetch_add(inc, Relaxed);
     }
 
     pub fn sub_texture(&self, sub: u32) {
-        self.texture_count
-            .fetch_sub(sub, std::sync::atomic::Ordering::Relaxed);
+        self.texture_count.fetch_sub(sub, Relaxed);
     }
 
     pub fn inc_bytes(&self, inc: u64) {
-        self.bytes_count
-            .fetch_add(inc, std::sync::atomic::Ordering::Relaxed);
+        self.bytes_count.fetch_add(inc, Relaxed);
     }
 
     pub fn sub_bytes(&self, sub: u64) {
-        self.bytes_count
-            .fetch_sub(sub, std::sync::atomic::Ordering::Relaxed);
+        self.bytes_count.fetch_sub(sub, Relaxed);
     }
 }
 
@@ -137,9 +123,8 @@ impl std::fmt::Display for TextureCount {
         write!(
             f,
             "Textures: {}, {} B",
-            self.texture_count
-                .load(std::sync::atomic::Ordering::Relaxed),
-            self.bytes_count.load(std::sync::atomic::Ordering::Relaxed)
+            self.texture_count.load(Relaxed),
+            self.bytes_count.load(Relaxed)
         )
     }
 }

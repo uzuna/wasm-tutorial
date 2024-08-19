@@ -21,9 +21,6 @@ webgl2 = { workspace = true, features = ["context", "shader", "viewport", "metri
 
 [dependencies.web-sys]
 workspace = true
-features = [
-    "HtmlImageElement",
-]
 
 [dev-dependencies]
 wasm-bindgen-test.workspace = true

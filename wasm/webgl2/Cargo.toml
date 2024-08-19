@@ -14,7 +14,7 @@ font-embed-compress = ["font-embed", "dep:include-bytes-zstd"]
 shader = ["vertex", "dep:nalgebra"]
 vertex = ["web-sys/WebGlBuffer"]
 viewport = ["dep:nalgebra"]
-metrics = []
+metrics = ["context"]
 texture = ["web-sys/WebGlTexture", "web-sys/HtmlImageElement", "web-sys/WebGlTexture"]
 
 [dependencies]

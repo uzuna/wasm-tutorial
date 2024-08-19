@@ -8,7 +8,7 @@ use std::{
     future::Future,
     pin::Pin,
     rc::Rc,
-    sync::atomic::AtomicU32,
+    sync::atomic::{AtomicU32, Ordering::Relaxed},
     task::{Context, Poll},
 };
 
@@ -43,8 +43,7 @@ impl WaitGroup {
 
     /// ワーカを追加します。
     pub fn add(&self) -> Worker {
-        self.count
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.count.fetch_add(1, Relaxed);
         Worker {
             count: self.count.clone(),
             tx: self.tx.clone(),
@@ -52,12 +51,12 @@ impl WaitGroup {
     }
 
     pub fn is_finished(&self) -> bool {
-        self.count.load(std::sync::atomic::Ordering::Relaxed) == 0
+        self.count.load(Relaxed) == 0
     }
 
     /// 現在の待ちワーカー数
     pub fn count(&self) -> u32 {
-        self.count.load(std::sync::atomic::Ordering::Relaxed)
+        self.count.load(Relaxed)
     }
 
     /// 全てのワーカーが終了するまで待ちます。
@@ -89,11 +88,7 @@ pub struct Worker {
 
 impl Drop for Worker {
     fn drop(&mut self) {
-        if self
-            .count
-            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
-            == 0
-        {
+        if self.count.fetch_sub(1, Relaxed) == 0 {
             let _ = self.tx.clone().try_send(());
         }
     }
