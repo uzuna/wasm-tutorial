@@ -20,6 +20,8 @@ use webgl2::{
     texture::{Texture, TextureFilter},
 };
 
+use crate::mouse;
+
 thread_local! {
     // テクスチャロードのたびにクロージャをforgetするとメモリリークになるため
     // マニュアルドロップするために一時保存する
@@ -40,6 +42,7 @@ pub fn start(
     check_memory_usage("start");
     canvas.set_width(1000);
     canvas.set_height(600);
+    let canvas_clone = canvas.clone();
 
     let glctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
     let vp = glctx.viewport();
@@ -153,6 +156,24 @@ pub fn start(
             })
             .await;
     });
+
+    let (tx, mut rx) = futures_channel::mpsc::unbounded();
+    spawn_local(async move {
+        use futures_util::{future::ready, stream::StreamExt};
+        let interval = std::time::Duration::from_millis(100);
+        gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
+            .for_each(|_| {
+                while let Ok(Some(t)) = rx.try_next() {
+                    info!("tx {:?}", t);
+                }
+                ready(())
+            })
+            .await;
+    });
+
+    let mut m = mouse::MouseEventHandler::new(canvas_clone, tx);
+    m.start();
+    m.forget();
 
     Ok(())
 }
