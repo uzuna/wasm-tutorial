@@ -24,7 +24,8 @@ webgl2 = { workspace = true, features = ["context", "shader", "viewport", "metri
 workspace = true
 
 features = [
-    "MouseEvent"
+    "MouseEvent",
+    "WheelEvent",
 ]
 
 [dev-dependencies]
