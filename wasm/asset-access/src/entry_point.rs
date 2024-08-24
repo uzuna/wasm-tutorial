@@ -18,9 +18,13 @@ use webgl2::{
     gl,
     shader::texture::{TextureShader, TextureVd},
     texture::{Texture, TextureFilter},
+    GlPoint2d,
 };
 
-use crate::mouse;
+use crate::{
+    mouse,
+    target_shader::{TargetRequest, TargetShader},
+};
 
 thread_local! {
     // テクスチャロードのたびにクロージャをforgetするとメモリリークになるため
@@ -45,6 +49,7 @@ pub fn start(
     let canvas_clone = canvas.clone();
 
     let glctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
+    let gl = glctx.gl().clone();
     let vp = glctx.viewport();
 
     let mut ctx = DrawContext {
@@ -86,17 +91,6 @@ pub fn start(
             texture,
         });
     }
-    let a = AnimationLoop::new(move |_| {
-        ctx.draw();
-        Ok(())
-    });
-
-    // ボタンを押すとアニメーションが開始する
-    let btn = PlayStopButton::new(play_pause_btn, a);
-    let playing_flag = btn.flag();
-    let ctx = btn.start();
-    // JSに戻したらGCで回収されたためforgetする
-    ctx.forget();
 
     check_memory_usage("after spawn");
 
@@ -113,6 +107,50 @@ pub fn start(
             })
             .await;
     });
+
+    // マウスイベントを受け取る
+    let (tx, mut rx) = futures_channel::mpsc::unbounded();
+    let mut m = mouse::MouseEventHandler::new(canvas_clone, tx);
+    m.start();
+    m.forget();
+
+    // マウスイベントを元にターゲットを描画するシェーダー
+    let mut ts = TargetShader::new(&glctx)?;
+    ts.apply_requests(&[
+        TargetRequest::Enable(true),
+        TargetRequest::Position(GlPoint2d::new(0.0, 0.0)),
+    ]);
+    ts.update(0.0);
+    ts.draw();
+
+    let mut reqs = vec![];
+    let mut timestamp = 0.0_f64;
+    let a = AnimationLoop::new(move |time| {
+        // マウスイベントをターゲットリクエストに変換
+        reqs.clear();
+        while let Ok(Some(msg)) = rx.try_next() {
+            reqs.push(TargetRequest::Enable(msg.down));
+            reqs.push(TargetRequest::Position(GlPoint2d::new(
+                msg.pos.x, msg.pos.y,
+            )));
+        }
+        let elaplesd_sec = (time - timestamp) as f32 / 1000.0;
+        timestamp = time;
+        ts.apply_requests(reqs.as_slice());
+        ts.update(elaplesd_sec);
+        // clearが入っているので先に描画
+        ctx.draw();
+        ts.draw();
+        Ok(())
+    });
+
+    // ボタンを押すとアニメーションが開始する
+    let mut btn = PlayStopButton::new(play_pause_btn, a);
+    btn.play();
+    let playing_flag = btn.flag();
+    let ctx = btn.start();
+    // JSに戻したらGCで回収されたためforgetする
+    ctx.forget();
 
     // メモリリークの有無を確認するためにテクスチャを定期的に読み出す
     // 実際にforgetではメモリ使用量が増える付けることが確認できた
@@ -156,24 +194,6 @@ pub fn start(
             })
             .await;
     });
-
-    let (tx, mut rx) = futures_channel::mpsc::unbounded();
-    spawn_local(async move {
-        use futures_util::{future::ready, stream::StreamExt};
-        let interval = std::time::Duration::from_millis(100);
-        gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
-            .for_each(|_| {
-                while let Ok(Some(t)) = rx.try_next() {
-                    info!("tx {:?}", t);
-                }
-                ready(())
-            })
-            .await;
-    });
-
-    let mut m = mouse::MouseEventHandler::new(canvas_clone, tx);
-    m.start();
-    m.forget();
 
     Ok(())
 }

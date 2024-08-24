@@ -7,12 +7,19 @@ use futures_channel::mpsc::UnboundedSender;
 use fxhash::FxHashMap;
 use wasm_bindgen::prelude::*;
 use web_sys::{MouseEvent, WheelEvent};
+use webgl2::GlPoint2d;
 
 /// マウス座標を保持、計算する構造体
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Point {
     pub x: f32,
     pub y: f32,
+}
+
+impl From<Point> for GlPoint2d {
+    fn from(val: Point) -> Self {
+        GlPoint2d::new(val.x, val.y)
+    }
 }
 
 impl Point {
@@ -59,6 +66,7 @@ pub struct Wheel {
 /// モジュール外にマウスとホイールの状態を通知するメッセージ
 #[derive(Debug, Clone, Copy)]
 pub struct MouseMessage {
+    // OpenGL空間の座標。プロジェクション行列の逆行列をかけることで、データの位置がわかる
     pub pos: Point,
     pub wheel: Wheel,
     pub down: bool,
