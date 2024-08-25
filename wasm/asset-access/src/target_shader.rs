@@ -46,6 +46,7 @@ void main() {
     fragmentColor = vec4(color.rgb, color.w * alpha);
 }
 "#;
+    // 画面全体を覆うクロスの頂点
     const CROSS_VERTEX: [GlPoint2d; 4] = [
         GlPoint2d { x: -2.0, y: 0.0 },
         GlPoint2d { x: 2.0, y: 0.0 },

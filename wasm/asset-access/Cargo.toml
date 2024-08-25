@@ -26,6 +26,7 @@ workspace = true
 features = [
     "MouseEvent",
     "WheelEvent",
+    "AddEventListenerOptions",
 ]
 
 [dev-dependencies]

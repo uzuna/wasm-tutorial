@@ -6,7 +6,7 @@ use std::{
 use futures_channel::mpsc::UnboundedSender;
 use fxhash::FxHashMap;
 use wasm_bindgen::prelude::*;
-use web_sys::{MouseEvent, WheelEvent};
+use web_sys::{AddEventListenerOptions, MouseEvent, WheelEvent};
 use webgl2::GlPoint2d;
 
 /// マウス座標を保持、計算する構造体
@@ -225,8 +225,14 @@ impl MouseEventHandler {
             tx.start_send(state.fetch_msg()).unwrap();
         }) as Box<dyn FnMut(WheelEvent)>);
 
+        // スクロール操作というデフォルトのイベントがあるため
+        // passive: trueでスクロールイベントをキャンセルしない
         self.canvas
-            .add_event_listener_with_callback(event_type, clusure.as_ref().unchecked_ref())
+            .add_event_listener_with_callback_and_add_event_listener_options(
+                event_type,
+                clusure.as_ref().unchecked_ref(),
+                AddEventListenerOptions::new().passive(true),
+            )
             .unwrap();
         self.wheel_closures.insert(event_type.to_string(), clusure);
     }
