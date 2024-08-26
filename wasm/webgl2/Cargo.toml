@@ -16,6 +16,7 @@ vertex = ["web-sys/WebGlBuffer"]
 viewport = ["dep:nalgebra"]
 metrics = ["context"]
 texture = ["web-sys/WebGlTexture", "web-sys/HtmlImageElement", "web-sys/WebGlTexture"]
+pointing = ["context", "vertex"]
 
 [dependencies]
 bytemuck = { version = "1.16.1", features = ["derive"] }

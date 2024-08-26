@@ -17,12 +17,13 @@ use web_sys::{HtmlButtonElement, HtmlCanvasElement, HtmlImageElement};
 use webgl2::{
     context::{gl_clear_color, Context, COLOR_BLACK},
     gl,
-    shader::texture::{TextureShader, TextureVd},
+    shader::{
+        pointing::{PointingRequest, PointingShader},
+        texture::{TextureShader, TextureVd},
+    },
     texture::{Texture, TextureFilter},
     GlPoint2d,
 };
-
-use crate::target_shader::{TargetRequest, TargetShader};
 
 thread_local! {
     // テクスチャロードのたびにクロージャをforgetするとメモリリークになるため
@@ -47,7 +48,6 @@ pub fn start(
     let canvas_clone = canvas.clone();
 
     let glctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
-    let gl = glctx.gl().clone();
     let vp = glctx.viewport();
 
     let mut ctx = DrawContext {
@@ -113,10 +113,10 @@ pub fn start(
     m.forget();
 
     // マウスイベントを元にターゲットを描画するシェーダー
-    let mut ts = TargetShader::new(&glctx)?;
+    let mut ts = PointingShader::new(&glctx)?;
     ts.apply_requests(&[
-        TargetRequest::Enable(true),
-        TargetRequest::Position(GlPoint2d::new(0.0, 0.0)),
+        PointingRequest::Enable(true),
+        PointingRequest::Position(GlPoint2d::new(0.0, 0.0)),
     ]);
     ts.update(0.0);
     ts.draw();
@@ -129,15 +129,15 @@ pub fn start(
         while let Ok(Some(msg)) = rx.try_next() {
             match msg {
                 MouseEventMessage::Down { pos } => {
-                    reqs.push(TargetRequest::Enable(true));
-                    reqs.push(TargetRequest::Position(GlPoint2d::new(pos.x, pos.y)));
+                    reqs.push(PointingRequest::Enable(true));
+                    reqs.push(PointingRequest::Position(GlPoint2d::new(pos.x, pos.y)));
                 }
                 MouseEventMessage::Up { pos } => {
-                    reqs.push(TargetRequest::Enable(false));
-                    reqs.push(TargetRequest::Position(GlPoint2d::new(pos.x, pos.y)));
+                    reqs.push(PointingRequest::Enable(false));
+                    reqs.push(PointingRequest::Position(GlPoint2d::new(pos.x, pos.y)));
                 }
                 MouseEventMessage::Move { pos } => {
-                    reqs.push(TargetRequest::Position(GlPoint2d::new(pos.x, pos.y)));
+                    reqs.push(PointingRequest::Position(GlPoint2d::new(pos.x, pos.y)));
                 }
                 MouseEventMessage::Click { pos } => {
                     info!("click {:?}", pos);

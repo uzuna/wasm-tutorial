@@ -1,30 +1,34 @@
+//! 画面上の任意の点を指し示すポインタを描画するためのシェーダー
+
 use std::rc::Rc;
 
-use wasm_utils::error::Result;
-use web_sys::WebGlUniformLocation;
-use webgl2::{
+use crate::error::Result;
+use crate::{
     context::Context,
     gl,
     program::Program,
     vertex::{Vao, VaoDefine},
     GlPoint2d,
 };
+use web_sys::WebGlUniformLocation;
 
-/// 表示切り替え指示
-pub enum TargetRequest {
+/// 表示切り替えに関する指示
+pub enum PointingRequest {
+    /// 表示有効/無効
     Enable(bool),
+    /// 表示位置
     Position(GlPoint2d),
 }
 
-pub struct TargetShader {
+pub struct PointingShader {
     prog: Program,
-    uniform: TargetUniform,
-    params: TargetParams,
-    vao: Vao<TargetVd>,
+    uniform: PointingUniform,
+    params: PointingParams,
+    vao: Vao<PointingVd>,
     vertex_count: i32,
 }
 
-impl TargetShader {
+impl PointingShader {
     const VERT: &'static str = r#"#version 300 es
 uniform vec2 target;
 layout(location = 0) in vec2 position;
@@ -57,11 +61,11 @@ void main() {
     pub fn new(ctx: &Context) -> Result<Self> {
         let prog = ctx.program(Self::VERT, Self::FRAG)?;
         prog.use_program();
-        let uniform = TargetUniform::new(&prog)?;
+        let uniform = PointingUniform::new(&prog)?;
         uniform.init();
-        let params = TargetParams::default();
+        let params = PointingParams::default();
         let mut vao = prog.create_vao()?;
-        vao.buffer_data(TargetVd::Position, &Self::CROSS_VERTEX, gl::STATIC_DRAW);
+        vao.buffer_data(PointingVd::Position, &Self::CROSS_VERTEX, gl::STATIC_DRAW);
         vao.unbind();
 
         Ok(Self {
@@ -73,14 +77,14 @@ void main() {
         })
     }
 
-    pub fn apply_requests(&mut self, reqs: &[TargetRequest]) {
+    pub fn apply_requests(&mut self, reqs: &[PointingRequest]) {
         let mut last_pos = None;
         for req in reqs {
             match req {
-                TargetRequest::Enable(enable) => {
+                PointingRequest::Enable(enable) => {
                     self.params.showing = *enable;
                 }
-                TargetRequest::Position(pos) => {
+                PointingRequest::Position(pos) => {
                     last_pos = Some(*pos);
                 }
             }
@@ -107,14 +111,14 @@ void main() {
     }
 }
 
-pub struct TargetUniform {
+pub struct PointingUniform {
     gl: Rc<gl>,
     target: WebGlUniformLocation,
     color: WebGlUniformLocation,
     alpha: WebGlUniformLocation,
 }
 
-impl TargetUniform {
+impl PointingUniform {
     pub fn new(prog: &Program) -> Result<Self> {
         let gl = prog.gl().clone();
         let target = prog.uniform_location("target")?;
@@ -149,7 +153,7 @@ impl TargetUniform {
 
 // レンダリングエフェクト効果パラメータ
 #[derive(Debug, Clone, Copy)]
-struct TargetParams {
+struct PointingParams {
     // ラインの太さ
     line_width: f32,
     // 表示有効中の太さ
@@ -165,7 +169,7 @@ struct TargetParams {
     showing: bool,
 }
 
-impl Default for TargetParams {
+impl Default for PointingParams {
     fn default() -> Self {
         Self {
             line_width: 0.0,
@@ -179,7 +183,7 @@ impl Default for TargetParams {
     }
 }
 
-impl TargetParams {
+impl PointingParams {
     const LINE_WIDTH_SUSTINE: f32 = 3.0;
     const LINE_WIDTH_RELEASE: f32 = 0.22;
     const ALPHA_SUSTINE: f32 = 1.0;
@@ -198,26 +202,26 @@ impl TargetParams {
 }
 
 #[derive(Debug, PartialEq)]
-enum TargetVd {
+enum PointingVd {
     Position,
 }
 
-impl VaoDefine for TargetVd {
+impl VaoDefine for PointingVd {
     fn name(&self) -> &'static str {
         match self {
-            TargetVd::Position => "position",
+            PointingVd::Position => "position",
         }
     }
 
     fn size_of(&self) -> i32 {
-        use webgl2::GlPoint;
+        use crate::GlPoint;
         match self {
-            TargetVd::Position => GlPoint2d::size(),
+            PointingVd::Position => GlPoint2d::size(),
         }
     }
 
     fn iter() -> std::slice::Iter<'static, Self> {
-        static VD: [TargetVd; 1] = [TargetVd::Position];
+        static VD: [PointingVd; 1] = [PointingVd::Position];
         VD.iter()
     }
 }
