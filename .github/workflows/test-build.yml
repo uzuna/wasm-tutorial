@@ -19,8 +19,8 @@ jobs:
           tool: wasm-pack,cargo-generate
       - name: Build the package
         run: |
-          make -C boids build
-          make -C asset-access build
+          make -C wasm/boids build
+          make -C wasm/asset-access build
       - name: Upload the package
         uses: actions/upload-artifact@v4
         with:

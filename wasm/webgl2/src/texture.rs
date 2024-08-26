@@ -5,11 +5,7 @@ use std::{rc::Rc, sync::atomic::AtomicU64, sync::atomic::Ordering::Relaxed};
 use wasm_bindgen::JsError;
 use web_sys::WebGlTexture;
 
-use crate::{
-    context::{Context, ContextInner},
-    error::Result,
-    gl,
-};
+use crate::{error::Result, gl};
 
 /// テクスチャの設定
 pub struct Texture2dConfig {
@@ -191,7 +187,8 @@ fn create_texture_inner(gl: &gl) -> Result<WebGlTexture> {
         .ok_or(JsError::new("Failed to create texture"))
 }
 
-impl Context {
+#[cfg(feature = "context")]
+impl crate::context::Context {
     /// 画像のバイト列からテクスチャを作成する
     pub fn create_texture(&self, config: &Texture2dConfig, body: Option<&[u8]>) -> Result<Texture> {
         Texture::new_from_bytes(self.ctx.clone(), config, body)
@@ -212,14 +209,20 @@ impl Context {
     }
 }
 
+#[cfg(feature = "context")]
 struct TextureInner {
-    ctx: Rc<ContextInner>,
+    ctx: Rc<crate::context::ContextInner>,
     texture: Rc<WebGlTexture>,
     bytes: AtomicU64,
 }
 
+#[cfg(feature = "context")]
 impl TextureInner {
-    fn new(ctx: Rc<ContextInner>, texture: WebGlTexture, bytes: u64) -> Result<Self> {
+    fn new(
+        ctx: Rc<crate::context::ContextInner>,
+        texture: WebGlTexture,
+        bytes: u64,
+    ) -> Result<Self> {
         let texture = Rc::new(texture);
         let bytes = AtomicU64::new(bytes);
         #[cfg(feature = "metrics")]
@@ -252,6 +255,7 @@ impl TextureInner {
     }
 }
 
+#[cfg(feature = "context")]
 impl Drop for TextureInner {
     fn drop(&mut self) {
         self.ctx.gl().delete_texture(Some(&self.texture));
@@ -264,14 +268,16 @@ impl Drop for TextureInner {
     }
 }
 
+#[cfg(feature = "context")]
 #[derive(Clone)]
 pub struct Texture {
     inner: Rc<TextureInner>,
 }
 
+#[cfg(feature = "context")]
 impl Texture {
     pub(crate) fn new_from_bytes(
-        ctx: Rc<ContextInner>,
+        ctx: Rc<crate::context::ContextInner>,
         config: &Texture2dConfig,
         body: Option<&[u8]>,
     ) -> Result<Self> {
@@ -284,7 +290,7 @@ impl Texture {
     }
 
     pub(crate) fn new_from_image_element(
-        ctx: Rc<ContextInner>,
+        ctx: Rc<crate::context::ContextInner>,
         filter: &TextureFilter,
         element: &web_sys::HtmlImageElement,
     ) -> Result<Self> {

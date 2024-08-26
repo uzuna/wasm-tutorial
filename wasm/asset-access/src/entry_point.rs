@@ -10,14 +10,19 @@ use wasm_utils::{
     error,
     error::*,
     info,
+    mouse::{self, MouseEventMessage},
     waitgroup::{WaitGroup, Worker},
 };
 use web_sys::{HtmlButtonElement, HtmlCanvasElement, HtmlImageElement};
 use webgl2::{
     context::{gl_clear_color, Context, COLOR_BLACK},
     gl,
-    shader::texture::{TextureShader, TextureVd},
+    shader::{
+        pointing::{PointingRequest, PointingShader},
+        texture::{TextureShader, TextureVd},
+    },
     texture::{Texture, TextureFilter},
+    GlPoint2d,
 };
 
 thread_local! {
@@ -40,6 +45,7 @@ pub fn start(
     check_memory_usage("start");
     canvas.set_width(1000);
     canvas.set_height(600);
+    let canvas_clone = canvas.clone();
 
     let glctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
     let vp = glctx.viewport();
@@ -83,17 +89,6 @@ pub fn start(
             texture,
         });
     }
-    let a = AnimationLoop::new(move |_| {
-        ctx.draw();
-        Ok(())
-    });
-
-    // ボタンを押すとアニメーションが開始する
-    let btn = PlayStopButton::new(play_pause_btn, a);
-    let playing_flag = btn.flag();
-    let ctx = btn.start();
-    // JSに戻したらGCで回収されたためforgetする
-    ctx.forget();
 
     check_memory_usage("after spawn");
 
@@ -110,6 +105,66 @@ pub fn start(
             })
             .await;
     });
+
+    // マウスイベントを受け取る
+    let (tx, mut rx) = futures_channel::mpsc::unbounded();
+    let mut m = mouse::MouseEventHandler::new(canvas_clone, tx);
+    m.start();
+    m.forget();
+
+    // マウスイベントを元にターゲットを描画するシェーダー
+    let mut ts = PointingShader::new(&glctx)?;
+    ts.apply_requests(&[
+        PointingRequest::Enable(true),
+        PointingRequest::Position(GlPoint2d::new(0.0, 0.0)),
+    ]);
+    ts.update(0.0);
+    ts.draw();
+
+    let mut reqs = vec![];
+    let mut timestamp = 0.0_f64;
+    let a = AnimationLoop::new(move |time| {
+        // マウスイベントをターゲットリクエストに変換
+        reqs.clear();
+        while let Ok(Some(msg)) = rx.try_next() {
+            match msg {
+                MouseEventMessage::Down { pos } => {
+                    reqs.push(PointingRequest::Enable(true));
+                    reqs.push(PointingRequest::Position(GlPoint2d::new(pos.x, pos.y)));
+                }
+                MouseEventMessage::Up { pos } => {
+                    reqs.push(PointingRequest::Enable(false));
+                    reqs.push(PointingRequest::Position(GlPoint2d::new(pos.x, pos.y)));
+                }
+                MouseEventMessage::Move { pos } => {
+                    reqs.push(PointingRequest::Position(GlPoint2d::new(pos.x, pos.y)));
+                }
+                MouseEventMessage::Click { pos } => {
+                    info!("click {:?}", pos);
+                }
+                MouseEventMessage::DblClick { pos } => {
+                    info!("dblclick {:?}", pos);
+                }
+                _ => {}
+            }
+        }
+        let elaplesd_sec = (time - timestamp) as f32 / 1000.0;
+        timestamp = time;
+        ts.apply_requests(reqs.as_slice());
+        ts.update(elaplesd_sec);
+        // clearが入っているので先に描画
+        ctx.draw();
+        ts.draw();
+        Ok(())
+    });
+
+    // ボタンを押すとアニメーションが開始する
+    let mut btn = PlayStopButton::new(play_pause_btn, a);
+    btn.play();
+    let playing_flag = btn.flag();
+    let ctx = btn.start();
+    // JSに戻したらGCで回収されたためforgetする
+    ctx.forget();
 
     // メモリリークの有無を確認するためにテクスチャを定期的に読み出す
     // 実際にforgetではメモリ使用量が増える付けることが確認できた

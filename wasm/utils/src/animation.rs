@@ -2,7 +2,7 @@ use std::{
     borrow::Borrow,
     cell::RefCell,
     rc::{Rc, Weak},
-    sync::atomic::AtomicBool,
+    sync::atomic::{AtomicBool, Ordering::Relaxed},
 };
 
 use wasm_bindgen::prelude::*;
@@ -120,9 +120,7 @@ impl PlayStopButton {
         playing: Rc<RefCell<AtomicBool>>,
     ) -> Self {
         let play = animation_loop.is_started();
-        playing
-            .borrow_mut()
-            .store(play, std::sync::atomic::Ordering::Relaxed);
+        playing.borrow_mut().store(play, Relaxed);
         let s = Self {
             element,
             play,
@@ -140,18 +138,14 @@ impl PlayStopButton {
 
     pub fn play(&mut self) {
         self.play = true;
-        self.playing
-            .borrow_mut()
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.playing.borrow_mut().store(true, Relaxed);
         self.animation_loop.start();
         self.set_text();
     }
 
     pub fn stop(&mut self) -> Result<()> {
         self.play = false;
-        self.playing
-            .borrow_mut()
-            .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.playing.borrow_mut().store(false, Relaxed);
         self.set_text();
         self.animation_loop.cancel()
     }

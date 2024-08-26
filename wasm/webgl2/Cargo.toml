@@ -8,14 +8,15 @@ rust-version.workspace = true
 
 [features]
 context = ["web-sys/HtmlCanvasElement", "dep:serde"]
-font = ["vertex", "texture", "dep:fxhash", "dep:serde", "dep:nalgebra"]
-font-asset = ["font", "dep:serde_json", "web-sys/WebglCompressedTextureS3tc"]
-font-asset-compress = ["font-asset", "dep:include-bytes-zstd"]
+font = ["vertex", "texture", "context", "dep:fxhash", "dep:serde", "dep:nalgebra"]
+font-embed = ["font", "dep:serde_json", "web-sys/WebglCompressedTextureS3tc"]
+font-embed-compress = ["font-embed", "dep:include-bytes-zstd"]
 shader = ["vertex", "dep:nalgebra"]
 vertex = ["web-sys/WebGlBuffer"]
 viewport = ["dep:nalgebra"]
-metrics = []
+metrics = ["context"]
 texture = ["web-sys/WebGlTexture", "web-sys/HtmlImageElement", "web-sys/WebGlTexture"]
+pointing = ["context", "vertex"]
 
 [dependencies]
 bytemuck = { version = "1.16.1", features = ["derive"] }

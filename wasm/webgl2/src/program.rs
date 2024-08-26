@@ -1,5 +1,6 @@
 //! シェーダープログラムを扱うモジュール
 
+#[cfg(feature = "context")]
 use std::rc::Rc;
 
 use web_sys::{WebGlProgram, WebGlShader, WebGlUniformLocation};

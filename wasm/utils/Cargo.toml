@@ -9,11 +9,13 @@ rust-version.workspace = true
 [features]
 default = ["console_error_panic_hook"]
 waitgroup = ["dep:futures-channel", "dep:futures-util"]
+mouse = ["dep:fxhash", "web-sys/MouseEvent", "web-sys/WheelEvent", "web-sys/AddEventListenerOptions"]
 
 [dependencies]
 console_error_panic_hook = { workspace = true, optional = true }
 futures-channel = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
+fxhash = { workspace = true, optional = true }
 wasm-bindgen.workspace = true
 
 [dependencies.web-sys]

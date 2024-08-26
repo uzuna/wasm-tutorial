@@ -34,7 +34,7 @@ void main() {
 
     const FRAG: &'static str = r#"#version 300 es
 
-precision highp float;
+precision mediump float;
 
 in vec4 vertexColor;
 out vec4 fragmentColor;

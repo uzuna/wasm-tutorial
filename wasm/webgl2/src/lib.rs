@@ -15,9 +15,6 @@ pub mod context;
 #[cfg(feature = "font")]
 pub mod font;
 
-#[cfg(feature = "font-asset")]
-pub mod font_asset;
-
 #[cfg(feature = "viewport")]
 pub mod viewport;
 

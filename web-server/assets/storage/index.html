@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Storage Demo</title>
+  <style>
+    body {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      margin: 0;
+    }
+
+  </style>
+  <script type="module" src="./index.js"></script>
+  </head>
+
+<body>
+  <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
+  <h2>Storage Demo</h2>
+  <div id="ctrl1-container">
+    <h4>Test: <span id="c1-test-value"></span></h4>
+    <input type="range" min="0" max="100" value="20" class="slider" id="c1-test">
+    <h4>Scale: <span id="c1-scale-value"></span></h4>
+    <input type="range" min="0" max="100" value="20" class="slider" id="c1-scale">
+    <button id="c1-save"></button>
+  </div>
+</body>
+
+</html>
