@@ -22,7 +22,7 @@ use webgl2::{
 };
 
 use crate::{
-    mouse,
+    mouse::{self, MouseEventMessage},
     target_shader::{TargetRequest, TargetShader},
 };
 
@@ -129,10 +129,26 @@ pub fn start(
         // マウスイベントをターゲットリクエストに変換
         reqs.clear();
         while let Ok(Some(msg)) = rx.try_next() {
-            reqs.push(TargetRequest::Enable(msg.down));
-            reqs.push(TargetRequest::Position(GlPoint2d::new(
-                msg.pos.x, msg.pos.y,
-            )));
+            match msg {
+                MouseEventMessage::Down { pos } => {
+                    reqs.push(TargetRequest::Enable(true));
+                    reqs.push(TargetRequest::Position(GlPoint2d::new(pos.x, pos.y)));
+                }
+                MouseEventMessage::Up { pos } => {
+                    reqs.push(TargetRequest::Enable(false));
+                    reqs.push(TargetRequest::Position(GlPoint2d::new(pos.x, pos.y)));
+                }
+                MouseEventMessage::Move { pos } => {
+                    reqs.push(TargetRequest::Position(GlPoint2d::new(pos.x, pos.y)));
+                }
+                MouseEventMessage::Click { pos } => {
+                    info!("click {:?}", pos);
+                }
+                MouseEventMessage::DblClick { pos } => {
+                    info!("dblclick {:?}", pos);
+                }
+                _ => {}
+            }
         }
         let elaplesd_sec = (time - timestamp) as f32 / 1000.0;
         timestamp = time;

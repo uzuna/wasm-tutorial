@@ -1,7 +1,4 @@
-use std::{
-    cell::{RefCell, RefMut},
-    rc::Rc,
-};
+//! マウスイベントを処理してWASM空間で扱いやすい方にする。
 
 use futures_channel::mpsc::UnboundedSender;
 use fxhash::FxHashMap;
@@ -63,33 +60,29 @@ pub struct Wheel {
     pub y: f32,
 }
 
-/// モジュール外にマウスとホイールの状態を通知するメッセージ
+/// モジュール外にマウスとホイールのイベントを通知する
 #[derive(Debug, Clone, Copy)]
-pub struct MouseMessage {
-    // OpenGL空間の座標。プロジェクション行列の逆行列をかけることで、データの位置がわかる
-    pub pos: Point,
-    pub wheel: Wheel,
-    pub down: bool,
+pub enum MouseEventMessage {
+    Move { pos: Point },
+    Wheel { wheel: Wheel },
+    Down { pos: Point },
+    Up { pos: Point },
+    Click { pos: Point },
+    DblClick { pos: Point },
 }
 
-// マウスの状態を保持する構造体
-#[derive(Debug, Default)]
-struct MouseState {
+// Canvasで得られるマウスのpx座標をOpenGLの座標に変換する
+#[derive(Debug, Clone, Default)]
+struct PositionConverter {
     offset_c: Point,
     area_c: Point,
-    down: bool,
-    pos: Point,
-    wheel: Wheel,
 }
 
-impl MouseState {
+impl PositionConverter {
     fn new(offset_c: Point, area_c: Point) -> Self {
-        Self {
-            offset_c,
-            area_c,
-            ..Default::default()
-        }
+        Self { offset_c, area_c }
     }
+
     fn from_canvas(canvas: &web_sys::HtmlCanvasElement) -> Self {
         let offset = Point {
             x: canvas.offset_left() as f32,
@@ -102,91 +95,76 @@ impl MouseState {
         Self::new(offset, area)
     }
 
-    fn update_pos(&mut self, pos_x: i32, pos_y: i32) {
-        // self.down = true;
-        let pos = Point {
-            x: pos_x as f32,
-            y: pos_y as f32,
-        };
-        self.pos = pos;
-    }
-
-    fn update_wheel(&mut self, delta_x: f32, delta_y: f32) {
-        self.wheel = Wheel {
-            x: delta_x,
-            y: delta_y,
-        };
-    }
-
-    fn mouse_down(&mut self) {
-        self.down = true;
-    }
-
-    fn mouse_up(&mut self) {
-        self.down = false;
-    }
-
-    fn msg(&self) -> MouseMessage {
+    fn pixel_to_gl(&self, p: Point) -> Point {
         // マウス座標をOpenGL空間に変換
-        let mut mouse_pos = (self.pos - self.offset_c - self.area_c / 2.) / self.area_c * 2.;
-        mouse_pos.y = -mouse_pos.y;
-
-        MouseMessage {
-            pos: mouse_pos,
-            wheel: self.wheel,
-            down: self.down,
-        }
-    }
-
-    fn fetch_msg(&mut self) -> MouseMessage {
-        let msg = self.msg();
-        // wheelは継続する情報ではないのでリセット
-        self.wheel = Wheel::default();
-        msg
+        let mut gl_p = (p - self.offset_c - self.area_c / 2.) / self.area_c * 2.;
+        gl_p.y = -gl_p.y;
+        gl_p
     }
 }
 
 /// マウスイベントを処理する構造体
 pub struct MouseEventHandler {
     canvas: web_sys::HtmlCanvasElement,
-    sender: UnboundedSender<MouseMessage>,
+    sender: UnboundedSender<MouseEventMessage>,
+    cnv: PositionConverter,
     mouse_closures: FxHashMap<String, Closure<dyn FnMut(MouseEvent)>>,
     wheel_closures: FxHashMap<String, Closure<dyn FnMut(WheelEvent)>>,
-    state: Rc<RefCell<MouseState>>,
 }
 
 impl MouseEventHandler {
-    pub fn new(canvas: web_sys::HtmlCanvasElement, tx: UnboundedSender<MouseMessage>) -> Self {
-        let state = Rc::new(RefCell::new(MouseState::from_canvas(&canvas)));
+    pub fn new(canvas: web_sys::HtmlCanvasElement, tx: UnboundedSender<MouseEventMessage>) -> Self {
+        let cnv = PositionConverter::from_canvas(&canvas);
         Self {
             canvas,
             sender: tx,
+            cnv,
             mouse_closures: FxHashMap::default(),
             wheel_closures: FxHashMap::default(),
-            state,
         }
     }
 
     pub fn start(&mut self) {
         // マウスの上げ下げイベントは位置と状態を更新
-        self.build_mouse_closure("mousedown", |(state, event)| {
-            state.update_pos(event.client_x(), event.client_y());
-            state.mouse_down();
+        self.build_mouse_closure("mousedown", |(cnv, event)| {
+            let pos = Point::new(event.client_x() as f32, event.client_y() as f32);
+            let pos = cnv.pixel_to_gl(pos);
+            Some(MouseEventMessage::Down { pos })
         });
 
-        self.build_mouse_closure("mouseup", |(state, event)| {
-            state.update_pos(event.client_x(), event.client_y());
-            state.mouse_up();
+        self.build_mouse_closure("mouseup", |(cnv, event)| {
+            let pos = Point::new(event.client_x() as f32, event.client_y() as f32);
+            let pos = cnv.pixel_to_gl(pos);
+            Some(MouseEventMessage::Up { pos })
         });
 
         // マウス移動は移動のみを取得
-        self.build_mouse_closure("mousemove", |(state, event)| {
-            state.update_pos(event.client_x(), event.client_y());
+        self.build_mouse_closure("mousemove", |(cnv, event)| {
+            let pos = Point::new(event.client_x() as f32, event.client_y() as f32);
+            let pos = cnv.pixel_to_gl(pos);
+            Some(MouseEventMessage::Move { pos })
+        });
+
+        self.build_mouse_closure("click", |(cnv, event)| {
+            let pos = Point::new(event.client_x() as f32, event.client_y() as f32);
+            let pos = cnv.pixel_to_gl(pos);
+            Some(MouseEventMessage::Click { pos })
+        });
+
+        self.build_mouse_closure("dblclick", |(cnv, event)| {
+            let pos = Point::new(event.client_x() as f32, event.client_y() as f32);
+            let pos = cnv.pixel_to_gl(pos);
+            Some(MouseEventMessage::DblClick { pos })
         });
 
         // ホイールイベントはホイールの移動量を取得
-        self.build_wheel_closure("wheel", |(state, event)| {
-            state.update_wheel(event.delta_x() as f32, event.delta_y() as f32);
+        self.build_wheel_closure("wheel", |event| {
+            Some(MouseEventMessage::Wheel {
+                wheel: Wheel {
+                    x: event.delta_x() as f32,
+                    y: event.delta_y() as f32,
+                },
+            })
         });
     }
 
@@ -194,14 +172,14 @@ impl MouseEventHandler {
     fn build_mouse_closure(
         &mut self,
         event_type: &str,
-        mut f: impl FnMut((&mut RefMut<MouseState>, MouseEvent)) + 'static,
+        f: impl Fn((&PositionConverter, MouseEvent)) -> Option<MouseEventMessage> + 'static,
     ) {
-        let state = self.state.clone();
         let mut tx = self.sender.clone();
+        let cnv = self.cnv.clone();
         let clusure = Closure::wrap(Box::new(move |event: MouseEvent| {
-            let mut state = state.borrow_mut();
-            f((&mut state, event));
-            tx.start_send(state.msg()).unwrap();
+            if let Some(msg) = f((&cnv, event)) {
+                tx.start_send(msg).unwrap();
+            }
         }) as Box<dyn FnMut(MouseEvent)>);
 
         self.canvas
@@ -214,15 +192,13 @@ impl MouseEventHandler {
     fn build_wheel_closure(
         &mut self,
         event_type: &str,
-        mut f: impl FnMut((&mut RefMut<MouseState>, WheelEvent)) + 'static,
+        f: impl Fn(WheelEvent) -> Option<MouseEventMessage> + 'static,
     ) {
-        let state = self.state.clone();
         let mut tx = self.sender.clone();
         let clusure = Closure::wrap(Box::new(move |event: WheelEvent| {
-            let mut state = state.borrow_mut();
-            f((&mut state, event));
-            // ホイールイベントは継続する情報ではないのでリセット
-            tx.start_send(state.fetch_msg()).unwrap();
+            if let Some(msg) = f(event) {
+                tx.start_send(msg).unwrap();
+            }
         }) as Box<dyn FnMut(WheelEvent)>);
 
         // スクロール操作というデフォルトのイベントがあるため
