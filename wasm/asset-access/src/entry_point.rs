@@ -10,6 +10,7 @@ use wasm_utils::{
     error,
     error::*,
     info,
+    mouse::{self, MouseEventMessage},
     waitgroup::{WaitGroup, Worker},
 };
 use web_sys::{HtmlButtonElement, HtmlCanvasElement, HtmlImageElement};
@@ -21,10 +22,7 @@ use webgl2::{
     GlPoint2d,
 };
 
-use crate::{
-    mouse::{self, MouseEventMessage},
-    target_shader::{TargetRequest, TargetShader},
-};
+use crate::target_shader::{TargetRequest, TargetShader};
 
 thread_local! {
     // テクスチャロードのたびにクロージャをforgetするとメモリリークになるため
