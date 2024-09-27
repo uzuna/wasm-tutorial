@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/*",
     "web-server",
     "wasm/*", 
     "image_convert",

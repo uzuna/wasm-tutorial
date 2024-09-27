@@ -1,0 +1,11 @@
+[package]
+name = "moro-test"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tokio = { workspace = true, features = ["full"] }
+tokio-util = "0.7.12"
