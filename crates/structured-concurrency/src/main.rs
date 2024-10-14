@@ -3,6 +3,9 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+// 独自にループ処理を含む実行フローを持つ処理の例
+// このアクターの場合は自身の速度を元に経時変化で位置を更新する
+// 時間定期な経過による待ち時間が主でCPU処理としては極小
 struct Actor {
     position: f32,
     velocity: f32,
@@ -71,17 +74,24 @@ impl StActor for Actor {
     }
 }
 
+// 今回のアクターはイベント駆動で記述しているので、メッセージの種類を列挙しておく
 enum ActorIn {
     SetVel(f32),
     PosReader(mpsc::Sender<f32>),
 }
 
+// アクターのトレイト。
+// 処理の起動方法とメッセージの受信処理を定義
 trait StActor {
     type Msg;
     async fn recv(&mut self, rx: &mut mpsc::Receiver<Self::Msg>);
+    // キャンセラブルにするためにトークンを渡している。
+    // 実装者はこれを保証する必要があるが特性的な制限をしていない
     async fn start(&mut self, token: CancellationToken, rx: &mut mpsc::Receiver<Self::Msg>);
 }
 
+// アクターに対してメッセージを送受信する口を提供するラッパー
+// 動的に非同期処理が増える場合はこのようなラッパーが必要になりそうなので定義
 struct Stw<T, In> {
     state: T,
     in_tx: mpsc::Sender<In>,
@@ -98,6 +108,7 @@ impl<T, In> Stw<T, In> {
         }
     }
 
+    // senderを渡すことでmpscな関係を作れる
     fn tx(&self) -> mpsc::Sender<In> {
         self.in_tx.clone()
     }
@@ -130,6 +141,7 @@ impl<T, In> AsMut<T> for Stw<T, In> {
     }
 }
 
+// Actor向けの制御ロジック
 struct Target {
     position: f32,
     vel_max: f32,
@@ -156,6 +168,7 @@ impl Target {
         }
     }
 
+    // こちらも同様に非同期ループを実行する構造
     async fn start(&mut self, token: CancellationToken, tx_act: mpsc::Sender<ActorIn>) {
         let mut interval = tokio::time::interval(Duration::from_millis(200));
         let (tx, mut rx) = mpsc::channel(10);
@@ -209,6 +222,8 @@ async fn signal(token: CancellationToken) {
     token.cancel();
 }
 
+// [run_with_spawn]を書き換えたもの。
+// こちらはjoinを使っているのでasync moveが不要
 async fn run_with_join_inner() -> Result<(), Box<dyn std::error::Error>> {
     let token = CancellationToken::new();
     let actor = Actor::new(0.0, 1.0);
@@ -216,6 +231,9 @@ async fn run_with_join_inner() -> Result<(), Box<dyn std::error::Error>> {
     let actor_tx: mpsc::Sender<ActorIn> = actor_stw.tx();
     let mut target = Target::new(10.0, 1.0);
 
+    // この思索の主題。静的な同時実行とは、スケジューリングが同時であれば良くて、並行実行(CPUコア別で実行される)必要とは別の要件
+    // 言葉の定義は[タスクは間違った抽象化です by Yoshua Wuyts](https://blog.yoshuawuyts.com/tasks-are-the-wrong-abstraction/)を参照
+    // joinの場合は同じブロック内のスタックが生存していることを保証されるためasync moveが不要
     // ここはfutures::join!でもよい
     tokio::join!(
         actor_stw.start(token.clone()),
@@ -227,6 +245,7 @@ async fn run_with_join_inner() -> Result<(), Box<dyn std::error::Error>> {
 
 // localset spawn_localを使う場合
 // spawn_localは'static境界を持つため async move が必要
+// 同時実行がしたいだけで、並行処理は不要なためspawnを使いたくないが、こう書けてしまうという例。
 fn run_with_spawn() -> Result<(), Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -241,6 +260,10 @@ fn run_with_spawn() -> Result<(), Box<dyn std::error::Error>> {
 
         let token = CancellationToken::new();
         let token_h0 = token.clone();
+
+        // spawnメソッドがここの問題の主題。async blockを抜けない保証があるなら
+        // 'static特性を満たす必要がないのだが、spawn_localは非構造化並行処理であり
+        // 外側ブロックを抜ける可能性が許されているためasync moveが必要
         let _h0 = local.spawn_local(async move {
             tokio::signal::ctrl_c().await.unwrap();
             println!("Ctrl-C received, shutting down");
@@ -289,7 +312,6 @@ fn run_with_spawn() -> Result<(), Box<dyn std::error::Error>> {
             println!("shutdown h2");
         });
 
-        // spawnでなくとも、ここにjoinできるならasync moveもいらないのでは...?
         local.await;
 
         println!("graceful shutdown");
