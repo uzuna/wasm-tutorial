@@ -20,7 +20,7 @@ fn run_with_join() -> anyhow::Result<()> {
 
 // [run_with_spawn]を書き換えたもの。
 // こちらはjoinを使っているのでasync moveが不要
-async fn run_with_join_inner() -> anyhow::Result<()> {
+async fn run_with_join_inner() -> sc_test::error::Result<()> {
     let token = CancellationToken::new();
     let actor = Actor::new(0.0, 1.0);
     let mut actor_stw = StWrapper::new(actor);
@@ -33,10 +33,10 @@ async fn run_with_join_inner() -> anyhow::Result<()> {
     // 01殿違いの主題はここでjoinはこのブロック内でFutureが解決するまで待つため、ブロック内の生存期間を保証している
     // 'staticが不要
     // ただし動くタスクの数が静的に決まっているパターンでしか使えない
-    tokio::join!(
+    tokio::try_join!(
         actor_stw.start(token.clone()),
         target.start(token.clone(), actor_tx),
         signal(token),
-    );
+    )?;
     Ok(())
 }

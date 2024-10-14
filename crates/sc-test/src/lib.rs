@@ -1,7 +1,10 @@
 use std::time::Duration;
 
+use anyhow::Context;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+
+pub mod error;
 
 // 独自にループ処理を含む実行フローを持つ処理の例
 // このアクターの場合は自身の速度を元に経時変化で位置を更新する
@@ -48,7 +51,8 @@ impl Actor {
 
 impl StActor for Actor {
     type Msg = ActorIn;
-    async fn recv(&mut self, rx: &mut mpsc::Receiver<Self::Msg>) {
+    type Error = crate::error::Error;
+    async fn recv(&mut self, rx: &mut mpsc::Receiver<Self::Msg>) -> Result<(), Self::Error> {
         while let Ok(in_msg) = rx.try_recv() {
             match in_msg {
                 ActorIn::SetVel(vel) => self.set_velocity(vel),
@@ -57,13 +61,18 @@ impl StActor for Actor {
                 }
             }
         }
+        Ok(())
     }
 
-    async fn start(&mut self, token: CancellationToken, rx: &mut mpsc::Receiver<Self::Msg>) {
+    async fn start(
+        &mut self,
+        token: CancellationToken,
+        rx: &mut mpsc::Receiver<Self::Msg>,
+    ) -> Result<(), Self::Error> {
         let mut interval = tokio::time::interval(Duration::from_millis(100));
         loop {
             self.update(0.1);
-            self.recv(rx).await;
+            self.recv(rx).await?;
             tokio::select! {
                 _ = token.cancelled() => {
                     break;
@@ -71,6 +80,8 @@ impl StActor for Actor {
                 _ = interval.tick() => {}
             }
         }
+        println!("Actor shutdown");
+        Ok(())
     }
 }
 
@@ -85,15 +96,19 @@ pub enum ActorIn {
 // 状態を持つアクターを保持してそれを更新する
 pub trait StActor {
     type Msg;
-    fn recv(&mut self, rx: &mut mpsc::Receiver<Self::Msg>)
-        -> impl std::future::Future<Output = ()>;
+    type Error;
+
+    fn recv(
+        &mut self,
+        rx: &mut mpsc::Receiver<Self::Msg>,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>>;
     // キャンセラブルにするためにトークンを渡している。
     // 実装者はこれを保証する必要があるが特性的な制限をしていない
     fn start(
         &mut self,
         token: CancellationToken,
         rx: &mut mpsc::Receiver<Self::Msg>,
-    ) -> impl std::future::Future<Output = ()>;
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>>;
 }
 
 // アクターに対してメッセージを送受信する口を提供するラッパー
@@ -122,16 +137,17 @@ impl<T, In> StWrapper<T, In> {
 
 impl<T, In> StWrapper<T, In>
 where
-    T: StActor<Msg = In>,
+    T: StActor<Msg = In, Error = crate::error::Error>,
 {
-    pub async fn recv(&mut self) {
-        self.state.recv(&mut self.in_rx).await;
+    pub async fn recv(&mut self) -> Result<(), T::Error> {
+        self.state.recv(&mut self.in_rx).await
     }
 
-    pub async fn start(&mut self, token: CancellationToken) {
+    pub async fn start(&mut self, token: CancellationToken) -> Result<(), T::Error> {
         println!("start_task");
-        self.state.start(token, &mut self.in_rx).await;
+        self.state.start(token, &mut self.in_rx).await?;
         println!("shutdown");
+        Ok(())
     }
 }
 
@@ -175,10 +191,17 @@ impl Target {
     }
 
     // こちらも同様に非同期ループを実行する構造
-    pub async fn start(&mut self, token: CancellationToken, tx_act: mpsc::Sender<ActorIn>) {
+    pub async fn start(
+        &mut self,
+        token: CancellationToken,
+        tx_act: mpsc::Sender<ActorIn>,
+    ) -> crate::error::Result<()> {
         let mut interval = tokio::time::interval(Duration::from_millis(200));
         let (tx, mut rx) = mpsc::channel(10);
-        tx_act.send(ActorIn::PosReader(tx)).await.unwrap();
+        tx_act
+            .send(ActorIn::PosReader(tx))
+            .await
+            .context("start up message")?;
         let mut current_pos = 0.0;
         loop {
             // futures::select! はFusedFutureを要求するので、ここで代替はできない
@@ -200,15 +223,24 @@ impl Target {
                 _ = interval.tick() => {
                     let vel = self.calc_vel(current_pos);
                     println!("Actor position from reader: {current_pos} -> {vel}");
-                    tx_act.try_send(ActorIn::SetVel(vel)).unwrap();
+                    tx_act.send(ActorIn::SetVel(vel)).await.context("send message")?;
                 }
             }
         }
+        // 終了時の状態を定義
+        tx_act
+            .send(ActorIn::SetVel(0.0))
+            .await
+            .context("closing message")?;
+        println!("Target shutdown");
+        Ok(())
     }
 }
 
-pub async fn signal(token: CancellationToken) {
+/// Ctrl-Cを受信してキャンセルトークンをキャンセルする
+pub async fn signal(token: CancellationToken) -> crate::error::Result<()> {
     tokio::signal::ctrl_c().await.unwrap();
     println!("Ctrl-C received, shutting down");
     token.cancel();
+    Ok(())
 }
