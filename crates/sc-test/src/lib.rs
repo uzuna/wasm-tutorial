@@ -49,7 +49,7 @@ impl Actor {
 impl StActor for Actor {
     type Msg = ActorIn;
     async fn recv(&mut self, rx: &mut mpsc::Receiver<Self::Msg>) {
-        while let Some(in_msg) = rx.try_recv().ok() {
+        while let Ok(in_msg) = rx.try_recv() {
             match in_msg {
                 ActorIn::SetVel(vel) => self.set_velocity(vel),
                 ActorIn::PosReader(tx) => {
@@ -206,7 +206,6 @@ impl Target {
         }
     }
 }
-
 
 pub async fn signal(token: CancellationToken) {
     tokio::signal::ctrl_c().await.unwrap();

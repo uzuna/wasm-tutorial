@@ -12,30 +12,33 @@ version = "0.0.0"
 edition = "2021"
 authors = ["FUJINAKA Fumiya <uzuna.kf@gmail.com>"]
 repository = "https://github.com/uzuna/wasm-tutorial"
-rust-version = "1.79"
+rust-version = "1.81"
 
 [workspace.dependencies]
 ciborium = "0.2.2"
 console_error_panic_hook = "0.1.7"
-futures = "0.3.30"
-futures-util = "0.3.30"
-futures-channel = "0.3.30"
+futures = "0.3.31"
+futures-util = "0.3.31"
+futures-channel = "0.3.31"
 fxhash = "0.2.1"
 getrandom = { version = "0.2", features = ["js"] }
-gloo-net = { version = "0.5", default-features = false }
+gloo-net = { version = "0.6", default-features = false }
 gloo-timers = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
 nalgebra = "0.33"
 rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
-tokio = { version = "1.38.0", features = ["macros", "sync"] }
-wasm-bindgen = "0.2.84"
-wasm-bindgen-futures = "0.4.42"
-wasm-bindgen-test = "0.3.34"
+tokio = { version = "1.40.0", features = ["macros", "sync"] }
+wasm-bindgen = "0.2.95"
+wasm-bindgen-futures = "0.4.45"
+wasm-bindgen-test = "0.3.45"
 wasm-utils = { path = "./wasm/utils" }
 web-sys = "0.3"
 webgl2 = { path = "./wasm/webgl2" }
 
 [profile.release]
-strip = true
+opt-level = "s"
+
+[profile.release.package.sc-test]
+opt-level = 3
