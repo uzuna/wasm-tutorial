@@ -1,0 +1,21 @@
+[package]
+name = "sc-test"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = "1.0.89"
+thiserror = "1.0.64"
+tokio = { workspace = true, features = ["full"] }
+tokio-util = "0.7.12"
+
+[[example]]
+name = "01"
+path = "examples/01_local_spawn.rs"
+
+[[example]]
+name = "02"
+path = "examples/02_join.rs"

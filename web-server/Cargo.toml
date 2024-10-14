@@ -11,12 +11,12 @@ axum = { version = "0.7", features = ["json", "query", "ws"] }
 ciborium.workspace = true
 futures-util.workspace = true
 hex_color = "3"
-image = { version = "0.25.2", no-default-features = false, features = ["png", "jpeg", "webp"] }
+image = { version = "0.25.2", default-features = false, features = ["png", "jpeg", "webp"] }
 rand.workspace = true
 serde.workspace = true
-tokio = { version = "1.0", features = ["full"] }
-tower = { version = "0.4", features = ["util"] }
-tower-http = { version = "0.5.0", features = ["fs", "trace"] }
+tokio = { version = "1.40", features = ["full"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6.1", features = ["fs", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

@@ -19,7 +19,7 @@ texture = ["web-sys/WebGlTexture", "web-sys/HtmlImageElement", "web-sys/WebGlTex
 pointing = ["context", "vertex"]
 
 [dependencies]
-bytemuck = { version = "1.16.1", features = ["derive"] }
+bytemuck = { version = "1.19.0", features = ["derive"] }
 fxhash = { workspace = true, optional = true }
 include-bytes-zstd = { version = "0.1.0", optional = true }
 js-sys.workspace = true

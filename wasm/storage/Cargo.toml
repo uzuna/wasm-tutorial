@@ -30,6 +30,3 @@ features = [
 
 [dev-dependencies]
 wasm-bindgen-test.workspace = true
-
-[profile.release]
-opt-level = "s"
