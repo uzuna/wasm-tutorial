@@ -218,6 +218,7 @@ where
         let value = self.state.borrow().to_string();
         self.element.set_value(&value);
     }
+
     /// イベントリスナーを登録する
     pub fn start(&self, mut tx: mpsc::Sender<InputEvent<I>>) -> Result<()> {
         // check closure
@@ -250,6 +251,124 @@ where
     }
 }
 
+pub trait SelectOption: Copy + Sized + 'static {
+    fn iter() -> &'static [Self];
+    fn value(&self) -> &str;
+    fn text(&self) -> &str;
+    fn from_str(value: &str) -> Self;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OptionExample {
+    Off,
+    Normal,
+    Dark,
+    Bright,
+}
+
+impl OptionExample {
+    const ALL: [Self; 4] = [Self::Off, Self::Normal, Self::Dark, Self::Bright];
+}
+
+impl SelectOption for OptionExample {
+    fn iter() -> &'static [Self] {
+        &Self::ALL
+    }
+
+    fn value(&self) -> &str {
+        match self {
+            Self::Off => "off",
+            Self::Normal => "normal",
+            Self::Dark => "dark",
+            Self::Bright => "bright",
+        }
+    }
+
+    fn text(&self) -> &str {
+        match self {
+            Self::Off => "Off",
+            Self::Normal => "Normal",
+            Self::Dark => "Dark",
+            Self::Bright => "Bright",
+        }
+    }
+
+    fn from_str(value: &str) -> Self {
+        match value {
+            "off" => Self::Off,
+            "normal" => Self::Normal,
+            "dark" => Self::Dark,
+            "bright" => Self::Bright,
+            _ => panic!("invalid value: {}", value),
+        }
+    }
+}
+
+pub struct SelectInput<I, O>
+where
+    I: InputIdent,
+    O: SelectOption,
+{
+    ident: I,
+    element: web_sys::HtmlSelectElement,
+    state: Rc<RefCell<O>>,
+}
+
+impl<I, O> SelectInput<I, O>
+where
+    I: InputIdent,
+    O: SelectOption,
+{
+    pub fn new(ident: I, initial_value: O) -> Result<Self> {
+        let id = ident.id();
+        let element = get_html_element::<web_sys::HtmlSelectElement>(id)?;
+        let state = Rc::new(RefCell::new(initial_value));
+
+        let s = Self {
+            ident,
+            element,
+            state,
+        };
+        s.init()?;
+
+        Ok(s)
+    }
+
+    fn init(&self) -> Result<()> {
+        for v in O::iter() {
+            let option = create_element::<web_sys::HtmlOptionElement>("option")?;
+            option.set_value(v.value());
+            option.set_text(v.text());
+            self.element
+                .append_child(option.as_ref())
+                .map_err(|e| JsError::new(&format!("failed to append_child {e:?}")))?;
+        }
+        self.element.set_value(self.state.borrow().value());
+        Ok(())
+    }
+
+    /// イベントリスナーを登録する
+    pub fn start(&self, mut tx: mpsc::Sender<(I, O)>) -> Result<()> {
+        // check closure
+        if contains(self.ident.id()) {
+            return Err(JsError::new("Closure already exists"));
+        }
+        let ele = self.element.clone();
+        let state = self.state.clone();
+        let ident = self.ident.to_owned();
+        let closure = Closure::wrap(Box::new(move || {
+            let value = O::from_str(&ele.value());
+            *state.borrow_mut() = value;
+            // send message with sync
+            tx.try_send((ident, value)).unwrap();
+        }) as Box<dyn FnMut()>);
+        self.element
+            .set_oninput(Some(closure.as_ref().unchecked_ref()));
+        insert(self.ident.id(), closure);
+        Ok(())
+    }
+}
+
 fn contains(id: &str) -> bool {
     SELECT_CLOSURES.with_borrow(|closures| closures.contains_key(id))
 }
@@ -269,9 +388,23 @@ where
         .document()
         .ok_or(JsError::new("Failed to get document"))?
         .get_element_by_id(id)
-        .ok_or(JsError::new("Failed to get element"))?
+        .ok_or(JsError::new(&format!("Failed to get element: {id}")))?
         .dyn_into::<T>()
-        .map_err(|_| JsError::new("Failed to convert to HtmlButtonElement"))
+        .map_err(|_| JsError::new(&format!("Failed to convert Element: {id}")))
+}
+
+fn create_element<T>(tag: &str) -> Result<T>
+where
+    T: wasm_bindgen::JsCast,
+{
+    web_sys::window()
+        .ok_or(JsError::new("window is None"))?
+        .document()
+        .ok_or(JsError::new("document is None"))?
+        .create_element(tag)
+        .map_err(|_| JsError::new("cannot create element"))?
+        .dyn_into::<T>()
+        .map_err(|_| JsError::new("cannot convert to HtmlElement"))
 }
 
 /// イベントリスナーを登録する

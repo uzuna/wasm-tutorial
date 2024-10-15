@@ -24,6 +24,8 @@ features = [
     "console",
     "HtmlButtonElement",
     "HtmlInputElement",
+    "HtmlOptionElement",
+    "HtmlSelectElement",
     "HtmlCanvasElement",
     "MouseEvent",
     "Performance",
