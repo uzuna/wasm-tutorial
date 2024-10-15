@@ -1,10 +1,11 @@
 use std::{
     cell::RefCell,
+    fmt::Debug,
     rc::Rc,
-    str::FromStr,
     sync::atomic::{AtomicBool, Ordering},
 };
 
+use futures::channel::mpsc;
 use fxhash::FxHashMap;
 use wasm_bindgen::prelude::*;
 use wasm_utils::error::*;
@@ -14,29 +15,67 @@ thread_local! {
     pub(super) static SELECT_CLOSURES: RefCell<FxHashMap<String,Closure<dyn FnMut()>>> = RefCell::new(FxHashMap::default());
 }
 
-/// AnimationLoopに再生、停止のインタラクションを追加
-pub struct SubmitBtn {
-    id: String,
-    element: web_sys::HtmlButtonElement,
+pub trait InputIdent: Debug + Clone + Copy + PartialEq + Eq + 'static {
+    fn build_event(&self, value: InputEventValue) -> InputEvent<Self>;
+    fn id(&self) -> &'static str;
 }
 
-impl SubmitBtn {
-    pub fn new(id: &str) -> Result<Self> {
+#[derive(Debug)]
+pub struct InputEvent<I>
+where
+    I: InputIdent,
+{
+    pub ident: I,
+    pub value: InputEventValue,
+}
+
+impl<I> InputEvent<I>
+where
+    I: InputIdent,
+{
+    pub fn new(ident: I, value: InputEventValue) -> Self {
+        Self { ident, value }
+    }
+}
+
+#[derive(Debug)]
+pub enum InputEventValue {
+    EdgeTrigger,
+    Bool(bool),
+    F32(f32),
+}
+
+/// AnimationLoopに再生、停止のインタラクションを追加
+pub struct SubmitBtn<I> {
+    id: String,
+    element: web_sys::HtmlButtonElement,
+    ident: I,
+}
+
+impl<I> SubmitBtn<I>
+where
+    I: InputIdent,
+{
+    pub fn new(ident: I) -> Result<Self> {
+        let id = ident.id();
         let element = get_html_element::<web_sys::HtmlButtonElement>(id)?;
         Ok(Self {
             id: id.to_string(),
+            ident,
             element,
         })
     }
 
-    pub fn start(&self, mut tx: futures::channel::mpsc::Sender<()>) -> Result<()> {
+    pub fn start(&self, mut tx: mpsc::Sender<InputEvent<I>>) -> Result<()> {
         // check closure
         if contains(&self.id) {
             return Err(JsError::new("Closure already exists"));
         }
+        let ident = self.ident.to_owned();
         let closure = Closure::wrap(Box::new(move || {
             // send message with sync
-            tx.try_send(()).unwrap();
+            tx.try_send(ident.build_event(InputEventValue::EdgeTrigger))
+                .unwrap();
         }) as Box<dyn FnMut()>);
         add_event_listener(
             self.element.dyn_ref::<web_sys::EventTarget>().unwrap(),
@@ -50,14 +89,19 @@ impl SubmitBtn {
 }
 
 /// レベルトリガーのチェックボックス
-pub struct CheckBox {
+pub struct CheckBox<I> {
     id: String,
     element: web_sys::HtmlInputElement,
     state: Rc<RefCell<AtomicBool>>,
+    ident: I,
 }
 
-impl CheckBox {
-    pub fn new(id: &str, initial_value: bool) -> Result<Self> {
+impl<I> CheckBox<I>
+where
+    I: InputIdent,
+{
+    pub fn new(ident: I, initial_value: bool) -> Result<Self> {
+        let id = ident.id();
         let element = get_html_element::<web_sys::HtmlInputElement>(id)?;
         let state = Rc::new(RefCell::new(AtomicBool::new(initial_value)));
 
@@ -65,6 +109,7 @@ impl CheckBox {
             id: id.to_string(),
             element,
             state,
+            ident,
         };
         s.init();
 
@@ -79,18 +124,20 @@ impl CheckBox {
     }
 
     /// イベントリスナーを登録する
-    pub fn start(&self, mut tx: futures::channel::mpsc::Sender<bool>) -> Result<()> {
+    pub fn start(&self, mut tx: mpsc::Sender<InputEvent<I>>) -> Result<()> {
         // check closure
         if contains(&self.id) {
             return Err(JsError::new("Closure already exists"));
         }
+        let ident = self.ident.to_owned();
         let state = self.state.clone();
         let closure = Closure::wrap(Box::new(move || {
             let next = !state.borrow().load(Ordering::Relaxed);
             let state = state.borrow_mut();
             state.store(next, Ordering::Relaxed);
             // send message with sync
-            tx.try_send(next).unwrap();
+            tx.try_send(ident.build_event(InputEventValue::Bool(next)))
+                .unwrap();
         }) as Box<dyn FnMut()>);
 
         self.element
@@ -107,37 +154,18 @@ impl CheckBox {
     }
 }
 
-pub trait SliderValue: Default + Clone + ToString + FromStr + 'static {}
-
-impl SliderValue for u8 {}
-impl SliderValue for u16 {}
-impl SliderValue for u32 {}
-impl SliderValue for u64 {}
-impl SliderValue for i8 {}
-impl SliderValue for i16 {}
-impl SliderValue for i32 {}
-impl SliderValue for i64 {}
-impl SliderValue for f32 {}
-impl SliderValue for f64 {}
-
 /// スライダエレメントの設定を作る
 #[derive(Debug, Clone)]
-pub struct SliderConfig<T>
-where
-    T: SliderValue,
-{
+pub struct SliderConfig {
     // 設定範囲とステップ、初期値を設定
-    pub min: T,
-    pub max: T,
-    pub step: T,
-    pub default: T,
+    pub min: f32,
+    pub max: f32,
+    pub step: f32,
+    pub default: f32,
 }
 
-impl<T> SliderConfig<T>
-where
-    T: SliderValue,
-{
-    pub fn new(min: T, max: T, step: T, default: T) -> Self {
+impl SliderConfig {
+    pub fn new(min: f32, max: f32, step: f32, default: f32) -> Self {
         Self {
             min,
             max,
@@ -154,28 +182,31 @@ where
     }
 }
 
-pub struct SliderInput<T>
+pub struct SliderInput<I>
 where
-    T: SliderValue,
+    I: InputIdent,
 {
     id: String,
     element: web_sys::HtmlInputElement,
-    state: Rc<RefCell<T>>,
+    state: Rc<RefCell<f32>>,
+    ident: I,
 }
 
-impl<T> SliderInput<T>
+impl<I> SliderInput<I>
 where
-    T: SliderValue,
+    I: InputIdent,
 {
-    pub fn new(id: &str, config: SliderConfig<T>) -> Result<Self> {
+    pub fn new(ident: I, config: SliderConfig) -> Result<Self> {
+        let id = ident.id();
         let element = get_html_element::<web_sys::HtmlInputElement>(id)?;
         config.apply(&element);
-        let state = Rc::new(RefCell::new(config.default.clone()));
+        let state = Rc::new(RefCell::new(config.default));
 
         let s = Self {
             id: id.to_string(),
             element,
             state,
+            ident,
         };
         s.init();
 
@@ -187,23 +218,24 @@ where
         let value = self.state.borrow().to_string();
         self.element.set_value(&value);
     }
-
     /// イベントリスナーを登録する
-    pub fn start(&self, mut tx: futures::channel::mpsc::Sender<T>) -> Result<()> {
+    pub fn start(&self, mut tx: mpsc::Sender<InputEvent<I>>) -> Result<()> {
         // check closure
         if contains(&self.id) {
             return Err(JsError::new("Closure already exists"));
         }
         let ele = self.element.clone();
         let state = self.state.clone();
+        let ident = self.ident.to_owned();
         let closure = Closure::wrap(Box::new(move || {
-            let value = match ele.value().parse::<T>() {
+            let value = match ele.value().parse::<f32>() {
                 Ok(v) => v,
                 Err(_) => return,
             };
-            *state.borrow_mut() = value.clone();
+            *state.borrow_mut() = value;
             // send message with sync
-            tx.try_send(value).unwrap();
+            tx.try_send(ident.build_event(InputEventValue::F32(value)))
+                .unwrap();
         }) as Box<dyn FnMut()>);
         self.element
             .set_oninput(Some(closure.as_ref().unchecked_ref()));
@@ -212,7 +244,7 @@ where
     }
 
     /// プログラム側から状態を変更する
-    pub fn apply(&self, value: T) {
+    pub fn apply(&self, value: f32) {
         self.element.set_value(&value.to_string());
         *self.state.borrow_mut() = value;
     }
