@@ -23,6 +23,7 @@ features = [
     "CanvasRenderingContext2d",
     "console",
     "HtmlButtonElement",
+    "HtmlInputElement",
     "HtmlCanvasElement",
     "MouseEvent",
     "Performance",
