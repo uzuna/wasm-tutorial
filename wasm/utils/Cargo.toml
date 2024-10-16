@@ -15,8 +15,9 @@ input = [
     "dep:futures-channel",
     "web-sys/HtmlButtonElement",
     "web-sys/HtmlInputElement",
-    "web-sys/HtmlTextAreaElement",
+    "web-sys/HtmlOptionElement",
     "web-sys/HtmlSelectElement",
+    "web-sys/HtmlTextAreaElement",
 ]
 
 [dependencies]

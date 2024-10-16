@@ -19,22 +19,4 @@ webgl2 = { workspace = true, features = ["vertex", "context", "font-embed", "vie
 
 [dependencies.web-sys]
 workspace = true
-features = [
-    "CanvasRenderingContext2d",
-    "console",
-    "HtmlButtonElement",
-    "HtmlInputElement",
-    "HtmlOptionElement",
-    "HtmlSelectElement",
-    "HtmlCanvasElement",
-    "MouseEvent",
-    "Performance",
-    "WebGl2RenderingContext",
-    "WebGlBuffer",
-    "WebGlFramebuffer",
-    "WebGlRenderbuffer",
-    "WebGlTexture",
-    "WebGlUniformLocation",
-    "WebGlVertexArrayObject",
-    "Window",
-]
+features = []
