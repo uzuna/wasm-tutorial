@@ -55,6 +55,6 @@ where
     }
 
     pub fn remove(&self) {
-        remove_closure(&self.ident.id());
+        remove_closure(self.ident.id());
     }
 }

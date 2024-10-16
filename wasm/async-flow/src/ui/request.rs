@@ -10,6 +10,8 @@ use wasm_utils::{
     },
 };
 
+use crate::util::get_element;
+
 /// 識別子と値を分けずにメッセージの型を定義する
 ///
 /// 1つのチャネルを通じてUIから値を返してくる型の一覧で
@@ -85,6 +87,7 @@ pub struct Ui {
     times: SliderInputWithOutput<Event, u32, TimesFmt>,
     parallel: SliderInputWithOutput<Event, u32, PararellFmt>,
     submit_btn: SubmitBtn<Event>,
+    output: web_sys::Element,
 }
 
 impl Ui {
@@ -108,11 +111,13 @@ impl Ui {
             SliderConfig::new(1, 10, 1, 1),
             par_out,
         )?;
+        let output = get_element::<web_sys::Element>("sleep-output")?;
         Ok(Self {
             dutation,
             times,
             parallel,
             submit_btn,
+            output,
         })
     }
 
@@ -149,6 +154,15 @@ impl Ui {
 
     pub fn enable(&self, enable: bool) {
         self.submit_btn.enable(enable);
+    }
+
+    pub fn append_text(&self, text: &str) {
+        let text = format!("{}<br/>\n{}", self.output.inner_html(), text);
+        self.output.set_inner_html(&text);
+    }
+
+    pub fn clear_text(&self) {
+        self.output.set_inner_html("");
     }
 }
 

@@ -46,12 +46,9 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
             // wait message
             let event = rx1.next().await.unwrap();
             info!("event: {:?}", event);
-            match event {
-                first::Event::Submit => {
-                    ui1.apply(first::Event::Slider1(0.1));
-                    ui1.apply(first::Event::Slider2(20));
-                }
-                _ => {}
+            if event == first::Event::Submit {
+                ui1.apply(first::Event::Slider1(0.1));
+                ui1.apply(first::Event::Slider2(20));
             }
         }
         info!("exit");
@@ -85,28 +82,26 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         while let Some(event) = rx3.next().await {
             // リクエスト処理中はsubmitボタンを無効化
             ui.enable(false);
-            match event {
-                request::Event::Submit => {
-                    let dur = ui.duration();
-                    let times = ui.times();
-                    let parallel = ui.parallel();
-                    // ここからリクエストを送信する。
-                    // この1フローだけではUIからの入力のキャンセルなどは受け付けられない
-                    // stream combinatorsを使って全リクエストのうちn並列で処理する
-                    futures::stream::iter(0..times)
-                        .for_each_concurrent(parallel as usize, |_| async {
-                            let res = gloo_net::http::Request::get(&format!(
-                                "http://localhost:8080/api/sleep/{dur}"
-                            ))
-                            .send()
-                            .await
-                            .expect("Failed to fetch");
-                            let text = res.text().await.expect("Failed to get text");
-                            info!("res: {text}");
-                        })
-                        .await;
-                }
-                _ => {}
+            if event == request::Event::Submit {
+                ui.clear_text();
+                let dur = ui.duration();
+                let times = ui.times();
+                let parallel = ui.parallel();
+                // ここからリクエストを送信する。
+                // この1フローだけではUIからの入力のキャンセルなどは受け付けられない
+                // stream combinatorsを使って全リクエストのうちn並列で処理する
+                futures::stream::iter(0..times)
+                    .for_each_concurrent(parallel as usize, |_| async {
+                        let res = gloo_net::http::Request::get(&format!(
+                            "http://localhost:8080/api/sleep/{dur}"
+                        ))
+                        .send()
+                        .await
+                        .expect("Failed to fetch");
+                        let text = res.text().await.expect("Failed to get text");
+                        ui.append_text(&text);
+                    })
+                    .await;
             }
             ui.enable(true);
         }
@@ -125,19 +120,4 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     info!("start() done");
 
     Ok(())
-}
-
-/// エレメント取得のラッパー
-fn get_element<T>(id: &str) -> Result<T>
-where
-    T: wasm_bindgen::JsCast,
-{
-    web_sys::window()
-        .ok_or(JsError::new("Failed to get window"))?
-        .document()
-        .ok_or(JsError::new("Failed to get document"))?
-        .get_element_by_id(id)
-        .ok_or(JsError::new(&format!("Failed to get element: {id}")))?
-        .dyn_into::<T>()
-        .map_err(|_| JsError::new(&format!("Failed to convert Element: {id}")))
 }
