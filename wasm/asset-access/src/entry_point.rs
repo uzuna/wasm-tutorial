@@ -1,19 +1,22 @@
 use core::f32;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::atomic::AtomicBool};
 
+use futures_util::StreamExt;
 use fxhash::FxHashMap;
 use nalgebra::Vector2;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use wasm_utils::{
-    animation::{AnimationLoop, PlayStopButton},
-    error,
+    animation::{
+        ctrl::{AnimationCtrl, PlayStopButton},
+        AnimationLoop,
+    },
     error::*,
     info,
     mouse::{self, MouseEventMessage},
     waitgroup::{WaitGroup, Worker},
 };
-use web_sys::{HtmlButtonElement, HtmlCanvasElement, HtmlImageElement};
+use web_sys::{HtmlCanvasElement, HtmlImageElement};
 use webgl2::{
     context::{gl_clear_color, Context, COLOR_BLACK},
     gl,
@@ -38,10 +41,7 @@ pub fn init() -> Result<()> {
 }
 
 #[wasm_bindgen]
-pub fn start(
-    canvas: HtmlCanvasElement,
-    play_pause_btn: HtmlButtonElement,
-) -> std::result::Result<(), JsValue> {
+pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     check_memory_usage("start");
     canvas.set_width(1000);
     canvas.set_height(600);
@@ -159,12 +159,16 @@ pub fn start(
     });
 
     // ボタンを押すとアニメーションが開始する
-    let mut btn = PlayStopButton::new(play_pause_btn, a);
-    btn.play();
-    let playing_flag = btn.flag();
-    let ctx = btn.start();
-    // JSに戻したらGCで回収されたためforgetする
-    ctx.forget();
+    let (tx, mut rx) = futures_channel::mpsc::channel(1);
+    let btn = PlayStopButton::new(a, false)?;
+    btn.start(tx)?;
+    let playing_flag = Rc::new(AtomicBool::new(false));
+    let playing_flag_clone = playing_flag.clone();
+    wasm_bindgen_futures::spawn_local(async move {
+        while let Some(AnimationCtrl::Playing(playing)) = rx.next().await {
+            playing_flag_clone.store(playing, std::sync::atomic::Ordering::Relaxed);
+        }
+    });
 
     // メモリリークの有無を確認するためにテクスチャを定期的に読み出す
     // 実際にforgetではメモリ使用量が増える付けることが確認できた
@@ -175,10 +179,7 @@ pub fn start(
         gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
             .for_each(|_| {
                 // アニメーションが停止している場合は読み込まない
-                if !playing_flag
-                    .borrow()
-                    .load(std::sync::atomic::Ordering::Relaxed)
-                {
+                if !playing_flag.load(std::sync::atomic::Ordering::Relaxed) {
                     return ready(());
                 }
                 let wg = WaitGroup::new();
@@ -252,7 +253,7 @@ fn load_texture(glctx: Context, src: &str, mut cb: impl FnMut(Texture) + 'static
             match texture {
                 Ok(texture) => cb(texture),
                 Err(_e) => {
-                    error!("failed to create texture");
+                    wasm_utils::error!("failed to create texture");
                 }
             }
         }) as Box<dyn FnMut()>);
