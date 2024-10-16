@@ -13,6 +13,7 @@ mouse = ["dep:fxhash", "web-sys/MouseEvent", "web-sys/WheelEvent", "web-sys/AddE
 input = [
     "dep:fxhash",
     "dep:futures-channel",
+    "dep:futures-util",
     "web-sys/HtmlButtonElement",
     "web-sys/HtmlInputElement",
     "web-sys/HtmlOptionElement",
@@ -26,6 +27,7 @@ futures-channel = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 fxhash = { workspace = true, optional = true }
 wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
 
 [dependencies.web-sys]
 workspace = true

@@ -5,5 +5,4 @@ import init, { start } from "./pkg/plot.js";
 await init();
 
 const canvas_webgl = document.getElementById("webgl-canvas");
-const play_pause_btn = document.getElementById("play-pause");
-const context = start(canvas_webgl, play_pause_btn);
+const context = start(canvas_webgl);

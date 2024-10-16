@@ -48,6 +48,10 @@ where
         Ok(())
     }
 
+    pub fn set_text(&self, text: Option<&str>) {
+        self.element.set_text_content(text);
+    }
+
     pub fn remove(&self) {
         remove_closure(self.ident.id());
     }

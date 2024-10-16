@@ -3,8 +3,11 @@ use std::{cell::RefCell, rc::Rc, sync::atomic::AtomicBool, time::Duration};
 use rand::Rng;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use wasm_bindgen::prelude::*;
-use wasm_utils::{animation::PlayStopButton, error::*};
-use web_sys::{HtmlButtonElement, HtmlCanvasElement};
+use wasm_utils::{
+    animation::ctrl::{AnimationCtrl, PlayStopButton},
+    error::*,
+};
+use web_sys::HtmlCanvasElement;
 use webgl2::{
     context::Context,
     font::{Align, TextShader},
@@ -23,10 +26,7 @@ pub fn init() -> Result<()> {
 }
 
 #[wasm_bindgen]
-pub fn start(
-    canvas: HtmlCanvasElement,
-    play_pause_btn: HtmlButtonElement,
-) -> std::result::Result<(), JsValue> {
+pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     canvas.set_width(1024);
     canvas.set_height(768);
 
@@ -35,7 +35,9 @@ pub fn start(
     let gl = ctx.gl().clone();
     webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
 
-    let playing = Rc::new(RefCell::new(AtomicBool::new(false)));
+    let initial_value = false;
+
+    let playing = Rc::new(RefCell::new(AtomicBool::new(initial_value)));
 
     // 1Chart単位を手で組む
     let mut chart = Chart::new(&ctx, viewport.local(0, 0, 1024, 128))?;
@@ -131,12 +133,17 @@ pub fn start(
         Ok(())
     });
 
-    // TODO: 止めるべきはAnimationLoopのインスタンスではなく、データ更新部分では?
-    let btn = PlayStopButton::new_with_flag(play_pause_btn, a, playing);
+    let (tx, mut rx) = futures::channel::mpsc::channel(1);
+    let btn = PlayStopButton::new(a, initial_value)?;
+    btn.start(tx)?;
+    wasm_bindgen_futures::spawn_local(async move {
+        while let Some(AnimationCtrl::Playing(x)) = futures::StreamExt::next(&mut rx).await {
+            playing
+                .borrow_mut()
+                .store(x, std::sync::atomic::Ordering::Relaxed);
+        }
+    });
 
-    let ctx = btn.start();
-    // JSに戻したらGCで回収されたためforgetする
-    ctx.forget();
     Ok(())
 }
 
