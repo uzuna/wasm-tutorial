@@ -107,4 +107,8 @@ where
         self.element.set_value(&value.to_string());
         *self.state.borrow_mut() = value;
     }
+
+    pub fn remove(&self) {
+        remove_closure(self.ident.id());
+    }
 }

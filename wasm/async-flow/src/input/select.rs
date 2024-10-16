@@ -72,4 +72,13 @@ where
         insert(self.ident.id(), closure);
         Ok(())
     }
+
+    pub fn apply(&self, value: O) {
+        *self.state.borrow_mut() = value;
+        self.element.set_value(value.value());
+    }
+
+    pub fn remove(&self) {
+        remove_closure(self.ident.id());
+    }
 }

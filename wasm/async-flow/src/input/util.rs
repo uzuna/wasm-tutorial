@@ -64,3 +64,9 @@ pub(super) fn add_event_listener(
         .map_err(|_| JsError::new("Failed to add event listener"))?;
     Ok(())
 }
+
+pub(super) fn remove_closure(id: &str) {
+    SELECT_CLOSURES.with(|closures| {
+        closures.borrow_mut().remove(id);
+    });
+}

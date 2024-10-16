@@ -14,7 +14,6 @@ use super::{util::*, InputBool, InputIdent};
 ///
 /// フォーム入力後の送信などエッジトリガーとしての役割を持っている
 pub struct SubmitBtn<I> {
-    id: String,
     element: web_sys::HtmlButtonElement,
     ident: I,
 }
@@ -26,16 +25,12 @@ where
     pub fn new(ident: I) -> Result<Self> {
         let id = ident.id();
         let element = get_element::<web_sys::HtmlButtonElement>(id)?;
-        Ok(Self {
-            id: id.to_string(),
-            ident,
-            element,
-        })
+        Ok(Self { ident, element })
     }
 
     pub fn start(&self, mut tx: mpsc::Sender<I>) -> Result<()> {
         // check closure
-        if contains(&self.id) {
+        if contains(self.ident.id()) {
             return Err(JsError::new("Closure already exists"));
         }
         let ident = self.ident;
@@ -49,8 +44,12 @@ where
             closure.as_ref(),
         )?;
         // register closure
-        insert(&self.id, closure);
+        insert(self.ident.id(), closure);
         Ok(())
+    }
+
+    pub fn remove(&self) {
+        remove_closure(self.ident.id());
     }
 }
 
@@ -116,5 +115,9 @@ where
     pub fn apply(&self, value: bool) {
         self.state.borrow_mut().store(value, Ordering::Relaxed);
         self.element.set_checked(value);
+    }
+
+    pub fn remove(&self) {
+        remove_closure(&self.ident.id());
     }
 }
