@@ -4,8 +4,10 @@ use wasm_utils::{error::*, info};
 use web_sys::HtmlCanvasElement;
 
 use crate::input::{
-    CheckBox, InputBool, InputF32, InputIdent, InputOption, OptionExample, SelectInput,
-    SliderConfig, SliderInput, SubmitBtn,
+    button::{CheckBox, SubmitBtn},
+    select::SelectInput,
+    slider::{SliderConfig, SliderInput},
+    InputBool, InputF32, InputIdent, InputOption, SelectOption,
 };
 
 #[wasm_bindgen(start)]
@@ -61,6 +63,52 @@ impl InputF32 for PositionMsg {
         match self {
             PositionMsg::Slider(_) => Ok(PositionMsg::Slider(value)),
             _ => Err(JsError::new("not f32")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OptionExample {
+    Off,
+    Normal,
+    Dark,
+    Bright,
+}
+
+impl OptionExample {
+    const ALL: [Self; 4] = [Self::Off, Self::Normal, Self::Dark, Self::Bright];
+}
+
+impl SelectOption for OptionExample {
+    fn iter() -> &'static [Self] {
+        &Self::ALL
+    }
+
+    fn value(&self) -> &str {
+        match self {
+            Self::Off => "off",
+            Self::Normal => "normal",
+            Self::Dark => "dark",
+            Self::Bright => "bright",
+        }
+    }
+
+    fn text(&self) -> &str {
+        match self {
+            Self::Off => "Off",
+            Self::Normal => "Normal",
+            Self::Dark => "Dark",
+            Self::Bright => "Bright",
+        }
+    }
+
+    fn from_str(value: &str) -> Self {
+        match value {
+            "off" => Self::Off,
+            "normal" => Self::Normal,
+            "dark" => Self::Dark,
+            "bright" => Self::Bright,
+            _ => panic!("invalid value: {}", value),
         }
     }
 }
