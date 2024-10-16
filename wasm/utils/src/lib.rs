@@ -9,3 +9,6 @@ pub mod waitgroup;
 
 #[cfg(feature = "mouse")]
 pub mod mouse;
+
+#[cfg(feature = "input")]
+pub mod input;

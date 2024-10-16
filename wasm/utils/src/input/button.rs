@@ -4,11 +4,11 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use futures::channel::mpsc;
+use futures_channel::mpsc;
 use wasm_bindgen::prelude::*;
-use wasm_utils::error::*;
 
 use super::{util::*, InputBool, InputIdent};
+use crate::error::*;
 
 /// Submitボタンの実装
 ///

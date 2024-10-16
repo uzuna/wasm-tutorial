@@ -2,7 +2,8 @@ use std::cell::RefCell;
 
 use fxhash::FxHashMap;
 use wasm_bindgen::prelude::*;
-use wasm_utils::error::*;
+
+use crate::error::*;
 
 thread_local! {
     /// JSに登録するClosureはそのままではWASM空間内ではライフタイムが切れてしまう

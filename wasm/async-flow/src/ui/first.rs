@@ -2,12 +2,14 @@
 
 use futures::channel::mpsc::Receiver;
 use wasm_bindgen::prelude::*;
-use wasm_utils::error::*;
 
-use crate::input::{
-    button::{CheckBox, SubmitBtn},
-    slider::{SliderConfig, SliderInput},
-    InputBool, InputIdent, InputNumber,
+use wasm_utils::{
+    error::*,
+    input::{
+        button::{CheckBox, SubmitBtn},
+        slider::{SliderConfig, SliderInput},
+        InputBool, InputIdent, InputNumber,
+    },
 };
 
 /// 識別子と値を分けずにメッセージの型を定義する
@@ -82,6 +84,7 @@ impl InputNumber<u16> for Event {
     }
 }
 
+/// プログラム側からUIを操作するための構造体
 pub struct Ui {
     submit_btn: SubmitBtn<Event>,
     toggle_btn: CheckBox<Event>,

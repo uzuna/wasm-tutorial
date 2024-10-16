@@ -2,9 +2,10 @@
 
 use futures::channel::mpsc::Receiver;
 use wasm_bindgen::prelude::*;
-use wasm_utils::error::*;
-
-use crate::input::{select::SelectInput, InputIdent, InputOption, SelectOption};
+use wasm_utils::{
+    error::*,
+    input::{select::SelectInput, InputIdent, InputOption, SelectOption},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OptionMode {
@@ -100,63 +101,85 @@ impl SelectOption for OptionStrength {
 
 /// 上3苞は別のチャネルで送受信するメッセージの型
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum InputEvent {
+pub enum Event {
     Select1(OptionMode),
     Select2(OptionStrength),
 }
 
-impl InputIdent for InputEvent {
+impl InputIdent for Event {
     fn id(&self) -> &'static str {
         match self {
-            InputEvent::Select1(_) => "selectbox1",
-            InputEvent::Select2(_) => "selectbox2",
+            Event::Select1(_) => "selectbox1",
+            Event::Select2(_) => "selectbox2",
         }
     }
 }
 
-impl InputOption<OptionMode> for InputEvent {
+impl InputOption<OptionMode> for Event {
     fn value(&self) -> Result<OptionMode> {
         match self {
-            InputEvent::Select1(v) => Ok(*v),
-            InputEvent::Select2(_) => Err(JsError::new("not OptionMode")),
-            _ => Err(JsError::new("not OptionMode")),
+            Event::Select1(v) => Ok(*v),
+            Event::Select2(_) => Err(JsError::new("not OptionMode")),
         }
     }
     fn with_value(&self, value: OptionMode) -> Result<Self> {
         match self {
-            InputEvent::Select1(_) => Ok(InputEvent::Select1(value)),
-            InputEvent::Select2(_) => Err(JsError::new("not OptionMode")),
-            _ => Err(JsError::new("not OptionMode")),
+            Event::Select1(_) => Ok(Event::Select1(value)),
+            Event::Select2(_) => Err(JsError::new("not OptionMode")),
         }
     }
 }
 
-impl InputOption<OptionStrength> for InputEvent {
+impl InputOption<OptionStrength> for Event {
     fn value(&self) -> Result<OptionStrength> {
         match self {
-            InputEvent::Select1(_) => Err(JsError::new("not OptionStrength")),
-            InputEvent::Select2(v) => Ok(*v),
-            _ => Err(JsError::new("not OptionStrength")),
+            Event::Select1(_) => Err(JsError::new("not OptionStrength")),
+            Event::Select2(v) => Ok(*v),
         }
     }
     fn with_value(&self, value: OptionStrength) -> Result<Self> {
         match self {
-            InputEvent::Select1(_) => Err(JsError::new("not OptionStrength")),
-            InputEvent::Select2(_) => Ok(InputEvent::Select2(value)),
-            _ => Err(JsError::new("not OptionStrength")),
+            Event::Select1(_) => Err(JsError::new("not OptionStrength")),
+            Event::Select2(_) => Ok(Event::Select2(value)),
         }
     }
 }
 
-pub fn start() -> Result<Receiver<InputEvent>> {
-    let (tx, rx) = futures::channel::mpsc::channel(1);
-    let select =
-        SelectInput::<InputEvent, OptionMode>::new(InputEvent::Select1(OptionMode::Normal))?;
-    select.start(tx.clone())?;
+pub struct Ui {
+    select1: SelectInput<Event, OptionMode>,
+    select2: SelectInput<Event, OptionStrength>,
+}
 
-    let select = SelectInput::<InputEvent, OptionStrength>::new(InputEvent::Select2(
-        OptionStrength::Strict,
-    ))?;
-    select.start(tx)?;
-    Ok(rx)
+impl Ui {
+    pub fn new() -> Result<Self> {
+        let select1 = SelectInput::<Event, OptionMode>::new(Event::Select1(OptionMode::Normal))?;
+        let select2 =
+            SelectInput::<Event, OptionStrength>::new(Event::Select2(OptionStrength::Strict))?;
+        Ok(Self { select1, select2 })
+    }
+
+    pub fn start(&self, tx: futures::channel::mpsc::Sender<Event>) -> Result<()> {
+        self.select1.start(tx.clone())?;
+        self.select2.start(tx)?;
+        Ok(())
+    }
+
+    pub fn apply(&self, event: Event) {
+        match event {
+            Event::Select1(v) => self.select1.apply(v),
+            Event::Select2(v) => self.select2.apply(v),
+        }
+    }
+
+    pub fn remove(&self) {
+        self.select1.remove();
+        self.select2.remove();
+    }
+}
+
+pub fn start() -> Result<(Ui, Receiver<Event>)> {
+    let (tx, rx) = futures::channel::mpsc::channel(1);
+    let ui = Ui::new()?;
+    ui.start(tx)?;
+    Ok((ui, rx))
 }

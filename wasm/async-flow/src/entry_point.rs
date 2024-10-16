@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 use wasm_utils::{error::*, info};
 use web_sys::HtmlCanvasElement;
 
-use crate::ui::first::Event;
+use crate::ui::{first, second};
 
 #[wasm_bindgen(start)]
 pub fn init() -> Result<()> {
@@ -19,7 +19,7 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     info!("start");
 
     let (ui1, mut rx1) = crate::ui::first::start()?;
-    let mut rx2 = crate::ui::second::start()?;
+    let (ui2, mut rx2) = crate::ui::second::start()?;
 
     wasm_bindgen_futures::spawn_local(async move {
         info!("spawn_local");
@@ -28,9 +28,9 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
             let event = rx1.next().await.unwrap();
             info!("event: {:?}", event);
             match event {
-                Event::Submit => {
-                    ui1.apply(Event::Slider1(0.1));
-                    ui1.apply(Event::Slider2(20));
+                first::Event::Submit => {
+                    ui1.apply(first::Event::Slider1(0.1));
+                    ui1.apply(first::Event::Slider2(20));
                 }
                 _ => {}
             }
@@ -46,6 +46,12 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
             // wait message
             let event = rx2.next().await.unwrap();
             info!("event: {:?}", event);
+            match event {
+                second::Event::Select1(second::OptionMode::Off) => {
+                    ui2.apply(second::Event::Select2(second::OptionStrength::Off));
+                }
+                _ => {}
+            }
         }
         info!("exit");
     });

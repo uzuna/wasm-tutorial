@@ -1,10 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
-use futures::channel::mpsc;
+use futures_channel::mpsc;
 use wasm_bindgen::prelude::*;
-use wasm_utils::error::*;
 
 use super::{util::*, InputIdent, InputOption, SelectOption};
+use crate::error::*;
 
 /// セレクトボックスの実装
 ///

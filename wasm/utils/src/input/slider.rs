@@ -1,10 +1,10 @@
 use std::{cell::RefCell, fmt::Debug, rc::Rc, str::FromStr};
 
-use futures::channel::mpsc;
+use futures_channel::mpsc;
 use wasm_bindgen::prelude::*;
-use wasm_utils::error::*;
 
 use super::{util::*, InputIdent, InputNumber};
+use crate::error::*;
 
 /// スライダエレメントの設定を作る
 #[derive(Debug, Clone)]

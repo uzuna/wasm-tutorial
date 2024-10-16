@@ -14,7 +14,7 @@ futures.workspace = true
 fxhash.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
-wasm-utils = { workspace = true }
+wasm-utils = { workspace = true, features = ["input"] }
 webgl2 = { workspace = true, features = ["vertex", "context", "font-embed", "viewport"] }
 
 [dependencies.web-sys]

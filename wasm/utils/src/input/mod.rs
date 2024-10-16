@@ -1,4 +1,4 @@
-use wasm_utils::error::*;
+use crate::error::*;
 
 pub mod button;
 pub mod select;
