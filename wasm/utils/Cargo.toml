@@ -10,7 +10,14 @@ rust-version.workspace = true
 default = ["console_error_panic_hook"]
 waitgroup = ["dep:futures-channel", "dep:futures-util"]
 mouse = ["dep:fxhash", "web-sys/MouseEvent", "web-sys/WheelEvent", "web-sys/AddEventListenerOptions"]
-input = ["dep:fxhash", "dep:futures-channel"]
+input = [
+    "dep:fxhash",
+    "dep:futures-channel",
+    "web-sys/HtmlButtonElement",
+    "web-sys/HtmlInputElement",
+    "web-sys/HtmlTextAreaElement",
+    "web-sys/HtmlSelectElement",
+]
 
 [dependencies]
 console_error_panic_hook = { workspace = true, optional = true }

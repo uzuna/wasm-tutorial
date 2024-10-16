@@ -3,10 +3,11 @@ use crate::error::*;
 pub mod button;
 pub mod select;
 pub mod slider;
+pub mod textarea;
 mod util;
 
 /// HTML側のエレメントを探すための識別子を返す
-pub trait InputIdent: Copy + 'static {
+pub trait InputIdent: Clone + 'static {
     fn id(&self) -> &'static str;
 }
 
@@ -36,4 +37,9 @@ pub trait SelectOption: Copy + Sized + 'static {
     fn value(&self) -> &str;
     fn text(&self) -> &str;
     fn from_str(value: &str) -> Self;
+}
+
+pub trait InputString: Sized {
+    fn value(&self) -> Result<String>;
+    fn with_value(&self, value: String) -> Result<Self>;
 }

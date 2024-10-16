@@ -33,10 +33,10 @@ where
         if contains(self.ident.id()) {
             return Err(JsError::new("Closure already exists"));
         }
-        let ident = self.ident;
+        let ident = self.ident.clone();
         let closure = Closure::wrap(Box::new(move || {
             // send message with sync
-            tx.try_send(ident).unwrap();
+            tx.try_send(ident.clone()).unwrap();
         }) as Box<dyn FnMut()>);
         add_event_listener(
             self.element.dyn_ref::<web_sys::EventTarget>().unwrap(),
@@ -94,7 +94,7 @@ where
         if contains(self.ident.id()) {
             return Err(JsError::new("Closure already exists"));
         }
-        let ident = self.ident;
+        let ident = self.ident.clone();
         let state = self.state.clone();
         let closure = Closure::wrap(Box::new(move || {
             let next = !state.borrow().load(Ordering::Relaxed);
