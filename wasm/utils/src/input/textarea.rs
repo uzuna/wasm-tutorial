@@ -29,7 +29,10 @@ where
     pub fn start(&self, mut tx: mpsc::Sender<I>) -> Result<()> {
         // check closure
         if contains(self.ident.id()) {
-            return Err(JsError::new("Closure already exists"));
+            return Err(JsError::new(&format!(
+                "Closure already exists: {}",
+                self.ident.id()
+            )));
         }
         let ident = self.ident.clone();
         let ele = self.element.clone();

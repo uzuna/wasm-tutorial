@@ -3,7 +3,7 @@ use std::rc::Rc;
 use futures::StreamExt;
 use wasm_bindgen::prelude::*;
 use wasm_utils::{animation::AnimationLoop, error::*, info};
-use web_sys::{Element, HtmlCanvasElement};
+use web_sys::HtmlCanvasElement;
 use webgl2::{
     context::{Context, COLOR_BLACK},
     font::{Align, TextShader},
@@ -87,20 +87,24 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
             ui.enable(false);
             match event {
                 request::Event::Submit => {
-                    info!("request::Event::Submit");
                     let dur = ui.duration();
+                    let times = ui.times();
+                    let parallel = ui.parallel();
                     // ここからリクエストを送信する。
                     // この1フローだけではUIからの入力のキャンセルなどは受け付けられない
-                    for _ in 0..ui.times() {
-                        let res = gloo_net::http::Request::get(&format!(
-                            "http://localhost:8080/api/sleep/{dur}"
-                        ))
-                        .send()
-                        .await
-                        .expect("Failed to fetch");
-                        let text = res.text().await.expect("Failed to get text");
-                        info!("res: {text}");
-                    }
+                    // stream combinatorsを使って全リクエストのうちn並列で処理する
+                    futures::stream::iter(0..times)
+                        .for_each_concurrent(parallel as usize, |_| async {
+                            let res = gloo_net::http::Request::get(&format!(
+                                "http://localhost:8080/api/sleep/{dur}"
+                            ))
+                            .send()
+                            .await
+                            .expect("Failed to fetch");
+                            let text = res.text().await.expect("Failed to get text");
+                            info!("res: {text}");
+                        })
+                        .await;
                 }
                 _ => {}
             }

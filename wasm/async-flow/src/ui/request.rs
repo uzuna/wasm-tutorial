@@ -5,7 +5,7 @@ use wasm_utils::{
     error::*,
     input::{
         button::SubmitBtn,
-        slider::{OutputFmt, SliderConfig, SliderFormat, SliderInput, SliderInputWithOutput},
+        slider::{OutputFmt, SliderConfig, SliderFormat, SliderInputWithOutput},
         InputIdent, InputNumber,
     },
 };
@@ -18,6 +18,7 @@ use wasm_utils::{
 pub enum Event {
     Duration(u32),
     Times(u32),
+    Parallel(u32),
     Submit,
 }
 
@@ -26,6 +27,7 @@ impl InputIdent for Event {
         match self {
             Event::Duration(_) => "sleep-duration",
             Event::Times(_) => "sleep-times",
+            Event::Parallel(_) => "sleep-parallel",
             Event::Submit => "sleep-apply",
         }
     }
@@ -36,6 +38,7 @@ impl InputNumber<u32> for Event {
         match self {
             Event::Duration(v) => Ok(*v),
             Event::Times(v) => Ok(*v),
+            Event::Parallel(v) => Ok(*v),
             _ => Err(JsError::new("not u32")),
         }
     }
@@ -43,6 +46,7 @@ impl InputNumber<u32> for Event {
         match self {
             Event::Duration(_) => Ok(Event::Duration(value)),
             Event::Times(_) => Ok(Event::Times(value)),
+            Event::Parallel(_) => Ok(Event::Parallel(value)),
             _ => Err(JsError::new("not u32")),
         }
     }
@@ -66,10 +70,20 @@ impl SliderFormat<u32> for TimesFmt {
     }
 }
 
+#[derive(Clone)]
+pub struct PararellFmt;
+
+impl SliderFormat<u32> for PararellFmt {
+    fn format(&self, value: &u32) -> String {
+        format!("{} par", value)
+    }
+}
+
 /// プログラム側からUIを操作するための構造体
 pub struct Ui {
     dutation: SliderInputWithOutput<Event, u32, DurationFmt>,
     times: SliderInputWithOutput<Event, u32, TimesFmt>,
+    parallel: SliderInputWithOutput<Event, u32, PararellFmt>,
     submit_btn: SubmitBtn<Event>,
 }
 
@@ -88,9 +102,16 @@ impl Ui {
             SliderConfig::new(1, 100, 1, 1),
             times_out,
         )?;
+        let par_out = OutputFmt::by_id("sleep-parallel-value", PararellFmt)?;
+        let parallel = SliderInputWithOutput::new(
+            Event::Parallel(1),
+            SliderConfig::new(1, 10, 1, 1),
+            par_out,
+        )?;
         Ok(Self {
             dutation,
             times,
+            parallel,
             submit_btn,
         })
     }
@@ -103,11 +124,16 @@ impl Ui {
         self.times.value()
     }
 
+    pub fn parallel(&self) -> u32 {
+        self.parallel.value()
+    }
+
     /// イベントリスナーを登録して入力を受け付ける
     pub fn start(&self, tx: futures::channel::mpsc::Sender<Event>) -> Result<()> {
         self.submit_btn.start(tx.clone())?;
         self.dutation.start(tx.clone())?;
-        self.times.start(tx)?;
+        self.times.start(tx.clone())?;
+        self.parallel.start(tx)?;
         Ok(())
     }
 
@@ -116,6 +142,7 @@ impl Ui {
         match event {
             Event::Duration(v) => self.dutation.apply(v),
             Event::Times(v) => self.times.apply(v),
+            Event::Parallel(v) => self.parallel.apply(v),
             _ => {}
         }
     }
