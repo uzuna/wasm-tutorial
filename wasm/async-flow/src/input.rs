@@ -15,37 +15,35 @@ thread_local! {
     pub(super) static SELECT_CLOSURES: RefCell<FxHashMap<String,Closure<dyn FnMut()>>> = RefCell::new(FxHashMap::default());
 }
 
-pub trait InputIdent: Debug + Clone + Copy + PartialEq + Eq + 'static {
-    fn build_event(&self, value: InputEventValue) -> InputEvent<Self>;
+/// HTML側のエレメントを探すための識別子を返す
+pub trait InputIdent: Copy + 'static {
     fn id(&self) -> &'static str;
 }
 
-#[derive(Debug)]
-pub struct InputEvent<I>
+/// CheckBoxなどのBool型の場合に実装する
+pub trait InputBool: Sized {
+    fn value(&self) -> Result<bool>;
+    fn with_value(&self, value: bool) -> Result<Self>;
+}
+
+/// f32型の場合に実装する
+pub trait InputF32: Sized {
+    fn value(&self) -> Result<f32>;
+    fn with_value(&self, value: f32) -> Result<Self>;
+}
+
+/// SelectInputの場合に実装する
+pub trait InputOption<O>: Sized
 where
-    I: InputIdent,
+    O: SelectOption,
 {
-    pub ident: I,
-    pub value: InputEventValue,
+    fn value(&self) -> Result<O>;
+    fn with_value(&self, value: O) -> Result<Self>;
 }
 
-impl<I> InputEvent<I>
-where
-    I: InputIdent,
-{
-    pub fn new(ident: I, value: InputEventValue) -> Self {
-        Self { ident, value }
-    }
-}
-
-#[derive(Debug)]
-pub enum InputEventValue {
-    EdgeTrigger,
-    Bool(bool),
-    F32(f32),
-}
-
-/// AnimationLoopに再生、停止のインタラクションを追加
+/// Submitボタンの実装
+///
+/// フォーム入力後の送信などエッジトリガーとしての役割を持っている
 pub struct SubmitBtn<I> {
     id: String,
     element: web_sys::HtmlButtonElement,
@@ -66,16 +64,15 @@ where
         })
     }
 
-    pub fn start(&self, mut tx: mpsc::Sender<InputEvent<I>>) -> Result<()> {
+    pub fn start(&self, mut tx: mpsc::Sender<I>) -> Result<()> {
         // check closure
         if contains(&self.id) {
             return Err(JsError::new("Closure already exists"));
         }
-        let ident = self.ident.to_owned();
+        let ident = self.ident;
         let closure = Closure::wrap(Box::new(move || {
             // send message with sync
-            tx.try_send(ident.build_event(InputEventValue::EdgeTrigger))
-                .unwrap();
+            tx.try_send(ident).unwrap();
         }) as Box<dyn FnMut()>);
         add_event_listener(
             self.element.dyn_ref::<web_sys::EventTarget>().unwrap(),
@@ -88,9 +85,10 @@ where
     }
 }
 
-/// レベルトリガーのチェックボックス
+/// チェックボックス向けの実装
+///
+/// boolの状態を持つレベルトリガーのような役割をもつ
 pub struct CheckBox<I> {
-    id: String,
     element: web_sys::HtmlInputElement,
     state: Rc<RefCell<AtomicBool>>,
     ident: I,
@@ -98,15 +96,14 @@ pub struct CheckBox<I> {
 
 impl<I> CheckBox<I>
 where
-    I: InputIdent,
+    I: InputIdent + InputBool,
 {
-    pub fn new(ident: I, initial_value: bool) -> Result<Self> {
+    pub fn new(ident: I) -> Result<Self> {
         let id = ident.id();
         let element = get_html_element::<web_sys::HtmlInputElement>(id)?;
-        let state = Rc::new(RefCell::new(AtomicBool::new(initial_value)));
+        let state = Rc::new(RefCell::new(AtomicBool::new(ident.value()?)));
 
         let s = Self {
-            id: id.to_string(),
             element,
             state,
             ident,
@@ -124,26 +121,25 @@ where
     }
 
     /// イベントリスナーを登録する
-    pub fn start(&self, mut tx: mpsc::Sender<InputEvent<I>>) -> Result<()> {
+    pub fn start(&self, mut tx: mpsc::Sender<I>) -> Result<()> {
         // check closure
-        if contains(&self.id) {
+        if contains(&self.ident.id()) {
             return Err(JsError::new("Closure already exists"));
         }
-        let ident = self.ident.to_owned();
+        let ident = self.ident;
         let state = self.state.clone();
         let closure = Closure::wrap(Box::new(move || {
             let next = !state.borrow().load(Ordering::Relaxed);
             let state = state.borrow_mut();
             state.store(next, Ordering::Relaxed);
             // send message with sync
-            tx.try_send(ident.build_event(InputEventValue::Bool(next)))
-                .unwrap();
+            tx.try_send(ident.with_value(next).unwrap()).unwrap();
         }) as Box<dyn FnMut()>);
 
         self.element
             .set_oninput(Some(closure.as_ref().unchecked_ref()));
         // register closure
-        insert(&self.id, closure);
+        insert(&self.ident.id(), closure);
         Ok(())
     }
 
@@ -182,11 +178,13 @@ impl SliderConfig {
     }
 }
 
+/// スライダーの実装
+///
+/// 任意の値域を持ちその値を返す
 pub struct SliderInput<I>
 where
     I: InputIdent,
 {
-    id: String,
     element: web_sys::HtmlInputElement,
     state: Rc<RefCell<f32>>,
     ident: I,
@@ -194,16 +192,17 @@ where
 
 impl<I> SliderInput<I>
 where
-    I: InputIdent,
+    I: InputIdent + InputF32,
 {
-    pub fn new(ident: I, config: SliderConfig) -> Result<Self> {
+    pub fn new(ident: I, mut config: SliderConfig) -> Result<Self> {
         let id = ident.id();
         let element = get_html_element::<web_sys::HtmlInputElement>(id)?;
+        let default = ident.value()?;
+        config.default = default;
         config.apply(&element);
         let state = Rc::new(RefCell::new(config.default));
 
         let s = Self {
-            id: id.to_string(),
             element,
             state,
             ident,
@@ -220,9 +219,9 @@ where
     }
 
     /// イベントリスナーを登録する
-    pub fn start(&self, mut tx: mpsc::Sender<InputEvent<I>>) -> Result<()> {
+    pub fn start(&self, mut tx: mpsc::Sender<I>) -> Result<()> {
         // check closure
-        if contains(&self.id) {
+        if contains(&self.ident.id()) {
             return Err(JsError::new("Closure already exists"));
         }
         let ele = self.element.clone();
@@ -235,12 +234,11 @@ where
             };
             *state.borrow_mut() = value;
             // send message with sync
-            tx.try_send(ident.build_event(InputEventValue::F32(value)))
-                .unwrap();
+            tx.try_send(ident.with_value(value).unwrap()).unwrap();
         }) as Box<dyn FnMut()>);
         self.element
             .set_oninput(Some(closure.as_ref().unchecked_ref()));
-        insert(&self.id, closure);
+        insert(&self.ident.id(), closure);
         Ok(())
     }
 
@@ -304,6 +302,9 @@ impl SelectOption for OptionExample {
     }
 }
 
+/// セレクトボックスの実装
+///
+/// 別途指定されたOption型を持ち、その値を返す
 pub struct SelectInput<I, O>
 where
     I: InputIdent,
@@ -316,13 +317,13 @@ where
 
 impl<I, O> SelectInput<I, O>
 where
-    I: InputIdent,
+    I: InputIdent + InputOption<O>,
     O: SelectOption,
 {
-    pub fn new(ident: I, initial_value: O) -> Result<Self> {
+    pub fn new(ident: I) -> Result<Self> {
         let id = ident.id();
         let element = get_html_element::<web_sys::HtmlSelectElement>(id)?;
-        let state = Rc::new(RefCell::new(initial_value));
+        let state = Rc::new(RefCell::new(ident.value()?));
 
         let s = Self {
             ident,
@@ -348,7 +349,7 @@ where
     }
 
     /// イベントリスナーを登録する
-    pub fn start(&self, mut tx: mpsc::Sender<(I, O)>) -> Result<()> {
+    pub fn start(&self, mut tx: mpsc::Sender<I>) -> Result<()> {
         // check closure
         if contains(self.ident.id()) {
             return Err(JsError::new("Closure already exists"));
@@ -360,7 +361,7 @@ where
             let value = O::from_str(&ele.value());
             *state.borrow_mut() = value;
             // send message with sync
-            tx.try_send((ident, value)).unwrap();
+            tx.try_send(ident.with_value(value).unwrap()).unwrap();
         }) as Box<dyn FnMut()>);
         self.element
             .set_oninput(Some(closure.as_ref().unchecked_ref()));

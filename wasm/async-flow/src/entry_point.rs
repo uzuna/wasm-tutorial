@@ -4,8 +4,8 @@ use wasm_utils::{error::*, info};
 use web_sys::HtmlCanvasElement;
 
 use crate::input::{
-    CheckBox, InputEvent, InputEventValue, InputIdent, OptionExample, SelectInput, SliderConfig,
-    SliderInput, SubmitBtn,
+    CheckBox, InputBool, InputF32, InputIdent, InputOption, OptionExample, SelectInput,
+    SliderConfig, SliderInput, SubmitBtn,
 };
 
 #[wasm_bindgen(start)]
@@ -14,28 +14,80 @@ pub fn init() -> Result<()> {
     Ok(())
 }
 
-/// UIの識別子
+/// 識別子と値を分けずにメッセージの型を定義する
 ///
-/// 大量のチャンネルを扱いたくなかったので、UIから届く値とその元についてこちらで定義
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UiIdent {
+/// 1つのチャネルを通じてUIから値を返してくる型の一覧で
+/// メッセージの識別と値のペアで構成される
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PositionMsg {
     Submit,
-    Toggle,
-    Slider,
-    Select,
+    Toggle(bool),
+    Slider(f32),
 }
 
-impl InputIdent for UiIdent {
-    fn build_event(&self, value: InputEventValue) -> InputEvent<Self> {
-        InputEvent::new(*self, value)
-    }
-
+impl InputIdent for PositionMsg {
     fn id(&self) -> &'static str {
         match self {
-            UiIdent::Submit => "submit-btn",
-            UiIdent::Toggle => "toggle-btn",
-            UiIdent::Slider => "slider",
-            UiIdent::Select => "selectbox",
+            PositionMsg::Submit => "submit-btn",
+            PositionMsg::Toggle(_) => "toggle-btn",
+            PositionMsg::Slider(_) => "slider",
+        }
+    }
+}
+
+impl InputBool for PositionMsg {
+    fn value(&self) -> Result<bool> {
+        match self {
+            PositionMsg::Toggle(b) => Ok(*b),
+            _ => Err(JsError::new("not bool")),
+        }
+    }
+    fn with_value(&self, value: bool) -> Result<Self> {
+        match self {
+            PositionMsg::Toggle(_) => Ok(PositionMsg::Toggle(value)),
+            _ => Err(JsError::new("not bool")),
+        }
+    }
+}
+
+impl InputF32 for PositionMsg {
+    fn value(&self) -> Result<f32> {
+        match self {
+            PositionMsg::Slider(f) => Ok(*f),
+            _ => Err(JsError::new("not f32")),
+        }
+    }
+    fn with_value(&self, value: f32) -> Result<Self> {
+        match self {
+            PositionMsg::Slider(_) => Ok(PositionMsg::Slider(value)),
+            _ => Err(JsError::new("not f32")),
+        }
+    }
+}
+
+/// 上3苞は別のチャネルで送受信するメッセージの型
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SelectMsg {
+    Select(OptionExample),
+}
+
+impl InputIdent for SelectMsg {
+    fn id(&self) -> &'static str {
+        match self {
+            SelectMsg::Select(_) => "selectbox",
+        }
+    }
+}
+
+impl InputOption<OptionExample> for SelectMsg {
+    fn value(&self) -> Result<OptionExample> {
+        match self {
+            SelectMsg::Select(v) => Ok(*v),
+        }
+    }
+    fn with_value(&self, value: OptionExample) -> Result<Self> {
+        match self {
+            SelectMsg::Select(_) => Ok(SelectMsg::Select(value)),
         }
     }
 }
@@ -48,17 +100,20 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     info!("start");
 
     let (tx, mut rx) = futures::channel::mpsc::channel(10);
-    let submit_btn = SubmitBtn::new(UiIdent::Submit)?;
+    let submit_btn = SubmitBtn::new(PositionMsg::Submit)?;
     submit_btn.start(tx.clone())?;
 
-    let toggle_btn = CheckBox::new(UiIdent::Toggle, true)?;
+    let toggle_btn = CheckBox::new(PositionMsg::Toggle(true))?;
     toggle_btn.start(tx.clone())?;
 
-    let slider = SliderInput::new(UiIdent::Slider, SliderConfig::new(-1.0, 1.0, 0.1_f32, 0.1))?;
+    let slider = SliderInput::new(
+        PositionMsg::Slider(0.1),
+        SliderConfig::new(-1.0, 1.0, 0.1_f32, 0.1),
+    )?;
     slider.start(tx)?;
 
     let (tx, mut rx_sel) = futures::channel::mpsc::channel(1);
-    let select = SelectInput::new(UiIdent::Select, OptionExample::Normal)?;
+    let select = SelectInput::new(SelectMsg::Select(OptionExample::Normal))?;
     select.start(tx)?;
 
     wasm_bindgen_futures::spawn_local(async move {
