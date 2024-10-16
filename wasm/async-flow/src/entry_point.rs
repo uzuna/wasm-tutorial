@@ -7,7 +7,7 @@ use crate::input::{
     button::{CheckBox, SubmitBtn},
     select::SelectInput,
     slider::{SliderConfig, SliderInput},
-    InputBool, InputF32, InputIdent, InputOption, SelectOption,
+    InputBool, InputIdent, InputNumber, InputOption, SelectOption,
 };
 
 #[wasm_bindgen(start)]
@@ -52,7 +52,7 @@ impl InputBool for PositionMsg {
     }
 }
 
-impl InputF32 for PositionMsg {
+impl InputNumber<f32> for PositionMsg {
     fn value(&self) -> Result<f32> {
         match self {
             PositionMsg::Slider(f) => Ok(*f),

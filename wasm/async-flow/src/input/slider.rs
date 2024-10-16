@@ -1,23 +1,26 @@
-use std::{cell::RefCell, fmt::Debug, rc::Rc};
+use std::{cell::RefCell, fmt::Debug, rc::Rc, str::FromStr};
 
 use futures::channel::mpsc;
 use wasm_bindgen::prelude::*;
 use wasm_utils::error::*;
 
-use super::{util::*, InputF32, InputIdent};
+use super::{util::*, InputIdent, InputNumber};
 
 /// スライダエレメントの設定を作る
 #[derive(Debug, Clone)]
-pub struct SliderConfig {
+pub struct SliderConfig<T> {
     // 設定範囲とステップ、初期値を設定
-    pub min: f32,
-    pub max: f32,
-    pub step: f32,
-    pub default: f32,
+    pub min: T,
+    pub max: T,
+    pub step: T,
+    pub default: T,
 }
 
-impl SliderConfig {
-    pub fn new(min: f32, max: f32, step: f32, default: f32) -> Self {
+impl<T> SliderConfig<T>
+where
+    T: ToString,
+{
+    pub fn new(min: T, max: T, step: T, default: T) -> Self {
         Self {
             min,
             max,
@@ -37,20 +40,21 @@ impl SliderConfig {
 /// スライダーの実装
 ///
 /// 任意の値域を持ちその値を返す
-pub struct SliderInput<I>
+pub struct SliderInput<I, T>
 where
     I: InputIdent,
 {
     element: web_sys::HtmlInputElement,
-    state: Rc<RefCell<f32>>,
+    state: Rc<RefCell<T>>,
     ident: I,
 }
 
-impl<I> SliderInput<I>
+impl<I, T> SliderInput<I, T>
 where
-    I: InputIdent + InputF32,
+    I: InputIdent + InputNumber<T>,
+    T: Copy + FromStr + ToString + 'static,
 {
-    pub fn new(ident: I, mut config: SliderConfig) -> Result<Self> {
+    pub fn new(ident: I, mut config: SliderConfig<T>) -> Result<Self> {
         let id = ident.id();
         let element = get_element::<web_sys::HtmlInputElement>(id)?;
         let default = ident.value()?;
@@ -84,7 +88,7 @@ where
         let state = self.state.clone();
         let ident = self.ident.to_owned();
         let closure = Closure::wrap(Box::new(move || {
-            let value = match ele.value().parse::<f32>() {
+            let value = match ele.value().parse::<T>() {
                 Ok(v) => v,
                 Err(_) => return,
             };
@@ -99,7 +103,7 @@ where
     }
 
     /// プログラム側から状態を変更する
-    pub fn apply(&self, value: f32) {
+    pub fn apply(&self, value: T) {
         self.element.set_value(&value.to_string());
         *self.state.borrow_mut() = value;
     }

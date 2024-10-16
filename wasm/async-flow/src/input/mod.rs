@@ -17,9 +17,9 @@ pub trait InputBool: Sized {
 }
 
 /// f32型の場合に実装する
-pub trait InputF32: Sized {
-    fn value(&self) -> Result<f32>;
-    fn with_value(&self, value: f32) -> Result<Self>;
+pub trait InputNumber<T>: Sized {
+    fn value(&self) -> Result<T>;
+    fn with_value(&self, value: T) -> Result<Self>;
 }
 
 /// SelectInputの場合に実装する
