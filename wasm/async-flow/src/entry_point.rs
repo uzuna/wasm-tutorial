@@ -3,13 +3,13 @@ use std::rc::Rc;
 use futures::StreamExt;
 use wasm_bindgen::prelude::*;
 use wasm_utils::{animation::AnimationLoop, error::*, info};
-use web_sys::HtmlCanvasElement;
+use web_sys::{Element, HtmlCanvasElement};
 use webgl2::{
     context::{Context, COLOR_BLACK},
     font::{Align, TextShader},
 };
 
-use crate::ui::{first, second};
+use crate::ui::{first, request, second};
 
 #[wasm_bindgen(start)]
 pub fn init() -> Result<()> {
@@ -38,6 +38,7 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
 
     let (ui1, mut rx1) = crate::ui::first::start()?;
     let (ui2, mut rx2) = crate::ui::second::start()?;
+    let (ui3, mut rx3) = crate::ui::request::start()?;
 
     wasm_bindgen_futures::spawn_local(async move {
         info!("spawn_local");
@@ -78,6 +79,36 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         info!("exit");
     });
 
+    wasm_bindgen_futures::spawn_local(async move {
+        let ui = ui3;
+
+        while let Some(event) = rx3.next().await {
+            // リクエスト処理中はsubmitボタンを無効化
+            ui.enable(false);
+            match event {
+                request::Event::Submit => {
+                    info!("request::Event::Submit");
+                    let dur = ui.duration();
+                    // ここからリクエストを送信する。
+                    // この1フローだけではUIからの入力のキャンセルなどは受け付けられない
+                    for _ in 0..ui.times() {
+                        let res = gloo_net::http::Request::get(&format!(
+                            "http://localhost:8080/api/sleep/{dur}"
+                        ))
+                        .send()
+                        .await
+                        .expect("Failed to fetch");
+                        let text = res.text().await.expect("Failed to get text");
+                        info!("res: {text}");
+                    }
+                }
+                _ => {}
+            }
+            ui.enable(true);
+        }
+        info!("exit");
+    });
+
     // Canvasの描画
     let mut a = AnimationLoop::new(move |_time_msec| {
         webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
@@ -90,4 +121,19 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     info!("start() done");
 
     Ok(())
+}
+
+/// エレメント取得のラッパー
+fn get_element<T>(id: &str) -> Result<T>
+where
+    T: wasm_bindgen::JsCast,
+{
+    web_sys::window()
+        .ok_or(JsError::new("Failed to get window"))?
+        .document()
+        .ok_or(JsError::new("Failed to get document"))?
+        .get_element_by_id(id)
+        .ok_or(JsError::new(&format!("Failed to get element: {id}")))?
+        .dyn_into::<T>()
+        .map_err(|_| JsError::new(&format!("Failed to convert Element: {id}")))
 }

@@ -32,15 +32,21 @@
     <label class="switch">
       <input id="toggle-btn", type="checkbox"> toggle switch
     </label>
-    <p>Slider1: <input type="range" class="slider" id="slider1"><span id="slider-value"></span></p>
-    <p>Slider2: <input type="range" class="slider" id="slider2"><span id="slider-value"></span></p>
-    <p>Slider3: <input type="range" class="slider" id="slider3"><span id="slider-value"></span></p>
+    <p>Slider1: <input type="range" class="slider" id="slider1"><span id="slider1-value"></span></p>
+    <p>Slider2: <input type="range" class="slider" id="slider2"><span id="slider2-value"></span></p>
+    <p>Slider3: <input type="range" class="slider" id="slider3"><span id="slider3-value"></span></p>
     
     <h3>Select1</h3> <select id="selectbox1"></select>
     <h3>Select2</h3> <select id="selectbox2"></select>
     <div>
       <textarea id="text1" name="text1" rows="4" cols="60"></textarea><br/>
       <button id="text1-apply">Submit</button>
+    </div>
+    <div>
+      <p>SleepDuration: <input type="range" class="slider" id="sleep-duration"><span id="sleep-duration-value"></span></p>
+      <p>SleepTimes: <input type="range" class="slider" id="sleep-times"><span id="sleep-times-value"></span></p>
+      <button id="sleep-apply">Submit</button>
+      <p id="sleep-result"></p>
     </div>
   </div>
 </body>

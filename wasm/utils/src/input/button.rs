@@ -55,6 +55,10 @@ where
     pub fn remove(&self) {
         remove_closure(self.ident.id());
     }
+
+    pub fn enable(&self, enable: bool) {
+        self.element.set_disabled(!enable);
+    }
 }
 
 /// チェックボックス向けの実装
