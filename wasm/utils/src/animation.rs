@@ -2,7 +2,6 @@ use std::{
     borrow::Borrow,
     cell::RefCell,
     rc::{Rc, Weak},
-    sync::atomic::{AtomicBool, Ordering::Relaxed},
 };
 
 use wasm_bindgen::prelude::*;
@@ -94,108 +93,86 @@ impl AnimationLoop {
     pub fn forget(&self) {
         std::mem::forget(self.closure_ctx.clone());
     }
-
-    fn is_started(&self) -> bool {
-        self.animation_ctx.borrow_mut().is_some()
-    }
 }
 
-/// AnimationLoopに再生、停止のインタラクションを追加
-pub struct PlayStopButton {
-    element: web_sys::HtmlButtonElement,
-    play: bool,
-    animation_loop: AnimationLoop,
-    playing: Rc<RefCell<AtomicBool>>,
-}
+#[cfg(feature = "input")]
+pub mod ctrl {
+    use futures_channel::mpsc;
+    use futures_util::StreamExt;
+    use std::{
+        cell::RefCell,
+        rc::Rc,
+        sync::atomic::{AtomicBool, Ordering},
+    };
 
-impl PlayStopButton {
-    pub fn new(element: web_sys::HtmlButtonElement, animation_loop: AnimationLoop) -> Self {
-        let playing = Rc::new(RefCell::new(AtomicBool::new(false)));
-        Self::new_with_flag(element, animation_loop, playing)
+    use crate::{
+        error::*,
+        input::{button::SubmitBtn, InputIdent},
+    };
+
+    use super::AnimationLoop;
+
+    #[derive(Debug, Clone)]
+    pub enum AnimationCtrl {
+        Playing(bool),
     }
 
-    pub fn new_with_flag(
-        element: web_sys::HtmlButtonElement,
+    impl InputIdent for AnimationCtrl {
+        fn id(&self) -> &'static str {
+            match self {
+                Self::Playing(_) => "play-pause",
+            }
+        }
+    }
+
+    /// AnimationLoopに再生、停止のインタラクションを追加
+    pub struct PlayStopButton {
+        btn: SubmitBtn<AnimationCtrl>,
         animation_loop: AnimationLoop,
         playing: Rc<RefCell<AtomicBool>>,
-    ) -> Self {
-        let play = animation_loop.is_started();
-        playing.borrow_mut().store(play, Relaxed);
-        let s = Self {
-            element,
-            play,
-            animation_loop,
-            playing,
-        };
-        s.set_text();
-        s
     }
 
-    fn set_text(&self) {
-        self.element
-            .set_text_content(Some(if self.play { "Stop" } else { "Play" }));
-    }
+    impl PlayStopButton {
+        pub fn new(animation_loop: AnimationLoop, initial_value: bool) -> Result<Self> {
+            let btn = SubmitBtn::new(AnimationCtrl::Playing(initial_value))?;
+            let playing = Rc::new(RefCell::new(AtomicBool::new(initial_value)));
+            let s = Self {
+                btn,
+                animation_loop,
+                playing,
+            };
+            s.set_text();
+            Ok(s)
+        }
 
-    pub fn play(&mut self) {
-        self.play = true;
-        self.playing.borrow_mut().store(true, Relaxed);
-        self.animation_loop.start();
-        self.set_text();
-    }
+        fn set_text(&self) {
+            let current = self.playing.borrow().load(Ordering::Relaxed);
+            self.btn
+                .set_text(Some(if current { "Stop" } else { "Play" }));
+        }
 
-    pub fn stop(&mut self) -> Result<()> {
-        self.play = false;
-        self.playing.borrow_mut().store(false, Relaxed);
-        self.set_text();
-        self.animation_loop.cancel()
-    }
-
-    pub fn toggle(&mut self) -> Result<()> {
-        if self.play {
-            self.stop()?;
-        } else {
-            self.play();
-        };
-        Ok(())
-    }
-
-    pub fn start(self) -> PlayAnimaionContext {
-        let ctx = Rc::new(RefCell::new(self));
-        let ctx_clone = ctx.clone();
-        let closure = Closure::wrap(Box::new(move || {
-            let mut this = ctx_clone.borrow_mut();
-            if this.play {
-                let _ = this.stop();
-            } else {
-                this.play();
+        pub fn set_play(&mut self, play: bool) {
+            let current = self.playing.borrow().swap(play, Ordering::Relaxed);
+            if current != play {
+                if play {
+                    self.animation_loop.start();
+                } else {
+                    self.animation_loop.cancel().unwrap();
+                }
+                self.set_text();
             }
-        }) as Box<dyn FnMut()>);
-        ctx.borrow_mut()
-            .element
-            .add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())
-            .unwrap();
-        PlayAnimaionContext { ctx, closure }
-    }
+        }
 
-    pub fn flag(&self) -> Rc<RefCell<AtomicBool>> {
-        self.playing.clone()
-    }
-
-    fn forget(&self) {
-        self.animation_loop.forget();
-    }
-}
-
-#[wasm_bindgen]
-pub struct PlayAnimaionContext {
-    ctx: Rc<RefCell<PlayStopButton>>,
-    closure: Closure<dyn FnMut()>,
-}
-
-impl PlayAnimaionContext {
-    pub fn forget(self) {
-        let Self { ctx, closure } = self;
-        std::mem::forget(closure);
-        ctx.borrow_mut().forget();
+        pub fn start(mut self, mut tx: mpsc::Sender<AnimationCtrl>) -> Result<()> {
+            let (tx_inner, mut rx) = mpsc::channel(1);
+            self.btn.start(tx_inner).unwrap();
+            wasm_bindgen_futures::spawn_local(async move {
+                while let Some(AnimationCtrl::Playing(playing)) = rx.next().await {
+                    self.set_play(playing);
+                    tx.try_send(AnimationCtrl::Playing(playing)).unwrap();
+                }
+            });
+            Ok(())
+        }
     }
 }

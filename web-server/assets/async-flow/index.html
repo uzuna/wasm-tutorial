@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>JS Event Control</title>
+  <style>
+    body {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      margin: 0;
+    }
+
+  </style>
+  <script type="module" src="./index.js"></script>
+</head>
+
+<body>
+  <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
+  <h2>JS Event Control</h2>
+  <canvas id="webgl-canvas"></canvas>
+  <div>
+    <button id="submit-btn">Play</button>
+    <label class="switch">
+      <input id="toggle-btn", type="checkbox"> toggle switch
+    </label>
+    <p>Slider1: <input type="range" class="slider" id="slider1"><span id="slider1-value"></span></p>
+    <p>Slider2: <input type="range" class="slider" id="slider2"><span id="slider2-value"></span></p>
+    <p>Slider3: <input type="range" class="slider" id="slider3"><span id="slider3-value"></span></p>
+    
+    <h3>Select1</h3> <select id="selectbox1"></select>
+    <h3>Select2</h3> <select id="selectbox2"></select>
+    <div>
+      <textarea id="text1" name="text1" rows="4" cols="60"></textarea><br/>
+      <button id="text1-apply">Submit</button>
+    </div>
+    <div>
+      <p>SleepDuration: <input type="range" class="slider" id="sleep-duration"><span id="sleep-duration-value"></span></p>
+      <p>SleepTimes: <input type="range" class="slider" id="sleep-times"><span id="sleep-times-value"></span></p>
+      <p>SleepPar: <input type="range" class="slider" id="sleep-parallel"><span id="sleep-parallel-value"></span></p>
+      <button id="sleep-apply">Submit</button>
+      <div id="sleep-output"></div>
+    </div>
+  </div>
+</body>
+
+</html>

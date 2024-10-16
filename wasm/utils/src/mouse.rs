@@ -196,11 +196,13 @@ impl MouseEventHandler {
 
         // スクロール操作というデフォルトのイベントがあるため
         // passive: trueでスクロールイベントをキャンセルしない
+        let options = AddEventListenerOptions::new();
+        options.set_passive(true);
         self.canvas
             .add_event_listener_with_callback_and_add_event_listener_options(
                 event_type,
                 clusure.as_ref().unchecked_ref(),
-                AddEventListenerOptions::new().passive(true),
+                &options,
             )
             .unwrap();
         self.wheel_closures.insert(event_type.to_string(), clusure);

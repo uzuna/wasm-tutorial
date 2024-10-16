@@ -1,5 +1,5 @@
 [package]
-name = "plot"
+name = "async-flow"
 version = "0.1.0"
 edition.workspace = true
 authors.workspace = true
@@ -10,21 +10,14 @@ rust-version.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-getrandom.workspace = true
-gloo-timers.workspace = true
-nalgebra.workspace = true
-rand.workspace = true
-tokio.workspace = true
+futures.workspace = true
+fxhash.workspace = true
+gloo-net = { workspace = true, features = ["http"] }
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 wasm-utils = { workspace = true, features = ["input"] }
 webgl2 = { workspace = true, features = ["vertex", "context", "font-embed", "viewport"] }
-futures.workspace = true
-futures-util.workspace = true
 
 [dependencies.web-sys]
 workspace = true
 features = []
-
-[dev-dependencies]
-wasm-bindgen-test.workspace = true
