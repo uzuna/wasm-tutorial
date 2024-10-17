@@ -1,0 +1,15 @@
+[package]
+name = "wasm-utils-derive"
+version = "0.0.0"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1.0.37"
+syn = "2.0.79"
+proc-macro2 = "1.0"

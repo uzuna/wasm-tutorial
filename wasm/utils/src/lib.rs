@@ -12,3 +12,7 @@ pub mod mouse;
 
 #[cfg(feature = "input")]
 pub mod input;
+
+#[cfg(feature = "derive")]
+#[doc(hidden)]
+pub use wasm_utils_derive::Select;

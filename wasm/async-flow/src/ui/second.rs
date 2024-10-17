@@ -10,7 +10,7 @@ use wasm_utils::{
     },
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, wasm_utils::Select)]
 pub enum OptionMode {
     Off,
     Normal,
@@ -18,88 +18,12 @@ pub enum OptionMode {
     Bright,
 }
 
-impl OptionMode {
-    const ALL: [Self; 4] = [Self::Off, Self::Normal, Self::Dark, Self::Bright];
-}
-
-impl SelectOption for OptionMode {
-    fn iter() -> &'static [Self] {
-        &Self::ALL
-    }
-
-    fn value(&self) -> &str {
-        match self {
-            Self::Off => "off",
-            Self::Normal => "normal",
-            Self::Dark => "dark",
-            Self::Bright => "bright",
-        }
-    }
-
-    fn text(&self) -> &str {
-        match self {
-            Self::Off => "Off",
-            Self::Normal => "Normal",
-            Self::Dark => "Dark",
-            Self::Bright => "Bright",
-        }
-    }
-
-    fn from_str(value: &str) -> Self {
-        match value {
-            "off" => Self::Off,
-            "normal" => Self::Normal,
-            "dark" => Self::Dark,
-            "bright" => Self::Bright,
-            _ => panic!("invalid value: {}", value),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, wasm_utils::Select)]
 pub enum OptionStrength {
     Off,
     Low,
     High,
     Strict,
-}
-
-impl OptionStrength {
-    const ALL: [Self; 4] = [Self::Off, Self::Low, Self::High, Self::Strict];
-}
-
-impl SelectOption for OptionStrength {
-    fn iter() -> &'static [Self] {
-        &Self::ALL
-    }
-
-    fn value(&self) -> &str {
-        match self {
-            Self::Off => "off",
-            Self::Low => "low",
-            Self::High => "high",
-            Self::Strict => "strict",
-        }
-    }
-
-    fn text(&self) -> &str {
-        match self {
-            Self::Off => "Off",
-            Self::Low => "Low",
-            Self::High => "High",
-            Self::Strict => "Strict",
-        }
-    }
-
-    fn from_str(value: &str) -> Self {
-        match value {
-            "off" => Self::Off,
-            "low" => Self::Low,
-            "high" => Self::High,
-            "strict" => Self::Strict,
-            _ => panic!("invalid value: {}", value),
-        }
-    }
 }
 
 /// 上3苞は別のチャネルで送受信するメッセージの型
