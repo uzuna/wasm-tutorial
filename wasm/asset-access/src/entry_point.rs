@@ -11,11 +11,10 @@ use web_sys::HtmlCanvasElement;
 use webgl2::{
     context::{gl_clear_color, COLOR_BLACK},
     gl,
+    loader::{load_texture, ImageLoader},
     shader::texture::{TextureShader, TextureVd},
     texture::Texture,
 };
-
-use crate::loader::{load_texture, ImageLoader};
 
 #[wasm_bindgen(start)]
 pub fn init() -> Result<()> {

@@ -3,11 +3,10 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-
 use wasm_bindgen::prelude::*;
-use wasm_utils::error::*;
 use web_sys::HtmlImageElement;
-use webgl2::texture::Texture;
+
+use crate::{error::*, texture::Texture};
 
 /// 画像をHtmlImageElementを経由して読み込むFuture実装構造体
 pub struct ImageLoader {

@@ -19,7 +19,7 @@ nalgebra.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 wasm-utils = { workspace = true, features = ["waitgroup", "mouse", "input"] }
-webgl2 = { workspace = true, features = ["shader", "viewport", "metrics", "texture", "pointing"] }
+webgl2 = { workspace = true, features = ["shader", "viewport", "metrics", "texture", "pointing", "loader"] }
 
 [dependencies.web-sys]
 workspace = true
