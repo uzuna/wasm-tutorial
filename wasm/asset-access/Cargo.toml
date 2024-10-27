@@ -11,6 +11,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 gloo-timers.workspace = true
+futures.workspace = true
 futures-util.workspace = true
 futures-channel.workspace = true
 fxhash.workspace = true
