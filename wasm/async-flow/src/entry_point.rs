@@ -1,9 +1,18 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use futures::StreamExt;
 use wasm_bindgen::prelude::*;
-use wasm_utils::{animation::AnimationTicker, error::*, info};
-use web_sys::HtmlCanvasElement;
+use wasm_utils::{
+    animation::AnimationTicker,
+    error::*,
+    info,
+    time::{sleep, Timeout},
+    util::get_performance,
+};
+use web_sys::{HtmlCanvasElement, Performance};
 use webgl2::{
     context::{Context, COLOR_BLACK},
     font::{Align, TextShader},
@@ -115,6 +124,14 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
             webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
             ts.draw(&tv);
         }
+    });
+
+    wasm_bindgen_futures::spawn_local(async move {
+        let p = get_performance().unwrap();
+        let now = p.now();
+        sleep(Duration::from_secs(1)).await.unwrap();
+        let elapsed = p.now() - now;
+        info!("elapsed: {}", elapsed);
     });
 
     info!("start() done");

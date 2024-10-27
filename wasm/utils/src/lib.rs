@@ -1,6 +1,7 @@
 pub mod __reexport;
 pub mod animation;
 pub mod error;
+pub mod time;
 pub mod util;
 
 #[macro_use]

@@ -47,3 +47,10 @@ pub fn get_body() -> Result<web_sys::HtmlElement> {
 pub fn get_window() -> Result<web_sys::Window> {
     web_sys::window().ok_or(JsError::new("window is None"))
 }
+
+pub fn get_performance() -> Result<web_sys::Performance> {
+    web_sys::window()
+        .ok_or(JsError::new("Failed to get window"))?
+        .performance()
+        .ok_or(JsError::new("Failed to get performance"))
+}
