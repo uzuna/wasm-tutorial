@@ -1,38 +1,20 @@
-use core::f32;
-use std::{cell::RefCell, rc::Rc, sync::atomic::AtomicBool};
+//! サーバーから画像を読み込んでテクスチャとして使う例
 
-use futures_util::StreamExt;
-use fxhash::FxHashMap;
+use core::f32;
+use std::rc::Rc;
+
 use nalgebra::Vector2;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use wasm_utils::{
-    animation::{
-        ctrl::{AnimationCtrl, PlayStopButton},
-        AnimationLoop,
-    },
-    error::*,
-    info,
-    mouse::{self, MouseEventMessage},
-    waitgroup::{WaitGroup, Worker},
-};
-use web_sys::{HtmlCanvasElement, HtmlImageElement};
+use wasm_utils::{animation::AnimationLoop, error::*, info};
+use web_sys::HtmlCanvasElement;
 use webgl2::{
-    context::{gl_clear_color, Context, COLOR_BLACK},
+    context::{gl_clear_color, COLOR_BLACK},
     gl,
-    shader::{
-        pointing::{PointingRequest, PointingShader},
-        texture::{TextureShader, TextureVd},
-    },
-    texture::{Texture, TextureFilter},
-    GlPoint2d,
+    loader::{load_texture, ImageLoader},
+    shader::texture::{TextureShader, TextureVd},
+    texture::Texture,
 };
-
-thread_local! {
-    // テクスチャロードのたびにクロージャをforgetするとメモリリークになるため
-    // マニュアルドロップするために一時保存する
-    static LOAD_CLOSUER: RefCell<FxHashMap<String,Closure<dyn FnMut()>>> = RefCell::new(FxHashMap::default());
-}
 
 #[wasm_bindgen(start)]
 pub fn init() -> Result<()> {
@@ -45,7 +27,6 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     check_memory_usage("start");
     canvas.set_width(1000);
     canvas.set_height(600);
-    let canvas_clone = canvas.clone();
 
     let glctx = webgl2::context::Context::new(canvas, webgl2::context::COLOR_BLACK)?;
     let vp = glctx.viewport();
@@ -58,6 +39,7 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     let metrics = glctx.metrics().clone();
     let mut textures = vec![];
 
+    // テクスチャインタンスの生成と配置
     let length = 100;
     for i in 0..length {
         let x = (i as f32 / length as f32 * f32::consts::PI * 2.0).sin();
@@ -70,18 +52,11 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         );
         let v = s.create_vao(&webgl2::vertex::UNIT_RECT)?;
         let texture = glctx.create_blank_texture()?;
-        let texture = Rc::new(texture);
 
         let color_front = rgba_to_hexcode(i as u8, 0, 0, 255);
-        lazy_load_texture(
-            format!(
-                "../api/texture/generate/test{}?color_front={}",
-                i, color_front
-            )
-            .as_str(),
-            texture.clone(),
-            None,
-        );
+        // 同期処理から非同期にタスクを生成
+        // ロードの完了を待たない
+        spawn_load_texture(create_img_src(i, color_front.as_str()), texture.clone());
         textures.push(texture.clone());
         ctx.objects.push(Drawable {
             shader: s,
@@ -92,122 +67,58 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
 
     check_memory_usage("after spawn");
 
-    // monitorring closure length
+    // console.logにメモリの使用量などを出す
     spawn_local(async move {
         use futures_util::{future::ready, stream::StreamExt};
         let interval = std::time::Duration::from_secs(5);
         gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
             .for_each(|_| {
-                let len = LOAD_CLOSUER.with_borrow(|x| x.len());
-                info!("closure_length {} {}", len, metrics);
+                info!("closure_length {}", metrics);
                 check_memory_usage("monitoring");
                 ready(())
             })
             .await;
     });
 
-    // マウスイベントを受け取る
-    let (tx, mut rx) = futures_channel::mpsc::unbounded();
-    let mut m = mouse::MouseEventHandler::new(canvas_clone, tx);
-    m.start();
-    m.forget();
-
-    // マウスイベントを元にターゲットを描画するシェーダー
-    let mut ts = PointingShader::new(&glctx)?;
-    ts.apply_requests(&[
-        PointingRequest::Enable(true),
-        PointingRequest::Position(GlPoint2d::new(0.0, 0.0)),
-    ]);
-    ts.update(0.0);
-    ts.draw();
-
-    let mut reqs = vec![];
-    let mut timestamp = 0.0_f64;
-    let a = AnimationLoop::new(move |time| {
-        // マウスイベントをターゲットリクエストに変換
-        reqs.clear();
-        while let Ok(Some(msg)) = rx.try_next() {
-            match msg {
-                MouseEventMessage::Down { pos } => {
-                    reqs.push(PointingRequest::Enable(true));
-                    reqs.push(PointingRequest::Position(GlPoint2d::new(pos.x, pos.y)));
-                }
-                MouseEventMessage::Up { pos } => {
-                    reqs.push(PointingRequest::Enable(false));
-                    reqs.push(PointingRequest::Position(GlPoint2d::new(pos.x, pos.y)));
-                }
-                MouseEventMessage::Move { pos } => {
-                    reqs.push(PointingRequest::Position(GlPoint2d::new(pos.x, pos.y)));
-                }
-                MouseEventMessage::Click { pos } => {
-                    info!("click {:?}", pos);
-                }
-                MouseEventMessage::DblClick { pos } => {
-                    info!("dblclick {:?}", pos);
-                }
-                _ => {}
-            }
-        }
-        let elaplesd_sec = (time - timestamp) as f32 / 1000.0;
-        timestamp = time;
-        ts.apply_requests(reqs.as_slice());
-        ts.update(elaplesd_sec);
-        // clearが入っているので先に描画
+    // animation loop
+    let mut a = AnimationLoop::new(move |_time| {
         ctx.draw();
-        ts.draw();
         Ok(())
     });
-
-    // ボタンを押すとアニメーションが開始する
-    let (tx, mut rx) = futures_channel::mpsc::channel(1);
-    let btn = PlayStopButton::new(a, false)?;
-    btn.start(tx)?;
-    let playing_flag = Rc::new(AtomicBool::new(false));
-    let playing_flag_clone = playing_flag.clone();
-    wasm_bindgen_futures::spawn_local(async move {
-        while let Some(AnimationCtrl::Playing(playing)) = rx.next().await {
-            playing_flag_clone.store(playing, std::sync::atomic::Ordering::Relaxed);
-        }
-    });
+    a.start();
+    a.forget();
 
     // メモリリークの有無を確認するためにテクスチャを定期的に読み出す
     // 実際にforgetではメモリ使用量が増える付けることが確認できた
     spawn_local(async move {
-        use futures_util::{future::ready, stream::StreamExt};
+        use futures_util::stream::StreamExt;
         let interval = std::time::Duration::from_secs(5);
         let mut counter = 0;
-        gloo_timers::future::IntervalStream::new(interval.as_millis() as u32)
-            .for_each(|_| {
-                // アニメーションが停止している場合は読み込まない
-                if !playing_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                    return ready(());
-                }
-                let wg = WaitGroup::new();
-                let f = match counter % 3 {
-                    0 => |i| rgba_to_hexcode(i as u8, 0, 128, 255),
-                    1 => |i| rgba_to_hexcode(128, i as u8, 0, 255),
-                    _ => |i| rgba_to_hexcode(0, 128, i as u8, 255),
-                };
-                for (i, texture) in textures.iter().enumerate() {
-                    let color_front = f(i);
-                    lazy_load_texture(
-                        format!(
-                            "../api/texture/generate/test{}?color_front={}",
-                            i, color_front
-                        )
-                        .as_str(),
-                        texture.clone(),
-                        Some(wg.add()),
-                    );
-                }
-                counter += 1;
-                spawn_local(async move {
-                    wg.wait().await;
-                    info!("end load texture");
-                });
-                ready(())
-            })
-            .await;
+
+        // 画像読み出しの同時実行数
+        let par_count = 8;
+        let requests = textures.iter().enumerate().collect::<Vec<_>>();
+        loop {
+            let timeout = gloo_timers::future::TimeoutFuture::new(interval.as_millis() as u32);
+
+            // ループごとに画像の色を変える
+            let f = match counter % 3 {
+                0 => |i| rgba_to_hexcode(i as u8, 0, 128, 255),
+                1 => |i| rgba_to_hexcode(128, i as u8, 0, 255),
+                _ => |i| rgba_to_hexcode(0, 128, i as u8, 255),
+            };
+
+            // 直接に読むと遅いので一定数の画像を同時に読み出す
+            futures::stream::iter(requests.iter())
+                .for_each_concurrent(par_count, |(i, texture)| async {
+                    let color_front = f(*i);
+                    let src = create_img_src(*i, color_front.as_str());
+                    load_texture(src, texture).await.unwrap();
+                })
+                .await;
+            timeout.await;
+            counter += 1;
+        }
     });
 
     Ok(())
@@ -216,9 +127,10 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
 struct Drawable {
     shader: TextureShader,
     vao: webgl2::vertex::Vao<TextureVd>,
-    texture: Rc<Texture>,
+    texture: Texture,
 }
 
+// 描画オブジェクトをまとめて保持する構造体
 struct DrawContext {
     gl: Rc<gl>,
     objects: Vec<Drawable>,
@@ -233,61 +145,12 @@ impl DrawContext {
     }
 }
 
-// テクスチャを読み込む
-#[allow(dead_code)]
-fn load_texture(glctx: Context, src: &str, mut cb: impl FnMut(Texture) + 'static) {
-    let src = src.to_string();
-    spawn_local(async move {
-        let img = HtmlImageElement::new().unwrap();
-        let img = Rc::new(img);
-        img.set_src(&src);
-        let img_clone = img.clone();
-        let del_key = src.to_string();
-        let closure = Closure::wrap(Box::new(move || {
-            let texture = glctx.create_texture_image_element(&TextureFilter::default(), &img_clone);
-            // manually drop closure
-            LOAD_CLOSUER.with(|c| {
-                c.borrow_mut().remove(&del_key);
-            });
-            img_clone.remove();
-            match texture {
-                Ok(texture) => cb(texture),
-                Err(_e) => {
-                    wasm_utils::error!("failed to create texture");
-                }
-            }
-        }) as Box<dyn FnMut()>);
-        let _ = img.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref());
-        LOAD_CLOSUER.with(|c| {
-            c.borrow_mut().insert(src, closure);
-        });
-    });
-}
-
 // テクスチャを先に確保しておき、後から画像を読み込む
-fn lazy_load_texture(src: &str, texture: Rc<Texture>, mut worker: Option<Worker>) {
-    let src = src.to_string();
+fn spawn_load_texture(src: impl AsRef<str>, texture: Texture) {
+    let loader = ImageLoader::new(src).unwrap();
     spawn_local(async move {
-        let img = HtmlImageElement::new().unwrap();
-        let img = Rc::new(img);
-        img.set_src(&src);
-        let img_clone = img.clone();
-        let del_key = src.to_string();
-        let closure = Closure::wrap(Box::new(move || {
-            texture.update_texture_image_element(&img_clone);
-            // manually drop closure
-            LOAD_CLOSUER.with(|c| {
-                c.borrow_mut().remove(&del_key);
-            });
-            img_clone.remove();
-            if let Some(w) = worker.take() {
-                drop(w);
-            }
-        }) as Box<dyn FnMut()>);
-        let _ = img.add_event_listener_with_callback("load", closure.as_ref().unchecked_ref());
-        LOAD_CLOSUER.with(|c| {
-            c.borrow_mut().insert(src, closure);
-        });
+        let img = loader.await.unwrap();
+        texture.update_texture_image_element(&img);
     });
 }
 
@@ -308,4 +171,12 @@ fn check_memory_usage(place: &str) {
 fn rgba_to_hexcode(r: u8, g: u8, b: u8, a: u8) -> String {
     // queryに含めるために`#`は`%23`にする
     format!("%23{:02X}{:02X}{:02X}{:02X}", r, g, b, a)
+}
+
+fn create_img_src(i: usize, color_front: impl AsRef<str>) -> String {
+    format!(
+        "../api/texture/generate/test{}?color_front={}",
+        i,
+        color_front.as_ref()
+    )
 }

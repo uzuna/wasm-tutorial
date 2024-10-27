@@ -27,6 +27,9 @@ pub mod metrics;
 #[cfg(feature = "texture")]
 pub mod texture;
 
+#[cfg(feature = "loader")]
+pub mod loader;
+
 pub type GlEnum = u32;
 pub type GlInt = i32;
 
