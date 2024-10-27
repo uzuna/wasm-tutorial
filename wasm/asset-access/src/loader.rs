@@ -7,6 +7,7 @@ use std::{
 use wasm_bindgen::prelude::*;
 use wasm_utils::error::*;
 use web_sys::HtmlImageElement;
+use webgl2::texture::Texture;
 
 /// 画像をHtmlImageElementを経由して読み込むFuture実装構造体
 pub struct ImageLoader {
@@ -54,4 +55,12 @@ impl Drop for ImageLoader {
         self.image.set_onload(None);
         self.image.remove();
     }
+}
+
+// 非同期フローの中で画像の読み込みを待つ
+pub async fn load_texture(src: impl AsRef<str>, texture: &Texture) -> Result<()> {
+    let loader = ImageLoader::new(src)?;
+    let img = loader.await?;
+    texture.update_texture_image_element(&img);
+    Ok(())
 }
