@@ -1,6 +1,8 @@
 pub mod __reexport;
 pub mod animation;
 pub mod error;
+pub mod util;
+
 #[macro_use]
 mod macros;
 pub mod panic;

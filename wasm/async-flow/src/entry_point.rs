@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use futures::StreamExt;
 use wasm_bindgen::prelude::*;
-use wasm_utils::{animation::AnimationLoop, error::*, info};
+use wasm_utils::{animation::AnimationTicker, error::*, info};
 use web_sys::HtmlCanvasElement;
 use webgl2::{
     context::{Context, COLOR_BLACK},
@@ -108,14 +108,14 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         info!("exit");
     });
 
-    // Canvasの描画
-    let mut a = AnimationLoop::new(move |_time_msec| {
-        webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
-        ts.draw(&tv);
-        Ok(())
+    wasm_bindgen_futures::spawn_local(async move {
+        let mut ticker = AnimationTicker::default();
+        loop {
+            let _timestamp = ticker.tick().await.unwrap();
+            webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
+            ts.draw(&tv);
+        }
     });
-    a.start();
-    a.forget();
 
     info!("start() done");
 

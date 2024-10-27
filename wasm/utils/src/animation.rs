@@ -2,11 +2,12 @@ use std::{
     borrow::Borrow,
     cell::RefCell,
     rc::{Rc, Weak},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use wasm_bindgen::prelude::*;
 
-use crate::error::Result;
+use crate::{error::Result, util::get_window};
 
 // アニメーションフレームのコールバック
 // タイムスタンプが渡され、次のアニメーションフレームのIDを返す
@@ -175,4 +176,93 @@ pub mod ctrl {
             Ok(())
         }
     }
+}
+
+/// 非同期の中でrequest animation frameの周期を待つTicker
+pub struct AnimationTicker {
+    timestamp: Rc<AtomicU64>,
+}
+
+impl AnimationTicker {
+    /// 次のアニメーションフレームを待つ
+    pub async fn tick(&mut self) -> Result<f64> {
+        let instant = AnimationInstanct::new(self.timestamp.clone());
+        instant.await
+    }
+
+    /// 最後のタイムスタンプを取得
+    pub fn last_timestamp(&self) -> f64 {
+        f64::from_bits(self.timestamp.load(Ordering::Relaxed))
+    }
+}
+
+impl Default for AnimationTicker {
+    fn default() -> Self {
+        Self {
+            timestamp: Rc::new(AtomicU64::new(0)),
+        }
+    }
+}
+
+// requestAnimationFrameを待つFutureの実装
+struct AnimationInstanct {
+    closure: Option<Closure<dyn FnMut(f64)>>,
+    handle: Option<i32>,
+    timestamp: Rc<AtomicU64>,
+}
+
+impl AnimationInstanct {
+    fn new(timestamp: Rc<AtomicU64>) -> Self {
+        Self {
+            closure: None,
+            handle: None,
+            timestamp,
+        }
+    }
+
+    fn cancel(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            cancel_animation_frame(handle);
+        }
+    }
+}
+
+impl std::future::Future for AnimationInstanct {
+    type Output = Result<f64>;
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context,
+    ) -> std::task::Poll<Self::Output> {
+        use std::borrow::BorrowMut;
+        // wakerが呼ばれたら基本的にはタスクが終了しているはず
+        if let Some(_handle) = self.handle.take() {
+            let ts = f64::from_bits(self.timestamp.load(Ordering::Relaxed));
+            std::task::Poll::Ready(Ok(ts))
+        } else {
+            // await callされたたらタスクを開始
+            let waker = cx.waker().clone();
+            let mut ts = self.timestamp.clone();
+            let closure = Closure::wrap(Box::new(move |timestamp| {
+                ts.borrow_mut()
+                    .store(f64::to_bits(timestamp), Ordering::Relaxed);
+                waker.wake_by_ref();
+            }) as Box<dyn FnMut(f64)>);
+            self.handle = Some(request_animation_frame_inner(&closure)?);
+            self.closure = Some(closure);
+            std::task::Poll::Pending
+        }
+    }
+}
+
+impl Drop for AnimationInstanct {
+    fn drop(&mut self) {
+        self.cancel();
+    }
+}
+
+fn request_animation_frame_inner(closure: &Closure<dyn FnMut(f64)>) -> Result<i32> {
+    get_window()?
+        .request_animation_frame(closure.as_ref().unchecked_ref())
+        .map_err(|_| JsError::new("Failed request animation frame"))
 }
