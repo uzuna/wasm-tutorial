@@ -1,7 +1,6 @@
 pub mod __reexport;
 pub mod animation;
 pub mod error;
-pub mod time;
 pub mod util;
 
 #[macro_use]
@@ -19,3 +18,6 @@ pub mod input;
 #[cfg(feature = "derive")]
 #[doc(hidden)]
 pub use wasm_utils_derive::Select;
+
+#[cfg(feature = "time")]
+pub mod time;

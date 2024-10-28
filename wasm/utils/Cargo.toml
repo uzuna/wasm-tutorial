@@ -21,6 +21,7 @@ input = [
     "web-sys/HtmlTextAreaElement",
 ]
 derive = ["dep:wasm-utils-derive"]
+time = ["dep:futures-util"]
 
 [dependencies]
 console_error_panic_hook = { workspace = true, optional = true }

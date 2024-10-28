@@ -1,7 +1,4 @@
-use std::{
-    rc::Rc,
-    time::{Duration, Instant},
-};
+use std::{rc::Rc, time::Duration};
 
 use futures::StreamExt;
 use wasm_bindgen::prelude::*;
@@ -9,10 +6,10 @@ use wasm_utils::{
     animation::AnimationTicker,
     error::*,
     info,
-    time::{sleep, Timeout},
+    time::{sleep, Interval},
     util::get_performance,
 };
-use web_sys::{HtmlCanvasElement, Performance};
+use web_sys::HtmlCanvasElement;
 use webgl2::{
     context::{Context, COLOR_BLACK},
     font::{Align, TextShader},
@@ -127,11 +124,22 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     });
 
     wasm_bindgen_futures::spawn_local(async move {
+        use futures::StreamExt;
         let p = get_performance().unwrap();
         let now = p.now();
         sleep(Duration::from_secs(1)).await.unwrap();
         let elapsed = p.now() - now;
         info!("elapsed: {}", elapsed);
+
+        let mut interval = Interval::new(1000);
+        while let Some(_) = interval.next().await {
+            let elapsed = p.now() - now;
+            info!("ticker: {}", elapsed);
+            if elapsed > 5000.0 {
+                interval.cancel();
+            }
+        }
+        info!("exit ticker loop")
     });
 
     info!("start() done");
