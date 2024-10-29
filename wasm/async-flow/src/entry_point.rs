@@ -1,8 +1,14 @@
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 use futures::StreamExt;
 use wasm_bindgen::prelude::*;
-use wasm_utils::{animation::AnimationLoop, error::*, info};
+use wasm_utils::{
+    animation::AnimationTicker,
+    error::*,
+    info,
+    time::{sleep, Interval},
+    util::get_performance,
+};
 use web_sys::HtmlCanvasElement;
 use webgl2::{
     context::{Context, COLOR_BLACK},
@@ -108,14 +114,33 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         info!("exit");
     });
 
-    // Canvasの描画
-    let mut a = AnimationLoop::new(move |_time_msec| {
-        webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
-        ts.draw(&tv);
-        Ok(())
+    wasm_bindgen_futures::spawn_local(async move {
+        let mut ticker = AnimationTicker::default();
+        loop {
+            let _timestamp = ticker.tick().await.unwrap();
+            webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
+            ts.draw(&tv);
+        }
     });
-    a.start();
-    a.forget();
+
+    wasm_bindgen_futures::spawn_local(async move {
+        use futures::StreamExt;
+        let p = get_performance().unwrap();
+        let now = p.now();
+        sleep(Duration::from_secs(1)).await.unwrap();
+        let elapsed = p.now() - now;
+        info!("elapsed: {}", elapsed);
+
+        let mut interval = Interval::new(1000);
+        while let Some(_) = interval.next().await {
+            let elapsed = p.now() - now;
+            info!("ticker: {}", elapsed);
+            if elapsed > 5000.0 {
+                interval.cancel();
+            }
+        }
+        info!("exit ticker loop")
+    });
 
     info!("start() done");
 
