@@ -47,5 +47,4 @@ features = [
 [dev-dependencies]
 gloo-timers.workspace = true
 wasm-bindgen-test.workspace = true
-wasm-bindgen-futures.workspace = true
 
