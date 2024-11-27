@@ -186,7 +186,7 @@ pub struct AnimationTicker {
 impl AnimationTicker {
     /// 次のアニメーションフレームを待つ
     pub async fn tick(&mut self) -> Result<f64> {
-        let instant = AnimationInstanct::new(self.timestamp.clone());
+        let instant = AnimationInstant::new(self.timestamp.clone());
         instant.await
     }
 
@@ -205,13 +205,13 @@ impl Default for AnimationTicker {
 }
 
 // requestAnimationFrameを待つFutureの実装
-struct AnimationInstanct {
+struct AnimationInstant {
     closure: Option<Closure<dyn FnMut(f64)>>,
     handle: Option<i32>,
     timestamp: Rc<AtomicU64>,
 }
 
-impl AnimationInstanct {
+impl AnimationInstant {
     fn new(timestamp: Rc<AtomicU64>) -> Self {
         Self {
             closure: None,
@@ -227,7 +227,7 @@ impl AnimationInstanct {
     }
 }
 
-impl std::future::Future for AnimationInstanct {
+impl std::future::Future for AnimationInstant {
     type Output = Result<f64>;
 
     fn poll(
@@ -255,7 +255,7 @@ impl std::future::Future for AnimationInstanct {
     }
 }
 
-impl Drop for AnimationInstanct {
+impl Drop for AnimationInstant {
     fn drop(&mut self) {
         self.cancel();
     }

@@ -9,7 +9,13 @@ rust-version.workspace = true
 [features]
 default = ["console_error_panic_hook"]
 waitgroup = ["dep:futures-channel", "dep:futures-util"]
-mouse = ["dep:fxhash", "web-sys/MouseEvent", "web-sys/WheelEvent", "web-sys/AddEventListenerOptions"]
+mouse = [
+    "dep:fxhash",
+    "web-sys/AddEventListenerOptions",
+    "web-sys/MouseEvent",
+    "web-sys/VisualViewport",
+    "web-sys/WheelEvent",
+]
 input = [
     "dep:fxhash",
     "dep:futures-channel",

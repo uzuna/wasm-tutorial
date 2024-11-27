@@ -15,7 +15,10 @@ use webgl2::{
     font::{Align, TextShader},
 };
 
-use crate::ui::{first, request, second};
+use crate::{
+    layer::MouseShader,
+    ui::{first, request, second},
+};
 
 #[wasm_bindgen(start)]
 pub fn init() -> Result<()> {
@@ -25,16 +28,19 @@ pub fn init() -> Result<()> {
 
 #[wasm_bindgen]
 pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
-    canvas.set_width(512);
-    canvas.set_height(384);
+    canvas.set_width(1024);
+    canvas.set_height(768);
 
     info!("start");
+    let mut mouse_handler = wasm_utils::mouse::MouseEventHandler::new(canvas.clone());
+    mouse_handler.start();
 
     // テキスト表示
     let ctx = Context::new(canvas, COLOR_BLACK)?;
     let gl = ctx.gl().clone();
     let viewport = ctx.viewport();
     let ts = TextShader::new(&ctx)?;
+    let mut ms = MouseShader::new(&ctx)?;
     let font = webgl2::font::embed::load(&ctx)?;
     let mut text = font.text_by_capacity(60, Align::left_bottom());
     let mat = viewport.font_mat(0, 128, 16.0);
@@ -117,9 +123,14 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
     wasm_bindgen_futures::spawn_local(async move {
         let mut ticker = AnimationTicker::default();
         loop {
-            let _timestamp = ticker.tick().await.unwrap();
+            let timestamp = ticker.tick().await.unwrap();
             webgl2::context::gl_clear_color(&gl, webgl2::context::COLOR_BLACK);
             ts.draw(&tv);
+            while let Ok(Some(ev)) = mouse_handler.try_recv() {
+                ms.apply_event(ev);
+            }
+            ms.update(timestamp);
+            ms.draw();
         }
     });
 
@@ -132,7 +143,7 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         info!("elapsed: {}", elapsed);
 
         let mut interval = Interval::new(1000);
-        while let Some(_) = interval.next().await {
+        while interval.next().await.is_some() {
             let elapsed = p.now() - now;
             info!("ticker: {}", elapsed);
             if elapsed > 5000.0 {

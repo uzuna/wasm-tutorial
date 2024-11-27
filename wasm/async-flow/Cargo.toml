@@ -15,8 +15,8 @@ fxhash.workspace = true
 gloo-net = { workspace = true, features = ["http"] }
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
-wasm-utils = { workspace = true, features = ["input", "derive", "time"] }
-webgl2 = { workspace = true, features = ["vertex", "context", "font-embed", "viewport"] }
+wasm-utils = { workspace = true, features = ["input", "derive", "time", "mouse"] }
+webgl2 = { workspace = true, features = ["vertex", "context", "font-embed", "viewport", "pointing", "shader"] }
 
 [dependencies.web-sys]
 workspace = true
