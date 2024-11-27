@@ -77,6 +77,10 @@ void main() {
         })
     }
 
+    pub fn enable(&mut self, enable: bool) {
+        self.params.showing = enable;
+    }
+
     pub fn apply_requests(&mut self, reqs: &[PointingRequest]) {
         let mut last_pos = None;
         for req in reqs {
