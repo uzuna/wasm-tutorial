@@ -21,48 +21,6 @@
 
   </style>
   <script type="module" src="./index.js"></script>
-  <script id="vs_simple" type="x-shader/x-vertex">
-attribute vec2 position;
-void main(void){
-  gl_Position = vec4(position.xy, 0.0, 1.0);
-}
-		</script>
-		
-		<script id="fs_simple" type="x-shader/x-fragment">
-precision mediump float;
-
-uniform vec4 u_color;
-
-void main(void){
-    gl_FragColor = u_color;
-}
-		</script>
-    <script id="vs_coord" type="x-shader/x-vertex">#version 300 es
-
-layout(location = 0) in vec2 position;
-layout(location = 1) in vec2 coord;
-
-uniform mat3 window_mat;
-
-out vec2 tex_coord;
-
-void main() {
-    gl_Position = vec4((window_mat * vec3(position, 1.0)).xy, 0.0, 1.0);
-    tex_coord = coord;
-}
-    </script>
-    <script id="fs_coord" type="x-shader/x-fragment">#version 300 es
-
-precision mediump float;
-uniform sampler2D u_texture;
-in vec2 tex_coord;
-
-out vec4 fragmentColor;
-
-void main() {
-    fragmentColor = texture(u_texture, tex_coord);
-}
-    </script>
   </head>
 
 <body>
@@ -70,8 +28,6 @@ void main() {
   <h2>WebGL Blending</h2>
   <canvas id="webgl-canvas" style="background-color: black;"></canvas></canvas>
   <canvas id="webgl-js"></canvas>
-  <canvas id="webgl2-canvas" style="background-color: black;"></canvas>
-  <canvas id="webgl2-js"></canvas>
   <div><select id="blend-select"></select></div>
 </body>
 
