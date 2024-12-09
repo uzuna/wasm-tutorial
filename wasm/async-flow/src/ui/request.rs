@@ -8,9 +8,8 @@ use wasm_utils::{
         slider::{OutputFmt, SliderConfig, SliderFormat, SliderInputWithOutput},
         InputIdent, InputNumber,
     },
+    util::get_element,
 };
-
-use crate::util::get_element;
 
 /// 識別子と値を分けずにメッセージの型を定義する
 ///
