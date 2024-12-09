@@ -20,6 +20,40 @@
     .height-pad {
       height: 500px;
     }
+    .tab {
+      overflow: hidden;
+      border: 1px solid #ccc;
+      background-color: #f1f1f1;
+    }
+
+    /* Style the buttons that are used to open the tab content */
+    .tab button {
+      background-color: inherit;
+      float: left;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      transition: 0.3s;
+    }
+
+    /* Change background color of buttons on hover */
+    .tab button:hover {
+      background-color: #ddd;
+    }
+
+    /* Create an active/current tablink class */
+    .tab button.active {
+      background-color: #ccc;
+    }
+
+    /* Style the tab content */
+    .tabcontent {
+      display: none;
+      padding: 6px 12px;
+      border: 1px solid #ccc;
+      border-top: none;
+    }
 
   </style>
   <script type="module" src="./index.js"></script>
@@ -28,40 +62,44 @@
 <body>
   <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
   <h2>JS Event Control</h2>
-  <div class="height-pad">
-    Pad
-  </div>
   <canvas id="webgl-canvas"></canvas>
+  <div class="tab">
+    <button class="tablinks" value="content-buttons">Buttons</button>
+    <button class="tablinks" value="content-selectors">Selectors</button>
+    <button class="tablinks" value="content-taskruns">TaskRunner</button>
+    <button class="tablinks" value="content-height-padding">Padding</button>
+  </div>
   <div>
-    <button id="submit-btn">Play</button>
-    <label class="switch">
-      <input id="toggle-btn", type="checkbox"> toggle switch
-    </label>
-    <p>Slider1: <input type="range" class="slider" id="slider1"><span id="slider1-value"></span></p>
-    <p>Slider2: <input type="range" class="slider" id="slider2"><span id="slider2-value"></span></p>
-    <p>Slider3: <input type="range" class="slider" id="slider3"><span id="slider3-value"></span></p>
-    
-    <h3>Select1</h3> <select id="selectbox1"></select>
-    <h3>Select2</h3> <select id="selectbox2"></select>
-    <div>
-      <textarea id="text1" name="text1" rows="4" cols="60"></textarea><br/>
-      <button id="text1-apply">Submit</button>
+    <div id="content-buttons" class="tabcontent">
+      <button id="submit-btn">Play</button>
+      <label class="switch">
+        <input id="toggle-btn", type="checkbox"> toggle switch
+      </label>
+      <p>Slider1: <input type="range" class="slider" id="slider1"><span id="slider1-value"></span></p>
+      <p>Slider2: <input type="range" class="slider" id="slider2"><span id="slider2-value"></span></p>
+      <p>Slider3: <input type="range" class="slider" id="slider3"><span id="slider3-value"></span></p>
     </div>
-    <div>
+    <div id="content-selectors" class="tabcontent">
+      <h3>Select1</h3> <select id="selectbox1"></select>
+      <h3>Select2</h3> <select id="selectbox2"></select>  
+      <div>
+        <textarea id="text1" name="text1" rows="4" cols="60"></textarea><br/>
+        <button id="text1-apply">Submit</button>
+      </div>
+    </div>
+    <div id="content-taskruns" class="tabcontent">
       <p>SleepDuration: <input type="range" class="slider" id="sleep-duration"><span id="sleep-duration-value"></span></p>
       <p>SleepTimes: <input type="range" class="slider" id="sleep-times"><span id="sleep-times-value"></span></p>
       <p>SleepPar: <input type="range" class="slider" id="sleep-parallel"><span id="sleep-parallel-value"></span></p>
       <button id="sleep-apply">Submit</button>
       <div id="sleep-output"></div>
     </div>
-    <div class="height-pad">
-      Pad
-    </div>
-    <div>
-      After Pad
-    </div>
-    <div class="height-pad">
-      Pad
+    <div id="content-height-padding" class="tabcontent">
+      <div class="height-pad"></div>
+      <div>After Pad</div>
+      <div class="height-pad">Pad</div>
+      <div class="height-pad">Pad</div>
+      <div class="height-pad">Pad</div>
     </div>
   </div>
 </body>

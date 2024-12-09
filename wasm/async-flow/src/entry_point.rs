@@ -4,6 +4,7 @@ use futures::StreamExt;
 use wasm_bindgen::prelude::*;
 use wasm_utils::{
     animation::AnimationTicker,
+    effect::Tab,
     error::*,
     info,
     time::{sleep, Interval},
@@ -152,6 +153,9 @@ pub fn start(canvas: HtmlCanvasElement) -> std::result::Result<(), JsValue> {
         }
         info!("exit ticker loop")
     });
+
+    let tab = Tab::new("tablinks")?;
+    tab.start()?;
 
     info!("start() done");
 

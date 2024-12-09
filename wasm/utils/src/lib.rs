@@ -21,3 +21,6 @@ pub use wasm_utils_derive::Select;
 
 #[cfg(feature = "time")]
 pub mod time;
+
+#[cfg(feature = "effect")]
+pub mod effect;

@@ -28,6 +28,10 @@ input = [
 ]
 derive = ["dep:wasm-utils-derive"]
 time = ["dep:futures-util"]
+effect = [
+    "dep:futures-util",
+    "web-sys/CssStyleDeclaration",
+]
 
 [dependencies]
 console_error_panic_hook = { workspace = true, optional = true }
@@ -44,6 +48,7 @@ features = [
     "console",
     "HtmlButtonElement",
     "HtmlCanvasElement",
+    "HtmlCollection",
     "Document",
     "DocumentTimeline",
     "Performance",
