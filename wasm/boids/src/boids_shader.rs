@@ -1,18 +1,15 @@
-use wasm_bindgen::JsError;
-use wasm_utils::{error::*, info};
-use web_sys::{js_sys, WebGlBuffer, WebGlUniformLocation};
+use wasm_utils::error::*;
+use web_sys::WebGlUniformLocation;
 use webgl2::{
+    camera::{Camera, CameraUbo, ViewMatrix},
     context::Context,
     gl,
-    program::{uniform_block_binding, Program},
+    program::Program,
     vertex::{Vao, VaoDefine},
     GlPoint3d,
 };
 
-use crate::{
-    boids::Boid,
-    camera::{Camera, ViewMatrix},
-};
+use crate::boids::Boid;
 
 pub struct BoidsShaderBuilder {
     /// ボイドの描画サイズ(Gl空間サイズ)
@@ -72,47 +69,6 @@ pub struct BoidsShader {
     pub camera: CameraUbo,
 }
 
-pub struct CameraUbo {
-    ubo: WebGlBuffer,
-}
-
-impl CameraUbo {
-    fn new(gl: &gl, camera: &Camera, view: &ViewMatrix) -> Result<Self> {
-        let ubo = gl
-            .create_buffer()
-            .ok_or(JsError::new("failed to create buffer"))?;
-        let mvp = Self::gen_matrix(camera, view);
-        info!("CameraUbo: mvp: {:?}", mvp);
-
-        gl.bind_buffer(gl::UNIFORM_BUFFER, Some(&ubo));
-        unsafe {
-            let view = js_sys::Float32Array::view(&mvp);
-            gl.buffer_data_with_array_buffer_view(gl::UNIFORM_BUFFER, &view, gl::DYNAMIC_DRAW);
-        }
-        gl.bind_buffer(gl::UNIFORM_BUFFER, None);
-        Ok(Self { ubo })
-    }
-
-    fn gen_matrix(camera: &Camera, view: &ViewMatrix) -> Vec<f32> {
-        let mvp = camera.perspective().as_matrix() * view.look_at();
-        info!("perspective: {:?}", camera.perspective());
-        info!("lookat: {:?}", view.look_at());
-        let mvp_arrays: [[f32; 4]; 4] = mvp.into();
-        mvp_arrays.iter().flat_map(|a| *a).collect::<Vec<_>>()
-    }
-
-    pub fn update_mvp(&self, gl: &gl, camera: &Camera, view: &ViewMatrix) {
-        let mvp = Self::gen_matrix(camera, view);
-
-        gl.bind_buffer(gl::UNIFORM_BUFFER, Some(&self.ubo));
-        unsafe {
-            let view = js_sys::Float32Array::view(&mvp);
-            gl.buffer_sub_data_with_i32_and_array_buffer_view(gl::UNIFORM_BUFFER, 0, &view);
-        }
-        gl.bind_buffer(gl::UNIFORM_BUFFER, None);
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub enum BoidVd {
     Position,
@@ -169,8 +125,6 @@ void main() {
 }
 "#;
 
-    const MVP_UBI: u32 = 0;
-
     // for TRIANGLE STRIP
     // Z方向は無視していたポリゴンで描画する
     fn rect(b: &Boid, size: f32) -> [GlPoint3d; 4] {
@@ -192,8 +146,7 @@ void main() {
     ) -> Result<Self> {
         let program = ctx.program(Self::VERT, Self::FRAG)?;
         let gl = ctx.gl();
-        uniform_block_binding(gl, program.program(), "matrix", Self::MVP_UBI);
-        gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
+        camera.bind_ubo(gl, &program);
 
         let ambient = program.uniform_location("ambient")?;
         let mut vao = program.create_vao()?;
@@ -285,14 +238,10 @@ void main() {
 }
 "#;
 
-    // uniform blockのn番目のindexを指定
-    const MVP_UBI: u32 = 0;
-
     fn new(ctx: &Context, b: &Boid, hist_len: usize, camera: &CameraUbo) -> Result<Self> {
         let program = ctx.program(Self::VERT, Self::FRAG)?;
         let gl = ctx.gl();
-        uniform_block_binding(gl, program.program(), "matrix", Self::MVP_UBI);
-        gl.bind_buffer_base(gl::UNIFORM_BUFFER, Self::MVP_UBI, Some(&camera.ubo));
+        camera.bind_ubo(gl, &program);
 
         let ambient = program.uniform_location("ambient")?;
         let point_size = program.uniform_location("pointSize")?;

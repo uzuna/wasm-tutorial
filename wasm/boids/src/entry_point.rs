@@ -2,11 +2,14 @@ use tokio::sync::mpsc;
 use wasm_bindgen::prelude::*;
 use wasm_utils::info;
 use web_sys::HtmlCanvasElement;
-use webgl2::{context::Context, gl};
+use webgl2::{
+    camera::{Camera, ViewMatrix},
+    context::Context,
+    gl,
+};
 
 use crate::{
     boids_shader::BoidsShaderBuilder,
-    camera::{Camera, ViewMatrix},
     utils::{merge_events, Mergeable},
     ws::start_websocket,
 };

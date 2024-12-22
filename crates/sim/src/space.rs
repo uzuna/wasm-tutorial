@@ -26,11 +26,13 @@ impl Object {
         self.pos
     }
 
-    pub fn update_pos(&mut self) {
-        self.pos += self.vel;
+    /// 速度が確定しているなら位置が更新可能
+    pub fn update_pos(&mut self, dt: Duration) {
+        self.pos += self.vel * dt.as_secs_f32();
     }
 
-    pub fn update_vel(&mut self, f: impl Fn(Vec3f) -> Vec3f) {
-        self.vel = f(self.vel);
+    /// 速度を更新する
+    pub fn update_vel(&mut self, dt: Duration, f: impl Fn(&Self, Duration) -> Vec3f) {
+        self.vel = f(self, dt);
     }
 }

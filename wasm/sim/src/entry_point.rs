@@ -42,6 +42,7 @@ pub fn start(canvas: HtmlCanvasElement, ws: WindowSize) -> std::result::Result<(
     let ctx = Context::new(canvas, COLOR_BLACK)?;
     let _gl = ctx.gl().clone();
     let _viewport = ctx.viewport();
+    let camera = Camera::default();
 
     Ok(())
 }

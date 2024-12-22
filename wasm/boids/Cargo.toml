@@ -20,7 +20,7 @@ wasm-bindgen-futures.workspace = true
 wasm-bindgen.workspace = true
 wasm-utils = { workspace = true }
 web-sys.workspace = true
-webgl2 = { workspace = true, features = ["vertex", "context"] }
+webgl2 = { workspace = true, features = ["vertex", "context", "camera"] }
 
 [dev-dependencies]
 wasm-bindgen-test.workspace = true

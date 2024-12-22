@@ -30,6 +30,9 @@ pub mod texture;
 #[cfg(feature = "loader")]
 pub mod loader;
 
+#[cfg(feature = "camera")]
+pub mod camera;
+
 pub type GlEnum = u32;
 pub type GlInt = i32;
 

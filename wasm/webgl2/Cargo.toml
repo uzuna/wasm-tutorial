@@ -18,6 +18,7 @@ metrics = ["context"]
 texture = ["web-sys/WebGlTexture", "web-sys/HtmlImageElement", "web-sys/WebGlTexture"]
 pointing = ["context", "vertex"]
 loader = ["context", "texture"]
+camera = ["dep:nalgebra"]
 
 [dependencies]
 bytemuck = { version = "1.19.0", features = ["derive"] }
